@@ -1,13 +1,6 @@
 // Atari 800 — Tang Nano 20K top-level
-// Stage 3: SDRAM controller (Gowin SDRC_HS IP) + HDMI + SD card ROM loader
-// Clock: 27 MHz oscillator used directly for the Atari core;
-//        RPLL generates 135 MHz (5×) for the HDMI OSER10 serialisers.
-//
-// IO count: 31 user-visible ports (within GW2AR-18 QN88 limit of 53).
-// The embedded SDRAM (64 Mbit) is accessed via the Gowin SDRC_HS IP,
-// whose O_sdram_*/IO_sdram_dq ports are internal signals routed to the
-// on-chip SDRAM by the P&R tool — they do NOT appear at the top-level
-// port list.
+// Stage 4: USB HID keyboard via nand2mario/usb_hid_host
+// Clocks: 27 MHz core/pixel; 135 MHz HDMI serialiser; 12 MHz USB HID host.
 
 module tang_top (
     input  wire        sys_clk,       // 27 MHz onboard oscillator
@@ -21,15 +14,15 @@ module tang_top (
     output wire        tmds_clk_p,
     output wire        tmds_clk_n,
 
-    // SD card (SPI mode) — FAT reader added in Stage 3
+    // SD card (SPI mode)
     output wire        sd_clk,
     output wire        sd_mosi,
     input  wire        sd_miso,
     output wire        sd_cs,
 
-    // PS/2 keyboard
-    input  wire        ps2_clk,
-    input  wire        ps2_dat,
+    // USB HID host (low-speed USB keyboard/mouse/gamepad)
+    inout  wire        usb_dm,        // D- — pin 42; 15 kΩ to GND
+    inout  wire        usb_dp,        // D+ — pin 41; 15 kΩ to GND
 
     // Joystick ports (Atari DB9 pinout, active low)
     input  wire [4:0]  joy1_n,
@@ -40,9 +33,10 @@ module tang_top (
 );
 
 // ── Clocks & reset ─────────────────────────────────────────────────────────
-wire clk_sys = sys_clk;    // 27 MHz — direct (no PLL needed for core clock)
-wire clk_5x;               // 135 MHz — from RPLL for HDMI serialiser
-wire pll_locked;
+wire clk_sys = sys_clk;    // 27 MHz — direct
+wire clk_5x;               // 135 MHz — HDMI serialiser
+wire clk_usb;              // 12 MHz  — USB HID host
+wire pll_locked, pll_usb_locked;
 
 rpll_135m pll (
     .clk_in  (sys_clk),
@@ -50,8 +44,14 @@ rpll_135m pll (
     .locked  (pll_locked)
 );
 
-// Physical reset: button OR PLL not locked
-wire hw_reset_n = btn_n[0] & pll_locked;
+rpll_12m pll_usb (
+    .clk_in  (sys_clk),
+    .clk_12m (clk_usb),
+    .locked  (pll_usb_locked)
+);
+
+// Physical reset: button OR either PLL not locked
+wire hw_reset_n = btn_n[0] & pll_locked & pll_usb_locked;
 
 // Core reset: hardware reset AND ROMs loaded
 wire roms_loaded;
@@ -381,28 +381,52 @@ atari800core_simple_sdram #(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PS/2 keyboard
+// USB HID keyboard
 // ─────────────────────────────────────────────────────────────────────────────
-ps2_to_atari800 #(
-    .ps2_enable     (1),
-    .direct_enable  (0)
-) keyboard (
-    .CLK                (clk_sys),
-    .RESET_N            (core_reset_n),
-    .PS2_CLK            (ps2_clk),
-    .PS2_DAT            (ps2_dat),
-    .INPUT              (32'd0),
-    .INPUT2             (5'd0),
-    .SPACE_FORCE        (1'b0),
-    .KEYBOARD_SCAN      (keyboard_scan),
-    .KEYBOARD_RESPONSE  (keyboard_response),
-    .CONSOL_START       (consol_start),
-    .CONSOL_SELECT      (consol_select),
-    .CONSOL_OPTION      (consol_option),
-    .FKEYS              (),
-    .FREEZER_ACTIVATE   (),
-    .PS2_KEYS           (),
-    .PS2_KEYS_NEXT_OUT  ()
+wire [7:0] usb_key_mod, usb_key1, usb_key2, usb_key3, usb_key4;
+
+usb_hid_host usb_hid (
+    .usbclk       (clk_usb),
+    .usbrst_n     (hw_reset_n),
+    .usb_dm       (usb_dm),
+    .usb_dp       (usb_dp),
+    .typ          (),
+    .report       (),
+    .conerr       (),
+    .key_modifiers(usb_key_mod),
+    .key1         (usb_key1),
+    .key2         (usb_key2),
+    .key3         (usb_key3),
+    .key4         (usb_key4),
+    .mouse_btn    (),
+    .mouse_dx     (),
+    .mouse_dy     (),
+    .game_l       (),
+    .game_r       (),
+    .game_u       (),
+    .game_d       (),
+    .game_a       (),
+    .game_b       (),
+    .game_x       (),
+    .game_y       (),
+    .game_sel     (),
+    .game_sta     (),
+    .dbg_hid_report()
+);
+
+usb_to_atari800 keyboard (
+    .clk              (clk_sys),
+    .reset_n          (core_reset_n),
+    .key_modifiers    (usb_key_mod),
+    .key1             (usb_key1),
+    .key2             (usb_key2),
+    .key3             (usb_key3),
+    .key4             (usb_key4),
+    .keyboard_scan    (keyboard_scan),
+    .keyboard_response(keyboard_response),
+    .consol_start     (consol_start),
+    .consol_select    (consol_select),
+    .consol_option    (consol_option)
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

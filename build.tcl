@@ -1,5 +1,5 @@
 # Gowin build script — Atari 800 Tang Nano 20K port
-# Stage 2: SDRAM controller, HDMI output, ROM loader, full P&R + bitstream
+# Stage 4: USB HID keyboard (nand2mario/usb_hid_host)
 
 # Resolve absolute paths before create_project changes the working directory
 set tang_dir [file normalize [file dirname [info script]]]
@@ -40,7 +40,6 @@ add_file "$rtl_dir/common/a8core/pokey_poly_17_9.vhdl"
 add_file "$rtl_dir/common/a8core/pokey_poly_4.vhdl"
 add_file "$rtl_dir/common/a8core/pokey_poly_5.vhdl"
 add_file "$rtl_dir/common/a8core/pot_from_signed.vhdl"
-add_file "$rtl_dir/common/a8core/ps2_to_atari800.vhdl"
 add_file "$rtl_dir/common/a8core/reg_file.vhdl"
 add_file "$rtl_dir/common/a8core/shared_enable.vhdl"
 add_file "$rtl_dir/common/a8core/simple_counter.vhdl"
@@ -56,7 +55,6 @@ add_file "$rtl_dir/common/components/delay_line.vhdl"
 add_file "$rtl_dir/common/components/generic_ram_infer.vhdl"
 add_file "$rtl_dir/common/components/latch_delay_line.vhdl"
 add_file "$rtl_dir/common/components/mult_infer.vhdl"
-add_file "$rtl_dir/common/components/ps2_keyboard.vhdl"
 add_file "$rtl_dir/common/components/simple_low_pass_filter.vhdl"
 add_file "$rtl_dir/common/components/synchronizer.vhdl"
 
@@ -73,7 +71,7 @@ add_file "$src_dir/bram.vhd"
 # ── SDRAM stub replaced by real controller ────────────────────────────────────
 add_file "$src_dir/sdram_statemachine.vhdl"
 
-# ── Stage 2: new RTL modules (Verilog/SV) ────────────────────────────────────
+# ── Stage 2: HDMI ─────────────────────────────────────────────────────────────
 add_file "$src_dir/rpll_135m.v"
 add_file "$src_dir/tmds_encoder.sv"
 add_file "$src_dir/hdmi_out.sv"
@@ -83,6 +81,15 @@ add_file "$src_dir/spi_master.sv"
 add_file "$src_dir/sd_card.sv"
 add_file "$src_dir/fat_reader.sv"
 add_file "$src_dir/sd_rom_loader.sv"
+
+# ── Stage 4: USB HID keyboard ─────────────────────────────────────────────────
+# usb_hid_host_rom uses $readmemh — copy hex to impl dir so synthesis finds it
+file mkdir "$tang_dir/impl/atari800_tn20k"
+file copy -force "$src_dir/usb_hid_host_rom.hex" "$tang_dir/impl/atari800_tn20k/"
+add_file "$src_dir/rpll_12m.v"
+add_file "$src_dir/usb_hid_host_rom.v"
+add_file "$src_dir/usb_hid_host.v"
+add_file "$src_dir/usb_to_atari800.sv"
 
 # ── Gowin SDRC_HS embedded SDRAM IP ──────────────────────────────────────────
 # SDRAM_Controller_HS_Top.v and sdrc_hs_top.vp both `include "sdrc_hs_defines.v"
