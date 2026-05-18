@@ -21,8 +21,8 @@ module tang_top (
     output wire        sd_cs,
 
     // USB HID host (low-speed USB keyboard/mouse/gamepad)
-    inout  wire        usb_dm,        // D- — pin 42; 15 kΩ to GND
-    inout  wire        usb_dp,        // D+ — pin 41; 15 kΩ to GND
+    inout  wire        usb_dm,        // D- — pin 49 (IOR49A); 15 kΩ to GND
+    inout  wire        usb_dp,        // D+ — pin 51 (IOR45A); 15 kΩ to GND
 
     // Joystick ports (Atari DB9 pinout, active low)
     input  wire [4:0]  joy1_n,

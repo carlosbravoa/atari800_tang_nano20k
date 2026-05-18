@@ -46,23 +46,24 @@ IO_LOC  "tmds_n[1]"   30;   // IOB14B — HDMI TX1N
 IO_LOC  "tmds_p[0]"   27;   // IOB8A  — HDMI TX0P
 IO_LOC  "tmds_n[0]"   28;   // IOB8B  — HDMI TX0N
 
-// ── SD / TF card (SPI mode) ───────────────────────────────────────────────────
-// sd_cs moved from pin 42 (now USB D-) to pin 53
+// ── SD / TF card (SPI mode — onboard TF slot) ────────────────────────────────
+// All four pins connect to the onboard TF card slot traces.
 IO_LOC  "sd_clk"      36;   // IOB30B
 IO_LOC  "sd_mosi"     37;   // IOB34A
 IO_LOC  "sd_miso"     39;   // IOB40A
-IO_LOC  "sd_cs"       53;   // IOR43A — GPIO header (moved from 42 for USB)
+IO_LOC  "sd_cs"       42;   // IOB42B — onboard TF card CS (do not move)
 IO_PORT "sd_clk"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "sd_mosi"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "sd_miso"     PULL_MODE=UP   IO_TYPE=LVCMOS33;
 IO_PORT "sd_cs"       PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
 // ── USB HID host (low-speed USB, nand2mario/usb_hid_host) ────────────────────
-// Connect USB-A female: D- → pin 42, D+ → pin 41.
+// Uses the former PS/2 header pins — no onboard conflict.
+// Connect USB-A female: D- → pin 49, D+ → pin 51.
 // Add 15 kΩ from D- to GND and 15 kΩ from D+ to GND.
 // Power keyboard from VBUS (5V) on the USB connector.
-IO_LOC  "usb_dm"      42;   // IOB42B — USB D-
-IO_LOC  "usb_dp"      41;   // IOB42A — USB D+
+IO_LOC  "usb_dm"      49;   // IOR49A — GPIO header (was ps2_clk)
+IO_LOC  "usb_dp"      51;   // IOR45A — GPIO header (was ps2_dat)
 IO_PORT "usb_dm"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "usb_dp"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
