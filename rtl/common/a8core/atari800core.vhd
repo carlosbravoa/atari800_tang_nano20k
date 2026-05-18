@@ -1,0 +1,885 @@
+---------------------------------------------------------------------------
+-- (c) 2013 mark watson
+-- I am happy for anyone to use this for non-commercial use.
+-- If my vhdl files are used commercially or otherwise sold,
+-- please contact me for explicit permission at scrameta (gmail).
+-- This applies for source and binary form and derived works.
+---------------------------------------------------------------------------
+
+LIBRARY ieee;
+USE ieee.std_logic_1164.all; 
+use IEEE.STD_LOGIC_MISC.all;
+use ieee.numeric_std.all;
+
+LIBRARY work;
+
+-- There is a higher level that just wires up internal ROM/RAM/joysticks to demonstrate how to use this
+-- Also see board specific top levels
+ENTITY atari800core IS 
+	GENERIC
+	(
+		cycle_length : integer := 16; -- or 32...
+		video_bits : integer := 8;
+		palette : integer :=0; -- 0:gtia colour on VIDEO_B, 1:on
+		low_memory : integer := 0; -- 0:32MB memory map, 1:1MB memory map
+		covox : integer := 1;
+		sdram_start_bank : integer := 0
+	);
+	PORT
+	(
+		CLK :  IN  STD_LOGIC; -- cycle_length*1.79MHz
+		RESET_N : IN STD_LOGIC;
+
+		-- VIDEO OUT - PAL/NTSC, original Atari timings approx (may be higher res)
+		VIDEO_VS :  OUT  STD_LOGIC;
+		VIDEO_HS :  OUT  STD_LOGIC;
+		VIDEO_CS :  OUT  STD_LOGIC;
+		VIDEO_B :  OUT  STD_LOGIC_VECTOR(video_bits-1 DOWNTO 0);
+		VIDEO_G :  OUT  STD_LOGIC_VECTOR(video_bits-1 DOWNTO 0);
+		VIDEO_R :  OUT  STD_LOGIC_VECTOR(video_bits-1 DOWNTO 0);
+		VIDEO_BLANK : out std_logic;
+		VIDEO_PIXCE : out std_logic;
+		VIDEO_BURST : out std_logic;
+		VIDEO_START_OF_FIELD : out std_logic;
+		VIDEO_ODD_LINE : out std_logic;
+		HBLANK : OUT STD_LOGIC;
+		VBLANK : OUT STD_LOGIC;
+		interlace_field : out std_logic;
+		interlace : out std_logic;
+		interlace_enable : in std_logic;
+
+
+		-- AUDIO OUT - Pokey/GTIA 1-bit and Covox all mixed
+		-- TODO - choose stereo/mono pokey
+		STEREO  : IN  STD_LOGIC;
+		AUDIO_L : OUT std_logic_vector(15 downto 0);
+		AUDIO_R : OUT std_logic_vector(15 downto 0);
+		SIO_AUDIO : IN std_logic_vector(7 downto 0);
+
+		-- PIA
+		CA1_IN : IN STD_LOGIC; -- SIO Proceed
+		CB1_IN : IN STD_LOGIC; -- SIO IRQ
+		CA2_IN : IN STD_LOGIC; -- SIO Motor control
+		CA2_OUT : OUT STD_LOGIC; 
+		CA2_DIR_OUT: OUT STD_LOGIC; -- 1=output mode
+		CB2_IN: IN STD_LOGIC;
+		CB2_OUT : OUT STD_LOGIC; -- SIO Command
+		CB2_DIR_OUT: OUT STD_LOGIC; -- 1=output mode
+		PORTA_IN : IN STD_LOGIC_VECTOR(7 DOWNTO 0); -- For joystick
+		PORTA_OUT : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+		PORTA_DIR_OUT : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+		PORTB_IN : IN STD_LOGIC_VECTOR(7 DOWNTO 0); -- For bank switching on XL/XE, for joystick on 800
+		PORTB_OUT : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+		PORTB_DIR_OUT : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+
+		-- Pokey keyboard matrix
+		-- Standard component available to connect this to PS2
+		KEYBOARD_RESPONSE : IN STD_LOGIC_VECTOR(1 DOWNTO 0);
+		KEYBOARD_SCAN : OUT STD_LOGIC_VECTOR(5 DOWNTO 0);
+
+		-- Pokey pots
+		POT_IN : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+		POT_RESET : OUT STD_LOGIC;
+		
+		-- PBI
+		ENABLE_179_EARLY : out std_logic; -- used for phi2 generation - 1 cycle before orig cpu runs
+		PBI_ADDR : out STD_LOGIC_VECTOR(15 DOWNTO 0);
+		PBI_WRITE_ENABLE : out STD_LOGIC; -- currently only for CART config...
+		PBI_SNOOP_DATA : out std_logic_vector(31 downto 0); -- snoop the bus (i.e. what gets feed to the CPU data in)
+		PBI_SNOOP_READY : out std_logic;
+		PBI_WRITE_DATA : out std_logic_vector(31 downto 0); -- we want to write this to external ram
+		PBI_WIDTH_8bit_ACCESS : out std_logic;
+		PBI_WIDTH_16bit_ACCESS : out std_logic;
+		PBI_WIDTH_32bit_ACCESS : out std_logic;
+
+		-- TODO - review this mechanism
+		-- Since this is intended for real carts, instead should use real timing, though perhaps that can be external...
+		PBI_ROM_DO : in STD_LOGIC_VECTOR(7 DOWNTO 0);
+		PBI_REQUEST : out STD_LOGIC;
+		PBI_TAKEOVER : in STD_LOGIC;
+		PBI_RELEASE : in STD_LOGIC := '0';
+		PBI_REQUEST_COMPLETE : in STD_LOGIC;
+		PBI_DISABLE : in STD_LOGIC;
+		-- TODO - also need to allow rest of PBI accesses, refresh handling etc. Can wait...
+		-- TODO MPD, RDY, REFRESH, EXTSEL, RST
+
+		CART_RD5 : in STD_LOGIC; -- just need it for trig3
+		PBI_MPD_N : in STD_LOGIC; 
+
+		PBI_IRQ_N : IN STD_LOGIC := '1';
+
+		-- SIO
+		SIO_RXD : in std_logic;
+		SIO_TXD : out std_logic;
+		SIO_CLOCKIN_IN : in std_logic :='1';
+		SIO_CLOCKIN_OUT : out std_logic;
+		SIO_CLOCKIN_OE : out std_logic;
+		SIO_CLOCKOUT : out std_logic;
+		-- SIO_COMMAND_TX - see PIA PB2
+
+		-- GTIA consol
+		CONSOL_OPTION : IN STD_LOGIC;
+		CONSOL_SELECT : IN STD_LOGIC;
+		CONSOL_START : IN STD_LOGIC;
+		GTIA_TRIG : IN STD_LOGIC_VECTOR(3 downto 0);
+
+		-- ANTIC lightpen
+		ANTIC_LIGHTPEN : IN std_logic;
+		ANTIC_REFRESH : out STD_LOGIC; -- 1 'original' cycle high when antic doing refresh cycle...
+		ANTIC_TURBO : out STD_LOGIC; -- if we are in high colour clock modes
+		ANTIC_RNMI_N : IN std_logic := '1';
+		
+		-----------------------
+		-- After here all FPGA implementation specific
+		-- e.g. need to write up RAM/ROM
+		-- we can dma from memory space
+		-- etc.
+
+		-- TODO - review if we need to pass out so many of these
+		-- Perhaps we can simplify address decoder and have an external layer?
+		SDRAM_REQUEST : OUT std_logic;
+		SDRAM_REQUEST_COMPLETE : IN std_logic;
+		SDRAM_READ_ENABLE : out STD_LOGIC;
+		SDRAM_WRITE_ENABLE : out std_logic;
+		SDRAM_ADDR : out STD_LOGIC_VECTOR(24 DOWNTO 0);
+		SDRAM_DO : in STD_LOGIC_VECTOR(31 DOWNTO 0);
+
+		RAM_ADDR : OUT STD_LOGIC_VECTOR(18 DOWNTO 0);
+		RAM_DO : IN STD_LOGIC_VECTOR(15 DOWNTO 0);
+		RAM_REQUEST : OUT STD_LOGIC;
+		RAM_REQUEST_COMPLETE : IN STD_LOGIC;
+		RAM_WRITE_ENABLE : OUT STD_LOGIC;
+		
+		ROM_ADDR : OUT STD_LOGIC_VECTOR(21 DOWNTO 0);
+		ROM_DO : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
+		ROM_REQUEST : OUT STD_LOGIC;
+		ROM_REQUEST_COMPLETE : IN STD_LOGIC;
+		ROM_WRITE_ENABLE : OUT STD_LOGIC;
+
+		-- DMA memory map differs
+		-- e.g. some special addresses to read behind hardware registers
+		-- 0x0000-0xffff: Atari registers + 3 mirrors (bit 16/17)
+		-- 25 downto 21:
+		-- 00001 : SRAM,512k
+		-- 00010|00011 : ROM, 4MB
+		-- 1xxxx : SDRAM, 32MB
+		DMA_FETCH : in STD_LOGIC; -- we want to read/write
+		DMA_READ_ENABLE : in std_logic;
+		DMA_32BIT_WRITE_ENABLE : in std_logic;
+		DMA_16BIT_WRITE_ENABLE : in std_logic;
+		DMA_8BIT_WRITE_ENABLE : in std_logic;
+		DMA_ADDR : in std_logic_vector(25 downto 0);
+		DMA_WRITE_DATA : in std_logic_vector(31 downto 0);
+		MEMORY_READY_DMA : out std_logic; -- op complete
+
+		-- Special config params
+   		RAM_SELECT : in std_logic_vector(2 downto 0); 
+			-- XL/XE mode  : 64K,128K,320KB Compy, 320KB Rambo, 576K Compy, 576K Rambo, 1088K, 4MB
+			-- 400/800 mode: 16K,32K,48K,52K,...? 
+		CART_EMULATION_SELECT : in std_logic_vector(7 downto 0);
+		CART2_EMULATION_SELECT : in std_logic_vector(7 downto 0);
+		EMU_FLASH_REQUEST : out std_logic;
+		EMU_FLASH_SLAVE : out std_logic;
+		PAL :  in STD_LOGIC;
+		CLIP_SIDES : in STD_LOGIC;
+		ROM_IN_RAM : in std_logic;
+		THROTTLE_COUNT_6502 : in STD_LOGIC_VECTOR(5 DOWNTO 0);
+		HALT : in std_logic;
+		freezer_enable: in std_logic;
+		freezer_activate: in std_logic;
+		ATARI800MODE : in std_logic := '0';
+		PBI_ROM_MODE : in std_logic := '0';
+		XEX_LOADER_MODE : in std_logic := '0';
+		RTC : IN STD_LOGIC_VECTOR(64 DOWNTO 0);
+		VBXE_SWITCH : IN STD_LOGIC;
+		VBXE_REG_BASE : IN STD_LOGIC;
+		VBXE_NTSC_FIX : IN STD_LOGIC;
+		VBXE_PALETTE_RGB : IN STD_LOGIC_VECTOR(2 downto 0);
+		VBXE_PALETTE_INDEX : IN STD_LOGIC_VECTOR(7 downto 0);
+		VBXE_PALETTE_COLOR : IN STD_LOGIC_VECTOR(6 downto 0);
+
+		-- debugging
+		freezer_state_out: out std_logic_vector(2 downto 0);
+		state_reg_out :  OUT  STD_LOGIC_VECTOR(1 downto 0);
+		memory_ready_antic_out :  OUT  STD_LOGIC;
+		memory_ready_cpu_out :  OUT  STD_LOGIC;
+		shared_enable_out :  OUT  STD_LOGIC;
+		nmi_n_out :  OUT  STD_LOGIC;
+		irq_n_out :  OUT  STD_LOGIC;
+		rdy_out :  OUT  STD_LOGIC;
+		AN_out : OUT STD_LOGIC_VECTOR(2 DOWNTO 0)
+	);
+END atari800core;
+
+ARCHITECTURE bdf_type OF atari800core IS 
+
+-- ANTIC
+SIGNAL	ANTIC_ADDR :  STD_LOGIC_VECTOR(15 DOWNTO 0);
+SIGNAL	ANTIC_AN :  STD_LOGIC_VECTOR(2 DOWNTO 0);
+SIGNAL	ANTIC_COLOUR_CLOCK_OUT :  STD_LOGIC;
+SIGNAL	ANTIC_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	CACHE_ANTIC_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	ANTIC_FETCH :  STD_LOGIC;
+SIGNAL	ANTIC_HIGHRES_COLOUR_CLOCK_OUT :  STD_LOGIC;
+SIGNAL	ANTIC_RDY :  STD_LOGIC;
+SIGNAL	ANTIC_WRITE_ENABLE :  STD_LOGIC;
+SIGNAL	BREAK_PRESSED :  STD_LOGIC;
+signal ANTIC_REFRESH_CYCLE : STD_LOGIC;
+SIGNAL	VBXE_COLOUR_CLOCK_OUT :  STD_LOGIC;
+signal	ANTIC_DMA_ENABLED : STD_LOGIC;
+
+-- GTIA
+SIGNAL	GTIA_SOUND :  STD_LOGIC;
+SIGNAL	CONSOL_OUT :  STD_LOGIC_VECTOR(3 downto 0);
+SIGNAL	CONSOL_IN :  STD_LOGIC_VECTOR(3 downto 0);
+SIGNAL  GTIA_TRIG_MERGED : STD_LOGIC_VECTOR(3 downto 0);
+
+SIGNAL	GTIA_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	CACHE_GTIA_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	GTIA_WRITE_ENABLE :  STD_LOGIC;
+
+signal COLOUR : std_logic_vector(7 downto 0);
+
+signal GTIA_VSYNC : std_logic;
+signal GTIA_HIGHRES_OUT : std_logic;
+signal GTIA_HIGHRES_IN : std_logic;
+signal GTIA_ACTIVE_HR_OUT : std_logic_vector(1 downto 0);
+signal GTIA_ACTIVE_HR_IN : std_logic_vector(1 downto 0);
+signal GTIA_PRIOR : std_logic_vector(7 downto 0);
+signal GTIA_PRIOR_RAW : std_logic_vector(7 downto 0);
+signal GTIA_HPOS : std_logic_vector(7 downto 0);
+signal GTIA_PF0_IN : std_logic_vector(7 downto 0);
+signal GTIA_PF1_IN : std_logic_vector(7 downto 0);
+signal GTIA_PF2_IN : std_logic_vector(7 downto 0);
+signal GTIA_PF0_OUT : std_logic_vector(7 downto 0);
+signal GTIA_PF1_OUT : std_logic_vector(7 downto 0);
+signal GTIA_PF2_OUT : std_logic_vector(7 downto 0);
+signal GTIA_PF3_OUT : std_logic_vector(7 downto 0);
+signal GTIA_XCOLOR : std_logic;
+signal GTIA_PALETTE : std_logic_vector(1 downto 0);
+
+-- GTIA PALETTE
+signal VIDEO_R_GTIA : std_logic_vector(7 downto 0);
+signal VIDEO_G_GTIA : std_logic_vector(7 downto 0);
+signal VIDEO_B_GTIA : std_logic_vector(7 downto 0);
+
+-- VBXE PALETTE
+signal VIDEO_R_VBXE : std_logic_vector(7 downto 0);
+signal VIDEO_G_VBXE : std_logic_vector(7 downto 0);
+signal VIDEO_B_VBXE : std_logic_vector(7 downto 0);
+signal VBXE_PF_PALETTE : std_logic_vector(1 downto 0);
+signal VBXE_OV_PALETTE : std_logic_vector(1 downto 0);
+signal VBXE_OV_PIXEL : std_logic_vector(7 downto 0);
+signal VBXE_OV_PIXEL_ACTIVE : std_logic;
+
+-- CPU
+SIGNAL	CPU_6502_RESET :  STD_LOGIC;
+SIGNAL	CPU_ADDR :  STD_LOGIC_VECTOR(15 DOWNTO 0);
+SIGNAL	CPU_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	CPU_FETCH :  STD_LOGIC;
+SIGNAL	IRQ_n :  STD_LOGIC;
+SIGNAL	NMI_n :  STD_LOGIC;
+SIGNAL	R_W_N :  STD_LOGIC;
+
+-- CLOCKING STUFF
+-- TODO - review/explain what all these are for
+SIGNAL	CPU_SHARED_ENABLE :  STD_LOGIC;
+SIGNAL	ENABLE_179_MEMWAIT :  STD_LOGIC;
+SIGNAL	ANTIC_ENABLE_179 :  STD_LOGIC;
+
+-- POKEY
+SIGNAL	POKEY_IRQ :  STD_LOGIC;
+
+SIGNAL	POKEY_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	CACHE_POKEY_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	POKEY_WRITE_ENABLE :  STD_LOGIC;
+signal POKEY1_CHANNEL0 : std_logic_vector(3 downto 0);
+signal POKEY1_CHANNEL1 : std_logic_vector(3 downto 0);
+signal POKEY1_CHANNEL2 : std_logic_vector(3 downto 0);
+signal POKEY1_CHANNEL3 : std_logic_vector(3 downto 0);
+
+SIGNAL	POKEY2_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	CACHE_POKEY2_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	POKEY2_WRITE_ENABLE :  STD_LOGIC;
+signal POKEY2_CHANNEL0 : std_logic_vector(3 downto 0);
+signal POKEY2_CHANNEL1 : std_logic_vector(3 downto 0);
+signal POKEY2_CHANNEL2 : std_logic_vector(3 downto 0);
+signal POKEY2_CHANNEL3 : std_logic_vector(3 downto 0);
+signal AUDIO_L_pre : std_logic_vector(15 downto 0);
+signal AUDIO_R_pre : std_logic_vector(15 downto 0);
+
+-- COVOX (after market DAC)
+signal covox_write_enable : std_logic;
+signal covox_channel0 : std_logic_vector(7 downto 0);
+signal covox_channel1 : std_logic_vector(7 downto 0);
+signal covox_channel2 : std_logic_vector(7 downto 0);
+signal covox_channel3 : std_logic_vector(7 downto 0);
+
+-- MEMORY IS READY - input to all devices
+SIGNAL	MEMORY_DATA :  STD_LOGIC_VECTOR(31 DOWNTO 0);
+SIGNAL	MEMORY_READY_ANTIC :  STD_LOGIC;
+SIGNAL	MEMORY_READY_CPU :  STD_LOGIC;
+
+SIGNAL	WRITE_DATA :  STD_LOGIC_VECTOR(31 DOWNTO 0);
+
+SIGNAL	WIDTH_16BIT_ACCESS :  STD_LOGIC;
+SIGNAL	WIDTH_32BIT_ACCESS :  STD_LOGIC;
+SIGNAL	WIDTH_8BIT_ACCESS :  STD_LOGIC;
+
+-- PIA
+SIGNAL	PIA_DO :  STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL	PIA_IRQA :  STD_LOGIC;
+SIGNAL	PIA_IRQB :  STD_LOGIC;
+SIGNAL	PIA_READ_ENABLE :  STD_LOGIC;
+SIGNAL	PIA_WRITE_ENABLE :  STD_LOGIC;
+SIGNAL PORTB_OUT_INT : STD_LOGIC_VECTOR(7 downto 0);
+SIGNAL PORTB_OPTIONS : STD_LOGIC_VECTOR(7 downto 0);
+
+-- ULTIME EMU
+SIGNAL	ULTIME_DO : STD_LOGIC_VECTOR(7 downto 0);
+SIGNAL	ULTIME_WRITE_ENABLE : STD_LOGIC;
+
+-- VBXE
+SIGNAL	VBXE_SOFT_RESET : STD_LOGIC;
+SIGNAL	VBXE_DO : STD_LOGIC_VECTOR(7 downto 0);
+SIGNAL	VBXE_WRITE_ENABLE : STD_LOGIC;
+
+signal memac_address : std_logic_vector(15 downto 0);
+signal memac_write_enable : std_logic;
+signal memac_cpu_access : std_logic;
+signal memac_antic_access : std_logic;
+signal memac_check : std_logic;
+signal memac_data_write : std_logic_vector(7 downto 0);
+signal memac_data_read : std_logic_vector(7 downto 0);
+signal memac_request : std_logic;
+signal memac_request_complete : std_logic;
+signal memac_dma_enable : std_logic;
+signal dma_fetch_vbxe_adj : std_logic;
+
+signal VBXE_IRQ_N : std_logic;
+
+-- PBI
+SIGNAL PBI_ADDR_INT : std_logic_vector(15 downto 0);
+
+-- cart
+signal cart_trig3_out: std_logic;
+
+BEGIN 
+
+PBI_WIDTH_8bit_ACCESS <= WIDTH_8bit_access;
+PBI_WIDTH_16bit_ACCESS <= WIDTH_16bit_access;
+PBI_WIDTH_32bit_ACCESS <= WIDTH_32bit_access;
+PBI_WRITE_DATA <= WRITE_DATA;
+PBI_SNOOP_DATA <= MEMORY_DATA;
+PBI_SNOOP_READY <= MEMORY_READY_CPU or MEMORY_READY_ANTIC;
+
+dma_fetch_vbxe_adj <= 
+	dma_fetch and memac_dma_enable;
+
+enables : entity work.shared_enable
+GENERIC MAP(cycle_length => cycle_length)
+PORT MAP(CLK => CLK,
+		 RESET_N => RESET_N,
+		 MEMORY_READY_CPU => MEMORY_READY_CPU,
+		 MEMORY_READY_ANTIC => MEMORY_READY_ANTIC,
+		 ANTIC_REFRESH => ANTIC_REFRESH_CYCLE,
+		 PAUSE_6502 => HALT,
+		 THROTTLE_COUNT_6502 => THROTTLE_COUNT_6502,
+		 ANTIC_ENABLE_179 => ANTIC_ENABLE_179,
+		 oldcpu_enable => ENABLE_179_MEMWAIT,
+		 CPU_ENABLE_OUT => CPU_SHARED_ENABLE);
+
+CPU_6502_RESET <= NOT(RESET_N); 
+cpu6502 : entity work.cpu
+PORT MAP(CLK => CLK,
+		 RESET => CPU_6502_RESET,
+		 ENABLE => RESET_N,
+		 IRQ_n => IRQ_n,
+		 NMI_n => NMI_n,
+		 MEMORY_READY => MEMORY_READY_CPU,
+		 THROTTLE => CPU_SHARED_ENABLE,
+		 RDY => ANTIC_RDY,
+		 DI => MEMORY_DATA(7 DOWNTO 0),
+		 R_W_n => R_W_N,
+		 CPU_FETCH => CPU_FETCH,
+		 A => CPU_ADDR,
+		 DO => CPU_DO);
+
+antic1 : entity work.antic
+GENERIC MAP(cycle_length => cycle_length)
+PORT MAP(CLK => CLK,
+		 WR_EN => ANTIC_WRITE_ENABLE,
+		 RESET_N => RESET_N,
+		 RNMI_N => ANTIC_RNMI_N,
+		 MEMORY_READY_ANTIC => MEMORY_READY_ANTIC,
+		 MEMORY_READY_CPU => MEMORY_READY_CPU,
+		 ANTIC_ENABLE_179 => ANTIC_ENABLE_179,
+		 PAL => PAL,
+		 lightpen => ANTIC_LIGHTPEN,
+		 ADDR => PBI_ADDR_INT(3 DOWNTO 0),
+		 CPU_DATA_IN => WRITE_DATA(7 DOWNTO 0),
+		 MEMORY_DATA_IN => MEMORY_DATA(7 DOWNTO 0),
+		 NMI_N_OUT => NMI_n,
+		 ANTIC_READY => ANTIC_RDY,
+		 COLOUR_CLOCK_OUT => ANTIC_COLOUR_CLOCK_OUT,
+		 HIGHRES_COLOUR_CLOCK_OUT => ANTIC_HIGHRES_COLOUR_CLOCK_OUT,
+		 VBXE_COLOUR_CLOCK_OUT => VBXE_COLOUR_CLOCK_OUT,
+		 ANTIC_DMA_ENABLED => ANTIC_DMA_ENABLED,
+		 dma_fetch_out => ANTIC_FETCH,
+		 HBLANK => HBLANK,
+		 VBLANK_OUT => VBLANK,
+		 refresh_out => ANTIC_REFRESH_CYCLE,
+		 turbo_out => ANTIC_TURBO,
+		 AN => ANTIC_AN,
+		 DATA_OUT => ANTIC_DO,
+		 dma_address_out => ANTIC_ADDR);
+
+pokey_mixer_both : entity work.pokey_mixer_mux
+PORT MAP(CLK => CLK,
+		 ENABLE_179 => ANTIC_ENABLE_179,
+		 GTIA_SOUND => GTIA_SOUND,
+		 SIO_AUDIO => SIO_AUDIO,
+		 CHANNEL_L_0 => POKEY1_CHANNEL0,
+		 CHANNEL_L_1 => POKEY1_CHANNEL1,
+		 CHANNEL_L_2 => POKEY1_CHANNEL2,
+		 CHANNEL_L_3 => POKEY1_CHANNEL3,
+		 COVOX_CHANNEL_L_0 => covox_channel0,
+		 COVOX_CHANNEL_L_1 => covox_channel1,
+		 CHANNEL_R_0 => POKEY2_CHANNEL0,
+		 CHANNEL_R_1 => POKEY2_CHANNEL1,
+		 CHANNEL_R_2 => POKEY2_CHANNEL2,
+		 CHANNEL_R_3 => POKEY2_CHANNEL3,
+		 COVOX_CHANNEL_R_0 => covox_channel2,
+		 COVOX_CHANNEL_R_1 => covox_channel3,
+		 VOLUME_OUT_L => AUDIO_L_pre,
+		 VOLUME_OUT_R => AUDIO_R_pre);
+
+AUDIO_L <= AUDIO_L_pre;
+AUDIO_R <= AUDIO_R_pre when STEREO = '1' else AUDIO_L_pre;
+
+pokey2 : entity work.pokey
+PORT MAP(CLK => CLK,
+		 ENABLE_179 => ANTIC_ENABLE_179,
+		 WR_EN => POKEY2_WRITE_ENABLE,
+		 RESET_N => RESET_N,
+		 ADDR => PBI_ADDR_INT(3 DOWNTO 0),
+		 DATA_IN => WRITE_DATA(7 DOWNTO 0),
+		 CHANNEL_0_OUT => POKEY2_CHANNEL0,
+		 CHANNEL_1_OUT => POKEY2_CHANNEL1,
+		 CHANNEL_2_OUT => POKEY2_CHANNEL2,
+		 CHANNEL_3_OUT => POKEY2_CHANNEL3,
+		 DATA_OUT => POKEY2_DO,
+		 SIO_IN1 => '1',
+		 keyboard_response => "00",
+		 pot_in=>"00000000");
+
+pia1 : entity work.pia
+PORT MAP(CLK => CLK,
+		 EN => PIA_READ_ENABLE,
+		 WR_EN => PIA_WRITE_ENABLE,
+		 RESET_N => RESET_N,
+		 ENABLE_ORIG => ENABLE_179_MEMWAIT,
+		 CA1 => CA1_IN,
+		 CB1 => CB1_IN,
+		 CA2_DIR_OUT => CA2_DIR_OUT,
+		 CA2_IN => CA2_IN,
+		 CA2_OUT => CA2_OUT,
+		 CB2_DIR_OUT => CB2_DIR_OUT,
+		 CB2_IN => CB2_IN,
+		 CB2_OUT => CB2_OUT,
+		 ADDR => PBI_ADDR_INT(1 DOWNTO 0),
+		 CPU_DATA_IN => WRITE_DATA(7 DOWNTO 0),
+		 IRQA_N => PIA_IRQA,
+		 IRQB_N => PIA_IRQB,
+		 DATA_OUT => PIA_DO,
+		 PORTA_IN => PORTA_IN,
+		 PORTA_DIR_OUT => PORTA_DIR_OUT,
+		 PORTA_OUT => PORTA_OUT,
+		 PORTB_IN => PORTB_IN,
+		 PORTB_DIR_OUT => PORTB_DIR_OUT,
+		 PORTB_OUT => PORTB_OUT_INT);
+
+ultimate_rtc : entity work.DS1305Redux
+PORT MAP(
+	CLK => CLK,
+	RESET_N => RESET_N,
+	DATA_IN => WRITE_DATA(7 DOWNTO 0),
+	WR_EN => ULTIME_WRITE_ENABLE,
+	DATA_OUT => ULTIME_DO,
+	RTC_IN => RTC
+);
+
+vbxe_board : entity work.VBXE
+GENERIC MAP ( cycle_length => cycle_length)
+PORT MAP(
+	CLK => CLK,
+	ENABLE => VBXE_SWITCH,
+	NTSC_FIX => VBXE_NTSC_FIX,
+	ENABLE_179 => ANTIC_ENABLE_179, -- ENABLE_179_MEMWAIT,
+	RESET_N => RESET_N,
+	SOFT_RESET => VBXE_SOFT_RESET,
+	PAL => PAL,
+	ADDR => PBI_ADDR_INT(4 DOWNTO 0),
+	DATA_IN => WRITE_DATA(7 DOWNTO 0),
+	WR_EN => VBXE_WRITE_ENABLE,
+	DATA_OUT => VBXE_DO,
+	PALETTE_GET_COLOR => COLOUR,
+	PALETTE_GET_INDEX => GTIA_PALETTE,
+	R_OUT => VIDEO_R_VBXE,
+	G_OUT => VIDEO_G_VBXE,
+	B_OUT => VIDEO_B_VBXE,
+	VBXE_UPLOAD_PALETTE_RGB => VBXE_PALETTE_RGB,
+	VBXE_UPLOAD_PALETTE_INDEX => VBXE_PALETTE_INDEX,
+	VBXE_UPLOAD_PALETTE_COLOR => VBXE_PALETTE_COLOR,
+	memac_address => memac_address,
+	memac_write_enable => memac_write_enable,
+	memac_cpu_access => memac_cpu_access,
+	memac_antic_access => memac_antic_access,
+	memac_check => memac_check,
+	memac_data_in => memac_data_write,
+	memac_data_out => memac_data_read,
+	memac_request => memac_request,
+	memac_request_complete => memac_request_complete,
+	memac_dma_enable => memac_dma_enable,
+	memac_dma_address => dma_addr,
+	irq_n => VBXE_IRQ_N,
+	video_clock_antic_lowres => ANTIC_COLOUR_CLOCK_OUT,
+	video_clock_antic_highres => ANTIC_HIGHRES_COLOUR_CLOCK_OUT,
+	video_clock_vbxe => VBXE_COLOUR_CLOCK_OUT,
+	gtia_highres => GTIA_HIGHRES_OUT,
+	gtia_highres_mod => GTIA_HIGHRES_IN,
+	gtia_active_hr => GTIA_ACTIVE_HR_OUT,
+	gtia_active_hr_mod => GTIA_ACTIVE_HR_IN,
+	gtia_prior => GTIA_PRIOR,
+	gtia_prior_raw => GTIA_PRIOR_RAW,
+	gtia_pf0 => GTIA_PF0_OUT,
+	gtia_pf1 => GTIA_PF1_OUT,
+	gtia_pf2 => GTIA_PF2_OUT,
+	gtia_pf3 => GTIA_PF3_OUT,
+	map_pf0 => GTIA_PF0_IN,
+	map_pf1 => GTIA_PF1_IN,
+	map_pf2 => GTIA_PF2_IN,
+	pf_palette => VBXE_PF_PALETTE,
+	ov_palette => VBXE_OV_PALETTE,
+	ov_pixel => VBXE_OV_PIXEL,
+	ov_pixel_active => VBXE_OV_PIXEL_ACTIVE,
+	xcolor => GTIA_XCOLOR,
+	VSYNC => GTIA_VSYNC,
+	GTIA_HPOS => GTIA_HPOS
+);
+
+mmu1 : entity work.address_decoder
+GENERIC MAP(low_memory => low_memory, sdram_start_bank => sdram_start_bank)
+PORT MAP(CLK => CLK,
+		 CPU_FETCH => CPU_FETCH,
+		 CPU_WRITE_N => R_W_N,
+		 ANTIC_FETCH => ANTIC_FETCH,
+		 DMA_FETCH => dma_fetch_vbxe_adj,
+		 DMA_READ_ENABLE => DMA_READ_ENABLE,
+		 DMA_32BIT_WRITE_ENABLE => DMA_32BIT_WRITE_ENABLE,
+		 DMA_16BIT_WRITE_ENABLE => DMA_16BIT_WRITE_ENABLE,
+		 DMA_8BIT_WRITE_ENABLE => DMA_8BIT_WRITE_ENABLE,
+		 RAM_REQUEST_COMPLETE => RAM_REQUEST_COMPLETE,
+		 ROM_REQUEST_COMPLETE => ROM_REQUEST_COMPLETE,
+		 PBI_REQUEST_COMPLETE => PBI_REQUEST_COMPLETE,
+		 PBI_TAKEOVER => PBI_TAKEOVER,
+		 PBI_RELEASE => PBI_RELEASE,
+		 --PBI_DISABLE => PBI_DISABLE,
+		 --PBI_TAKEOVER => '0',
+		 --PBI_RELEASE => '0',
+		 CART_RD5 => CART_RD5,
+		 PBI_MPD_N => PBI_MPD_N,
+		 reset_n => RESET_N,
+		 SDRAM_REQUEST_COMPLETE => SDRAM_REQUEST_COMPLETE,
+		 ANTIC_ADDR => ANTIC_ADDR,
+		 ANTIC_DATA => ANTIC_DO,
+		 CACHE_ANTIC_DATA => CACHE_ANTIC_DO,
+		 PBI_DATA => PBI_ROM_DO,
+		 CPU_ADDR => CPU_ADDR,
+		 CPU_WRITE_DATA => CPU_DO,
+		 GTIA_DATA => GTIA_DO,
+		 CACHE_GTIA_DATA => CACHE_GTIA_DO,
+		 PIA_DATA => PIA_DO,
+		 ULTIME_DATA => ULTIME_DO,
+		 STEREO => STEREO,
+		 POKEY2_DATA => POKEY2_DO,
+		 CACHE_POKEY2_DATA => CACHE_POKEY2_DO,
+		 POKEY_DATA => POKEY_DO,
+		 CACHE_POKEY_DATA => CACHE_POKEY_DO,
+		 PORTB => PORTB_OPTIONS,
+		 RAM_DATA => RAM_DO,
+
+		 VBXE_SWITCH => VBXE_SWITCH,
+		 VBXE_REG_BASE => VBXE_REG_BASE,
+		 VBXE_DATA => VBXE_DO,
+		 VBXE_WRITE_ENABLE => VBXE_WRITE_ENABLE,
+		 VBXE_SOFT_RESET => VBXE_SOFT_RESET,
+		 memac_address => memac_address,
+		 memac_write_enable => memac_write_enable,
+		 memac_cpu_access => memac_cpu_access,
+		 memac_antic_access => memac_antic_access,
+		 memac_check => memac_check,
+		 memac_data_write => memac_data_write,
+		 memac_data_read => memac_data_read,
+		 memac_request => memac_request,
+		 memac_request_complete => memac_request_complete,
+
+		 ram_select => RAM_SELECT(2 downto 0),
+		 ATARI800MODE => ATARI800MODE,
+		 PBI_ROM_MODE => PBI_ROM_MODE,
+		 XEX_LOADER_MODE => XEX_LOADER_MODE,
+		 ROM_DATA => ROM_DO,
+		 SDRAM_DATA => SDRAM_DO,
+		 DMA_ADDR => DMA_ADDR,
+		 DMA_WRITE_DATA => DMA_WRITE_DATA,
+		 MEMORY_READY_ANTIC => MEMORY_READY_ANTIC,
+		 MEMORY_READY_DMA => MEMORY_READY_DMA,
+		 MEMORY_READY_CPU => MEMORY_READY_CPU,
+		 GTIA_WR_ENABLE => GTIA_WRITE_ENABLE,
+		 POKEY_WR_ENABLE => POKEY_WRITE_ENABLE,
+		 POKEY2_WR_ENABLE => POKEY2_WRITE_ENABLE,
+		 ANTIC_WR_ENABLE => ANTIC_WRITE_ENABLE,
+		 PIA_WR_ENABLE => PIA_WRITE_ENABLE,
+		 PIA_RD_ENABLE => PIA_READ_ENABLE,
+		 ULTIME_WR_ENABLE => ULTIME_WRITE_ENABLE,
+		 RAM_WR_ENABLE => RAM_WRITE_ENABLE,
+		 ROM_WR_ENABLE => ROM_WRITE_ENABLE,
+		 PBI_WR_ENABLE => PBI_WRITE_ENABLE,
+		 RAM_REQUEST => RAM_REQUEST,
+		 ROM_REQUEST => ROM_REQUEST,
+		 PBI_REQUEST => PBI_REQUEST,
+		 CART_TRIG3_OUT => cart_trig3_out,
+		 WIDTH_8bit_ACCESS => WIDTH_8BIT_ACCESS,
+		 WIDTH_16bit_ACCESS => WIDTH_16BIT_ACCESS,
+		 WIDTH_32bit_ACCESS => WIDTH_32BIT_ACCESS,
+		 SDRAM_READ_EN => SDRAM_READ_ENABLE,
+		 SDRAM_WRITE_EN => SDRAM_WRITE_ENABLE,
+		 SDRAM_REQUEST => SDRAM_REQUEST,
+		 MEMORY_DATA => MEMORY_DATA,
+		 PBI_ADDR => PBI_ADDR_INT,
+		 RAM_ADDR => RAM_ADDR,
+		 ROM_ADDR => ROM_ADDR,
+		 SDRAM_ADDR => SDRAM_ADDR,
+		 WRITE_DATA => WRITE_DATA,
+		 d6_wr_enable => covox_write_enable,
+		 cart_select => CART_EMULATION_SELECT,
+		 cart2_select => CART2_EMULATION_SELECT,
+		 emu_flash_request => EMU_FLASH_REQUEST,
+		 emu_flash_slave => EMU_FLASH_SLAVE,
+		 rom_in_ram => ROM_IN_RAM,
+		 freezer_enable => freezer_enable,
+		 freezer_activate => freezer_activate,
+		 freezer_state_out => freezer_state_out,
+		 state_reg_out => state_reg_out);
+
+
+	process(ATARI800MODE,GTIA_TRIG,PORTB_OUT_INT,CART_TRIG3_OUT)
+	begin
+		PORTB_OPTIONS <= (others=>'0');
+		GTIA_TRIG_MERGED <= (others=>'0');
+
+		if (ATARI800MODE='0') then
+			PORTB_OPTIONS <= PORTB_OUT_INT;
+			GTIA_TRIG_MERGED <= (cart_trig3_out and GTIA_TRIG(3)) & GTIA_TRIG(2 downto 0); -- NOTE, inputs ignored, careful when adding 4 joystick support
+		else
+			PORTB_OPTIONS <= (others=>'0');
+			GTIA_TRIG_MERGED <= GTIA_TRIG(3 downto 0);
+		end if;
+	end process;
+
+pokey1 : entity work.pokey
+PORT MAP(CLK => CLK,
+		 ENABLE_179 => ANTIC_ENABLE_179,
+		 WR_EN => POKEY_WRITE_ENABLE,
+		 RESET_N => RESET_N,
+		 SIO_IN1 => SIO_RXD,
+		 SIO_CLOCKIN_IN => SIO_CLOCKIN_IN,
+		 SIO_CLOCKIN_OUT => SIO_CLOCKIN_OUT,
+		 SIO_CLOCKIN_OE => SIO_CLOCKIN_OE,
+		 ADDR => PBI_ADDR_INT(3 DOWNTO 0),
+		 DATA_IN => WRITE_DATA(7 DOWNTO 0),
+		 keyboard_response => KEYBOARD_RESPONSE,
+		 POT_IN => POT_IN,
+		 IRQ_N_OUT => POKEY_IRQ,
+		 SIO_OUT1 => SIO_TXD,
+		 SIO_OUT2 => open,
+		 SIO_OUT3 => open,
+		 SIO_CLOCKOUT => SIO_CLOCKOUT,
+		 POT_RESET => POT_RESET,
+		 CHANNEL_0_OUT => POKEY1_CHANNEL0,
+		 CHANNEL_1_OUT => POKEY1_CHANNEL1,
+		 CHANNEL_2_OUT => POKEY1_CHANNEL2,
+		 CHANNEL_3_OUT => POKEY1_CHANNEL3,
+		 DATA_OUT => POKEY_DO,
+		 keyboard_scan => KEYBOARD_SCAN);
+
+CONSOL_IN <= '1'&CONSOL_OPTION&CONSOL_SELECT&CONSOL_START;
+
+		 	 
+gtia1 : entity work.gtia
+PORT MAP(CLK => CLK,
+		 WR_EN => GTIA_WRITE_ENABLE,
+		 ANTIC_FETCH => ANTIC_FETCH, -- for first pmg fetch
+		 CPU_ENABLE_ORIGINAL => ENABLE_179_MEMWAIT, -- for subsequent pmg fetches
+		 RESET_N => RESET_N,
+		 PAL => PAL,
+		 CLIP_SIDES => CLIP_SIDES,
+		 ENABLE_179 => ANTIC_ENABLE_179,
+		 COLOUR_CLOCK => ANTIC_COLOUR_CLOCK_OUT,
+		 COLOUR_CLOCK_HIGHRES => ANTIC_HIGHRES_COLOUR_CLOCK_OUT,
+		 COLOUR_CLOCK_VBXE => VBXE_COLOUR_CLOCK_OUT,
+		 ANTIC_DMA_ENABLED => ANTIC_DMA_ENABLED,
+		 VBXE_SWITCH => VBXE_SWITCH,
+		 GTIA_HIGHRES_OUT => GTIA_HIGHRES_OUT,
+		 GTIA_HIGHRES_IN => GTIA_HIGHRES_IN,
+		 GTIA_ACTIVE_HR_OUT => GTIA_ACTIVE_HR_OUT,
+		 GTIA_ACTIVE_HR_IN => GTIA_ACTIVE_HR_IN,
+		 GTIA_PRIOR => GTIA_PRIOR,
+		 GTIA_PRIOR_RAW => GTIA_PRIOR_RAW,
+		 GTIA_PF0_OUT => GTIA_PF0_OUT,
+		 GTIA_PF1_OUT => GTIA_PF1_OUT,
+		 GTIA_PF2_OUT => GTIA_PF2_OUT,
+		 GTIA_PF3_OUT => GTIA_PF3_OUT,
+		 GTIA_PF0_IN => GTIA_PF0_IN,
+		 GTIA_PF1_IN => GTIA_PF1_IN,
+		 GTIA_PF2_IN => GTIA_PF2_IN,
+		 VBXE_PF_PALETTE => VBXE_PF_PALETTE,
+		 VBXE_OV_PALETTE => VBXE_OV_PALETTE,
+		 VBXE_OV_PIXEL => VBXE_OV_PIXEL,
+		 VBXE_OV_PIXEL_ACTIVE => VBXE_OV_PIXEL_ACTIVE,
+		 PALETTE_out => GTIA_PALETTE,
+		 XCOLOR => GTIA_XCOLOR,
+		 GTIA_VSYNC => GTIA_VSYNC,
+		 HPOS_OUT => GTIA_HPOS,
+
+		 CONSOL_OUT => CONSOL_OUT,
+		 CONSOL_IN => CONSOL_IN,
+		 TRIG => GTIA_TRIG_MERGED,
+		 ADDR => PBI_ADDR_INT(4 DOWNTO 0),
+		 AN => ANTIC_AN,
+		 CPU_DATA_IN => WRITE_DATA(7 DOWNTO 0),
+		 MEMORY_DATA_IN => MEMORY_DATA(7 DOWNTO 0),
+		 VSYNC => VIDEO_VS,
+		 HSYNC => VIDEO_HS,
+		 CSYNC => VIDEO_CS,
+		 BLANK => VIDEO_BLANK,
+		 HBLANK => open,
+		 VBLANK => open,
+		 interlace_enable => interlace_enable,
+		 interlace => interlace,
+		 interlace_field => interlace_field,
+		 BURST => VIDEO_BURST,
+		 START_OF_FIELD => VIDEO_START_OF_FIELD,
+		 ODD_LINE => VIDEO_ODD_LINE,
+		 COLOUR_out => COLOUR,
+		 DATA_OUT => GTIA_DO);
+
+-- Both negated and non-negated works, but technically it should be negated (or?)
+GTIA_SOUND <= not(CONSOL_OUT(3));
+
+	-- colour palette
+
+gen_palette_none : if palette=0 generate
+	VIDEO_B_GTIA <= COLOUR;
+	VIDEO_R_GTIA <= (others => '0');
+	VIDEO_G_GTIA <= (others => '0');
+end generate;
+
+gen_palette_on : if palette=1 generate
+	palette4 : entity work.gtia_palette
+		port map (PAL=>PAL, ATARI_COLOUR=>COLOUR, R_next=>VIDEO_R_GTIA, G_next=>VIDEO_G_GTIA, B_next=>VIDEO_B_GTIA);		
+end generate;
+
+VIDEO_R(video_bits-1 downto 0) <= VIDEO_R_VBXE(7 downto 8-video_bits) when VBXE_SWITCH = '1' else VIDEO_R_GTIA(7 downto 8-video_bits);
+VIDEO_G(video_bits-1 downto 0) <= VIDEO_G_VBXE(7 downto 8-video_bits) when VBXE_SWITCH = '1' else VIDEO_G_GTIA(7 downto 8-video_bits);
+VIDEO_B(video_bits-1 downto 0) <= VIDEO_B_VBXE(7 downto 8-video_bits) when VBXE_SWITCH = '1' else VIDEO_B_GTIA(7 downto 8-video_bits);
+
+irq_glue1 : entity work.irq_glue
+PORT MAP(pokey_irq => POKEY_IRQ,
+		 pia_irqa => PIA_IRQA,
+		 pia_irqb => PIA_IRQB,
+		 pbi_irq => PBI_IRQ_N,
+		 vbxe_irq => VBXE_IRQ_N,
+		 combined_irq => IRQ_n);
+		 
+-- TODO - generic ram infer?
+pokey1_mirror : entity work.reg_file
+generic map(BYTES=>16,WIDTH=>4)
+port map(
+	CLK => CLK,
+	ADDR => PBI_ADDR_INT(3 downto 0),
+	DATA_IN => WRITE_DATA(7 downto 0),
+	WR_EN => POKEY_WRITE_ENABLE,
+	DATA_OUT => CACHE_POKEY_DO
+);	 
+
+pokey2_mirror : entity work.reg_file
+generic map(BYTES=>16,WIDTH=>4)
+port map(
+	CLK => CLK,
+	ADDR => PBI_ADDR_INT(3 downto 0),
+	DATA_IN => WRITE_DATA(7 downto 0),
+	WR_EN => POKEY2_WRITE_ENABLE,
+	DATA_OUT => CACHE_POKEY2_DO
+);	 		 
+
+gtia_mirror : entity work.reg_file
+generic map(BYTES=>32,WIDTH=>5)
+port map(
+	CLK => CLK,
+	ADDR => PBI_ADDR_INT(4 downto 0),
+	DATA_IN => WRITE_DATA(7 downto 0),
+	WR_EN => GTIA_WRITE_ENABLE,
+	DATA_OUT => CACHE_GTIA_DO
+);	
+
+antic_mirror : entity work.reg_file
+generic map(BYTES=>16,WIDTH=>4)
+port map(
+	CLK => CLK,
+	ADDR => PBI_ADDR_INT(3 downto 0),
+	DATA_IN => WRITE_DATA(7 downto 0),
+	WR_EN => ANTIC_WRITE_ENABLE,
+	DATA_OUT => CACHE_ANTIC_DO
+);	
+
+gen_covox_off : if covox=0 generate
+	COVOX_CHANNEL0 <= (others=>'0');
+	COVOX_CHANNEL1 <= (others=>'0');
+	COVOX_CHANNEL2 <= (others=>'0');
+	COVOX_CHANNEL3 <= (others=>'0');
+end generate;
+
+gen_covox_on : if covox=1 generate
+covox1 : entity work.covox
+	PORT map
+	( 
+		clk => clk,
+		reset_n => reset_n,
+		addr => pbi_addr_int(1 downto 0),
+		data_in => WRITE_DATA(7 DOWNTO 0),
+		wr_en => covox_write_enable,
+		covox_channel0 => covox_channel0,
+		covox_channel1 => covox_channel1,
+		covox_channel2 => covox_channel2,
+		covox_channel3 => covox_channel3
+	);
+end generate;
+
+-- outputs
+PBI_ADDR <= PBI_ADDR_INT;
+ENABLE_179_EARLY <= ANTIC_ENABLE_179;
+PORTB_OUT <= PORTB_OUT_INT;
+ANTIC_REFRESH <= ANTIC_REFRESH_CYCLE;
+VIDEO_PIXCE <= VBXE_COLOUR_CLOCK_OUT when VBXE_SWITCH = '1' else ANTIC_HIGHRES_COLOUR_CLOCK_OUT;
+
+
+memory_ready_antic_out <= memory_ready_antic;
+memory_ready_cpu_out <= memory_ready_cpu;
+shared_enable_out <= cpu_shared_enable;
+nmi_n_out <= nmi_n;
+irq_n_out <= irq_n;
+rdy_out <= antic_rdy;
+an_out <= antic_an;
+
+END bdf_type;

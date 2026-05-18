@@ -1,0 +1,96 @@
+// Tang Nano 20K physical constraints — GW2AR-LV18QN88PC8/I7 (QFN88P package)
+//
+// Pin locations are QFN88P package pin INDEX numbers (1–88).
+// Source: Gowin QFN88P.json + Sipeed Tang Nano 20K schematic.
+//
+// Authoritative schematic:
+//   https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html
+//
+// Notation: each pin name is IOx<N><A|B> where x=L/R/B/T (Left/Right/Bot/Top),
+// N is a block number, A=P-side (diff+), B=N-side (diff−).
+
+// ── System clock (27 MHz oscillator → IOL29A, GCLKT_6) ───────────────────────
+IO_LOC  "sys_clk"     10;
+IO_PORT "sys_clk"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+// ── Buttons (active low) ──────────────────────────────────────────────────────
+// Physical S1 on the board is wired to RECONFIG_N (pin 9) and triggers FPGA
+// reconfiguration (hard reset) — it cannot be used as a readable GPIO unless
+// device.cfg sets "RECONFIG_N regular_io = true".
+// btn_n[0] and btn_n[1] are brought out to the GPIO expansion header.
+// Connect an external pushbutton (pull-up to 3.3V) to use them.
+IO_LOC  "btn_n[0]"    63;   // IOB29A = GCLKT_3 — "reset" on GPIO header
+IO_LOC  "btn_n[1]"    48;   // IOR49B             — "spare" on GPIO header
+IO_PORT "btn_n[0]"    PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "btn_n[1]"    PULL_MODE=UP IO_TYPE=LVCMOS33;
+
+// ── LEDs (active low, Bank 6/7 left-side pins) ───────────────────────────────
+IO_LOC  "leds_n[0]"   16;   // IOL47B
+IO_LOC  "leds_n[1]"   17;   // IOL49A
+IO_LOC  "leds_n[2]"   18;   // IOL49B
+IO_LOC  "leds_n[3]"   19;   // IOL51A
+IO_LOC  "leds_n[4]"   20;   // IOL51B
+IO_LOC  "leds_n[5]"   11;   // IOL29B (GCLKC_6) — Bank 6; pin 4/IOL7A is in Bank 7 (1.8V, LPLL1)
+IO_PORT "leds_n[0]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[1]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[2]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[3]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[4]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[5]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+// ── Embedded SDRAM (GW2AR-18 on-chip) ────────────────────────────────────────
+// The embedded SDRAM die connects to the FPGA die through internal bonds;
+// Gowin P&R routes O_sdram_*/IO_sdram_dq automatically — no IO_LOC needed.
+
+// ── HDMI TMDS differential outputs (Bank 5, pins 25–32) ──────────────────────
+// Confirmed layout: TX0P/N=27/28, TX1P/N=29/30, TX2P/N=31/32, CLK=25/26.
+// (Cross-checked against Gowin mjb_npu reference example for GW2AR-LV18QN88PC8.)
+IO_LOC  "tmds_clk_p"  25;   // IOB6A  — HDMI TXCP
+IO_LOC  "tmds_clk_n"  26;   // IOB6B  — HDMI TXCN
+IO_LOC  "tmds_p[2]"   31;   // IOB18A — HDMI TX2P
+IO_LOC  "tmds_n[2]"   32;   // IOB18B — HDMI TX2N
+IO_LOC  "tmds_p[1]"   29;   // IOB14A — HDMI TX1P
+IO_LOC  "tmds_n[1]"   30;   // IOB14B — HDMI TX1N
+IO_LOC  "tmds_p[0]"   27;   // IOB8A  — HDMI TX0P
+IO_LOC  "tmds_n[0]"   28;   // IOB8B  — HDMI TX0N
+// IO_TYPE is inferred from ELVDS_OBUF primitives — no IO_PORT needed.
+
+// ── SD / TF card (SPI mode, Bank 4 bottom-right pins) ────────────────────────
+IO_LOC  "sd_clk"      36;   // IOB30B (GCLKC_4 dual-purpose, used as GPIO)
+IO_LOC  "sd_mosi"     37;   // IOB34A
+IO_LOC  "sd_miso"     39;   // IOB40A
+IO_LOC  "sd_cs"       42;   // IOB42B
+IO_PORT "sd_clk"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "sd_mosi"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "sd_miso"     PULL_MODE=UP   IO_TYPE=LVCMOS33;
+IO_PORT "sd_cs"       PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+// ── PS/2 keyboard (GPIO expansion header — wire up externally) ────────────────
+IO_LOC  "ps2_clk"     49;   // IOR49A — GPIO header; add 4.7 kΩ pull-up to 3.3V
+IO_LOC  "ps2_dat"     51;   // IOR45A — GPIO header; add 4.7 kΩ pull-up to 3.3V
+IO_PORT "ps2_clk"     PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "ps2_dat"     PULL_MODE=UP IO_TYPE=LVCMOS33;
+
+// ── Joystick 1 (DB9 Atari pinout, active low, GPIO expansion header) ──────────
+IO_LOC  "joy1_n[0]"   69;   // IOT50A — Up
+IO_LOC  "joy1_n[1]"   70;   // IOT44B — Down
+IO_LOC  "joy1_n[2]"   71;   // IOT44A — Left
+IO_LOC  "joy1_n[3]"   72;   // IOT40B — Right
+IO_LOC  "joy1_n[4]"   73;   // IOT40A — Fire
+IO_PORT "joy1_n[0]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy1_n[1]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy1_n[2]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy1_n[3]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy1_n[4]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+
+// ── Joystick 2 ────────────────────────────────────────────────────────────────
+IO_LOC  "joy2_n[0]"   74;   // IOT34B — Up
+IO_LOC  "joy2_n[1]"   75;   // IOT34A — Down
+IO_LOC  "joy2_n[2]"   76;   // IOT30B — Left
+IO_LOC  "joy2_n[3]"   77;   // IOT30A — Right
+IO_LOC  "joy2_n[4]"   79;   // IOT27B — Fire
+IO_PORT "joy2_n[0]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy2_n[1]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy2_n[2]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy2_n[3]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "joy2_n[4]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
