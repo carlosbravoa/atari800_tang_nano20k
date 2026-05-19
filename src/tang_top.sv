@@ -1,5 +1,5 @@
 // Atari 800 — Tang Nano 20K top-level
-// Stage 5: POKEY audio via sigma-delta DAC on GPIO pins.
+// Stage 5: POKEY audio — GPIO sigma-delta DAC (pins 33/34) + HDMI audio data islands.
 // Clocks: 27 MHz core/pixel; 135 MHz HDMI serialiser; 12 MHz USB HID host.
 
 module tang_top (
@@ -437,9 +437,9 @@ usb_to_atari800 keyboard (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HDMI output
+// HDMI output (video + audio data islands)
 // ─────────────────────────────────────────────────────────────────────────────
-hdmi_out hdmi (
+hdmi_audio_out hdmi (
     .clk_pix    (clk_sys),
     .clk_5x     (clk_5x),
     .rst_n      (hw_reset_n),
@@ -449,6 +449,8 @@ hdmi_out hdmi (
     .hs         (video_hs),
     .vs         (video_vs),
     .de         (~video_blank),
+    .audio_l    (audio_l_pcm),
+    .audio_r    (audio_r_pcm),
     .tmds_p     (tmds_p),
     .tmds_n     (tmds_n),
     .tmds_clk_p (tmds_clk_p),

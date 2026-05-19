@@ -74,7 +74,8 @@ add_file "$src_dir/sdram_statemachine.vhdl"
 # ── Stage 2: HDMI ─────────────────────────────────────────────────────────────
 add_file "$src_dir/rpll_135m.v"
 add_file "$src_dir/tmds_encoder.sv"
-add_file "$src_dir/hdmi_out.sv"
+add_file "$src_dir/terc4.sv"
+add_file "$src_dir/hdmi_audio_out.sv"
 
 # ── Stage 3: SD card FAT reader ───────────────────────────────────────────────
 add_file "$src_dir/spi_master.sv"
