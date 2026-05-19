@@ -76,6 +76,11 @@ Do not modify files under `rtl/` — sync from upstream Atari800_MiSTer instead.
 Bank 7 (LPLL1/SDRAM area) is 1.8 V — do not assign user I/O there.
 HDMI pins (25–32) are fixed to ELVDS_OBUF inside `hdmi_audio_out.sv`; no CST entry needed.
 
+## Confirmed Hardware Pin Facts
+
+- LEDs: pins **15–20** (active LOW). Pin 11 is NOT an LED — it is IOL29B adjacent to the 27 MHz clock input on pin 10.
+- LED polarity confirmed on hardware: drive LOW = ON.
+
 ## Known Toolchain Quirks
 
 - Use `gw_sh.sh` (not `gw_sh`) for headless builds

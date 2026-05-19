@@ -273,7 +273,7 @@ The six onboard LEDs (active low, left side of board):
 | LED 2     | 18       | video_vs      | HDMI vertical sync active       |
 | LED 3     | 19       | roms_loaded   | SD card ROM load complete       |
 | LED 4     | 20       | pll_locked    | Main 135 MHz PLL locked         |
-| LED 5     | 11       | always on     | Power / bitstream present       |
+| LED 5     | 15       | always on     | Power / bitstream present       |
 
 Normal boot sequence: LED 5 lights immediately (bitstream loaded), LED 4 after ~1 ms (PLL locks),
 LED 0 after ~100 µs (SDRAM init), LED 3 after OS.ROM + BASIC.ROM are read from SD card.

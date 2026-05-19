@@ -25,7 +25,7 @@ IO_LOC  "leds_n[1]"   17;   // IOL49A
 IO_LOC  "leds_n[2]"   18;   // IOL49B
 IO_LOC  "leds_n[3]"   19;   // IOL51A
 IO_LOC  "leds_n[4]"   20;   // IOL51B
-IO_LOC  "leds_n[5]"   11;   // IOL29B (GCLKC_6)
+IO_LOC  "leds_n[5]"   15;   // IOL47A
 IO_PORT "leds_n[0]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "leds_n[1]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "leds_n[2]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
