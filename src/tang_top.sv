@@ -1,5 +1,5 @@
 // Atari 800 — Tang Nano 20K top-level
-// Stage 4: USB HID keyboard via nand2mario/usb_hid_host
+// Stage 5: POKEY audio via sigma-delta DAC on GPIO pins.
 // Clocks: 27 MHz core/pixel; 135 MHz HDMI serialiser; 12 MHz USB HID host.
 
 module tang_top (
@@ -27,6 +27,10 @@ module tang_top (
     // Joystick ports (Atari DB9 pinout, active low)
     input  wire [4:0]  joy1_n,
     input  wire [4:0]  joy2_n,
+
+    // Audio — sigma-delta PDM (add RC filter: 1 kΩ + 10 nF to 3.5 mm jack)
+    output wire        audio_l,        // pin 33 (IOB24A)
+    output wire        audio_r,        // pin 34 (IOB24B)
 
     // Status LEDs (active low on Tang Nano 20K)
     output wire [5:0]  leds_n
@@ -70,9 +74,12 @@ wire [7:0]  video_r, video_g, video_b;
 wire        video_blank;
 
 // ── Audio ──────────────────────────────────────────────────────────────────
-wire [15:0] audio_l, audio_r;
+wire [15:0] audio_l_pcm, audio_r_pcm;
 
-// ── SIO — stubbed until Stage 5 ───────────────────────────────────────────
+sigma_delta_dac dac_l (.clk(clk_sys), .audio_in(audio_l_pcm), .dac_out(audio_l));
+sigma_delta_dac dac_r (.clk(clk_sys), .audio_in(audio_r_pcm), .dac_out(audio_r));
+
+// ── SIO — stubbed until Stage 6 ───────────────────────────────────────────
 wire sio_command, sio_txd, sio_motor;
 
 // ── SDRAM logical bus from Atari core ─────────────────────────────────────
@@ -300,8 +307,8 @@ atari800core_simple_sdram #(
 
     // Audio
     .STEREO                     (1'b0),
-    .AUDIO_L                    (audio_l),
-    .AUDIO_R                    (audio_r),
+    .AUDIO_L                    (audio_l_pcm),
+    .AUDIO_R                    (audio_r_pcm),
 
     // Joysticks
     .JOY1_n                     (joy1_n),

@@ -91,6 +91,9 @@ add_file "$src_dir/usb_hid_host_rom.v"
 add_file "$src_dir/usb_hid_host.v"
 add_file "$src_dir/usb_to_atari800.sv"
 
+# ── Stage 5: POKEY audio — sigma-delta DAC ────────────────────────────────────
+add_file "$src_dir/sigma_delta_dac.sv"
+
 # ── Gowin SDRC_HS embedded SDRAM IP ──────────────────────────────────────────
 # SDRAM_Controller_HS_Top.v and sdrc_hs_top.vp both `include "sdrc_hs_defines.v"
 # and "sdrc_hs_name.v".  Gowin synthesis resolves includes relative to the

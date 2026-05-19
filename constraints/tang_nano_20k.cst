@@ -67,6 +67,14 @@ IO_LOC  "usb_dp"      51;   // IOR45A — GPIO header (was ps2_dat)
 IO_PORT "usb_dm"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "usb_dp"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
+// ── Audio — sigma-delta PDM output (GPIO header, Bank 5) ──────────────────
+// Add RC low-pass filter per channel: 1 kΩ series + 10 nF to GND → Fc ≈ 15.9 kHz.
+// Connect RC output to left/right of a 3.5 mm stereo jack; sleeve to GND.
+IO_LOC  "audio_l"     33;   // IOB24A — GPIO header
+IO_LOC  "audio_r"     34;   // IOB24B — GPIO header
+IO_PORT "audio_l"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "audio_r"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
 // ── Joystick 1 (DB9 Atari pinout, active low, GPIO expansion header) ──────────
 IO_LOC  "joy1_n[0]"   69;   // IOT50A — Up
 IO_LOC  "joy1_n[1]"   70;   // IOT44B — Down

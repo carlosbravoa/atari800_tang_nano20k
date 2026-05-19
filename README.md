@@ -113,6 +113,8 @@ FPGA pin numbers to physical header positions.
 
 | Function         | FPGA pin | IO name   | Direction | Note                          |
 |-----------------|----------|-----------|-----------|-------------------------------|
+| Audio L (PDM)   | 33       | IOB24A    | output    | RC filter → 3.5 mm jack L    |
+| Audio R (PDM)   | 34       | IOB24B    | output    | RC filter → 3.5 mm jack R    |
 | USB D−          | 49       | IOR49A    | inout     | 15 kΩ pull-down to GND       |
 | USB D+          | 51       | IOR45A    | inout     | 15 kΩ pull-down to GND       |
 | Joy1 Up         | 69       | IOT50A    | input     | active low, 33 kΩ pull-up    |
@@ -141,6 +143,31 @@ Onboard (no wiring needed):
 | SD MISO   | 39              | onboard TF card slot                  |
 | SD CS     | 42              | onboard TF card slot — do not move    |
 | LEDs      | 16–20, 11       | active low, see LED table below       |
+
+## Audio Wiring
+
+POKEY audio is output as 1-bit sigma-delta PDM at 27 MHz on pins 33 (L) and 34 (R).
+An RC low-pass filter converts it to an analogue signal suitable for headphones or line-in.
+
+```
+FPGA pin 33 (audio_l) ──── 1 kΩ ────┬──── 3.5 mm jack LEFT
+                                     │
+                                    10 nF
+                                     │
+                                    GND
+
+FPGA pin 34 (audio_r) ──── 1 kΩ ────┬──── 3.5 mm jack RIGHT
+                                     │
+                                    10 nF
+                                     │
+                                    GND
+
+3.5 mm jack SLEEVE ────────────────────── GND
+```
+
+- RC cutoff frequency: 1/(2π × 1kΩ × 10nF) ≈ **15.9 kHz** — adequate for POKEY audio
+- Increase C to 100 nF (Fc ≈ 1.6 kHz) for cleaner output at the cost of high-frequency response
+- Do not connect directly to powered speakers without a DC-blocking capacitor (10–100 µF)
 
 ## USB Keyboard Wiring
 
@@ -238,11 +265,10 @@ The Atari core starts running once LED 3 is on.
 
 ## Known Limitations / Roadmap
 
-- **Audio**: POKEY audio output not yet connected (Stage 5 — PWM/sigma-delta DAC)
 - **SIO disk**: No disk drive emulation yet (Stage 6)
 - **OSD menu**: No on-screen display (Stage 7)
+- **Cartridges**: No cartridge loading from SD card yet (Stage 8)
 - **Joystick paddles**: Analog pot inputs not implemented
-- **Cartridges**: No cartridge loading from SD card yet
 
 ## License
 
