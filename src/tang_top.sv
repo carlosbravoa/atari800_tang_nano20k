@@ -76,8 +76,20 @@ wire        video_blank;
 // ── Audio ──────────────────────────────────────────────────────────────────
 wire [15:0] audio_l_pcm, audio_r_pcm;
 
-sigma_delta_dac dac_l (.clk(clk_sys), .audio_in(audio_l_pcm), .dac_out(audio_l));
-sigma_delta_dac dac_r (.clk(clk_sys), .audio_in(audio_r_pcm), .dac_out(audio_r));
+// 1 kHz test tone: hold S2 (btn_n[1]) to inject into both HDMI and GPIO audio.
+// 27 MHz / (1000 Hz × 2) = 13500 cycles per half-period.
+reg [13:0] tone_cnt;
+reg        tone_sq;
+always_ff @(posedge clk_sys)
+    if (tone_cnt == 14'd13499) begin tone_cnt <= 14'd0; tone_sq <= ~tone_sq; end
+    else                            tone_cnt <= tone_cnt + 14'd1;
+
+wire [15:0] tone_sample = tone_sq ? 16'h4000 : 16'hC000;  // ±25 % FS square wave
+wire [15:0] audio_l_out = !btn_n[1] ? tone_sample : audio_l_pcm;
+wire [15:0] audio_r_out = !btn_n[1] ? tone_sample : audio_r_pcm;
+
+sigma_delta_dac dac_l (.clk(clk_sys), .audio_in(audio_l_out), .dac_out(audio_l));
+sigma_delta_dac dac_r (.clk(clk_sys), .audio_in(audio_r_out), .dac_out(audio_r));
 
 // ── SIO — stubbed until Stage 6 ───────────────────────────────────────────
 wire sio_command, sio_txd, sio_motor;
@@ -449,8 +461,8 @@ hdmi_audio_out hdmi (
     .hs         (video_hs),
     .vs         (video_vs),
     .de         (~video_blank),
-    .audio_l    (audio_l_pcm),
-    .audio_r    (audio_r_pcm),
+    .audio_l    (audio_l_out),
+    .audio_r    (audio_r_out),
     .tmds_p     (tmds_p),
     .tmds_n     (tmds_n),
     .tmds_clk_p (tmds_clk_p),
