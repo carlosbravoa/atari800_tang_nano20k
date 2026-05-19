@@ -8,6 +8,8 @@ Based on the [Atari800_MiSTer](https://github.com/MiSTer-devel/Atari800_MiSTer) 
 
 - Atari 800 / 800XL / 65XE / 130XE emulation (6502, ANTIC, GTIA, POKEY, PIA)
 - HDMI video output (27 MHz pixel clock, TMDS differential)
+- HDMI audio output (48 kHz stereo PCM via HDMI 1.3 data islands — no extra hardware)
+- GPIO audio output (1-bit sigma-delta PDM on pins 33/34 — add RC filter for analogue)
 - On-chip SDRAM (GW2AR-18 embedded 64 Mbit)
 - SD card ROM loader: reads `OS.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - USB HID keyboard via [nand2mario/usb_hid_host](https://github.com/nand2mario/usb_hid_host) (low-speed USB)
@@ -33,7 +35,8 @@ atari800_tang_nano20k/
     ├── tang_top.sv        # Top-level module
     ├── rpll_135m.v        # PLL: 27 MHz → 135 MHz (HDMI serialiser)
     ├── rpll_12m.v         # PLL: 27 MHz → 12 MHz (USB HID host)
-    ├── hdmi_out.sv        # TMDS encoder + ELVDS output buffers
+    ├── hdmi_audio_out.sv  # HDMI video + audio data islands (TMDS + TERC4)
+    ├── terc4.sv           # TERC4 encoder for HDMI data island channels
     ├── tmds_encoder.sv    # TMDS 8b10b encoder
     ├── sd_rom_loader.sv   # SD card FAT32 reader → SDRAM ROM loader
     ├── sd_card.sv         # SD SPI driver
@@ -144,10 +147,23 @@ Onboard (no wiring needed):
 | SD CS     | 42              | onboard TF card slot — do not move    |
 | LEDs      | 16–20, 11       | active low, see LED table below       |
 
-## Audio Wiring
+## Audio
 
-POKEY audio is output as 1-bit sigma-delta PDM at 27 MHz on pins 33 (L) and 34 (R).
+### HDMI Audio (recommended — no extra hardware)
+
+POKEY audio is embedded in HDMI data islands at 48 kHz stereo PCM.
+Any HDMI monitor or AV receiver with audio support will play it directly.
+No wiring or components needed beyond the HDMI cable.
+
+ACR packets (N=6144, CTS=27000) establish the 48 kHz clock relationship
+at the start of each frame; Audio Sample packets carry up to two stereo
+pairs per horizontal blanking period.
+
+### GPIO Audio (analogue — requires RC filter)
+
+POKEY audio is also output as 1-bit sigma-delta PDM at 27 MHz on pins 33 (L) and 34 (R).
 An RC low-pass filter converts it to an analogue signal suitable for headphones or line-in.
+Both outputs are always active; HDMI and GPIO audio coexist.
 
 ```
 FPGA pin 33 (audio_l) ──── 1 kΩ ────┬──── 3.5 mm jack LEFT
