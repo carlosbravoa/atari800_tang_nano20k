@@ -1,0 +1,21 @@
+// Minimal constraints for blink test — only sys_clk, buttons, and LEDs.
+
+IO_LOC  "sys_clk"     4;
+IO_PORT "sys_clk"     IO_TYPE=LVCMOS18 PULL_MODE=UP;
+
+IO_LOC  "btn_n[0]"    63;
+IO_LOC  "btn_n[1]"    48;
+IO_PORT "btn_n[0]"    PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_PORT "btn_n[1]"    PULL_MODE=UP IO_TYPE=LVCMOS33;
+
+// Pin 15 = IOL47A = LPLL2_T_fb  } LPLL2 feedback pins — must NOT be driven as outputs.
+// Pin 16 = IOL47B = LPLL2_C_fb  } rPLL maps to LPLL2; driving these pins prevents PLL lock.
+// leds_n[0] and leds_n[5] are removed from the module port; pins 15/16 left floating.
+IO_LOC  "leds_n[1]"   17;
+IO_LOC  "leds_n[2]"   18;
+IO_LOC  "leds_n[3]"   19;
+IO_LOC  "leds_n[4]"   20;
+IO_PORT "leds_n[1]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[2]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[3]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+IO_PORT "leds_n[4]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;

@@ -67,82 +67,99 @@ assign dbg_hid_report = {dat[7], dat[6], dat[5], dat[4], dat[3], dat[2], dat[1],
 reg valid = 0;		    // whether current gamepad report is valid
 
 always @(posedge usbclk) begin : process_in_data
-    data_rdy_r <= data_rdy; data_strobe_r <= data_strobe;
-    report <= 0;                    // ensure pulse
-    if (report == 1) begin
-        // clear mouse movement for later
-        mouse_dx <= 0; mouse_dy <= 0;
-    end
-    if(~data_rdy) rcvct <= 0;
-    else begin
-        if(data_strobe && ~data_strobe_r) begin  // rising edge of ukp data strobe
-            dat[rcvct] <= ukpdat;
-
-            if (typ == 1) begin     // keyboard
-                case (rcvct)
-                0: key_modifiers <= ukpdat;
-                2: key1 <= ukpdat;
-                3: key2 <= ukpdat;
-                4: key3 <= ukpdat;
-                5: key4 <= ukpdat;
-                endcase
-            end else if (typ == 2) begin    // mouse
-                case (rcvct)
-                0: mouse_btn <= ukpdat;
-                1: mouse_dx <= ukpdat;
-                2: mouse_dy <= ukpdat;
-                endcase
-            end else if (typ == 3) begin    // gamepad
-                // A typical report layout:
-                // - d[3] is X axis (0: left, 255: right)
-                // - d[4] is Y axis
-                // - d[5][7:4] is buttons YBAX
-                // - d[6][5:4] is buttons START,SELECT
-                // Variations:
-                // - Some gamepads uses d[0] and d[1] for X and Y axis.
-                // - Some transmits a different set when d[0][1:0] is 2 (a dualshock adapater)
-                case (rcvct)
-                0: begin
-                    if (ukpdat[1:0] != 2'b10) begin
-                        // for DualShock2 adapter, 2'b10 marks an irrelevant record
-                        valid <= 1;
-                        game_l <= 0; game_r <= 0; game_u <= 0; game_d <= 0;
-                    end else
-                        valid <= 0;
-                    if (ukpdat==8'h00) {game_l, game_r} <= 2'b10;
-                    if (ukpdat==8'hff) {game_l, game_r} <= 2'b01;
-                end
-                1: begin
-                    if (ukpdat==8'h00) {game_u, game_d} <= 2'b10;
-                    if (ukpdat==8'hff) {game_u, game_d} <= 2'b01;
-                end
-                3: if (valid) begin 
-                    if (ukpdat[7:6]==2'b00) {game_l, game_r} <= 2'b10;
-                    if (ukpdat[7:6]==2'b11) {game_l, game_r} <= 2'b01;
-                end
-                4: if (valid) begin 
-                    if (ukpdat[7:6]==2'b00) {game_u, game_d} <= 2'b10;
-                    if (ukpdat[7:6]==2'b11) {game_u, game_d} <= 2'b01;
-                end
-                5: if (valid) begin
-                    game_x <= ukpdat[4];
-                    game_a <= ukpdat[5];
-                    game_b <= ukpdat[6];
-                    game_y <= ukpdat[7];
-                end
-                6: if (valid) begin
-                    game_sel <= ukpdat[4];
-                    game_sta <= ukpdat[5];
-                end
-                endcase
-                // TODO: add any special handling if needed 
-                // (using the detected controller type in 'dev')                
-            end
-            rcvct <= rcvct + 1;
+    if (~usbrst_n || ~connected) begin
+        data_rdy_r <= 0;
+        data_strobe_r <= 0;
+        report <= 0;
+        mouse_dx <= 0;
+        mouse_dy <= 0;
+        mouse_btn <= 0;
+        rcvct <= 0;
+        key_modifiers <= 0;
+        key1 <= 0;
+        key2 <= 0;
+        key3 <= 0;
+        key4 <= 0;
+        game_l <= 0; game_r <= 0; game_u <= 0; game_d <= 0;
+        game_a <= 0; game_b <= 0; game_x <= 0; game_y <= 0; game_sel <= 0; game_sta <= 0;
+    end else begin
+        data_rdy_r <= data_rdy; data_strobe_r <= data_strobe;
+        report <= 0;                    // ensure pulse
+        if (report == 1) begin
+            // clear mouse movement for later
+            mouse_dx <= 0; mouse_dy <= 0;
         end
+        if(~data_rdy) rcvct <= 0;
+        else begin
+            if(data_strobe && ~data_strobe_r) begin  // rising edge of ukp data strobe
+                dat[rcvct] <= ukpdat;
+
+                if (typ == 1) begin     // keyboard
+                    case (rcvct)
+                    0: key_modifiers <= ukpdat;
+                    2: key1 <= ukpdat;
+                    3: key2 <= ukpdat;
+                    4: key3 <= ukpdat;
+                    5: key4 <= ukpdat;
+                    endcase
+                end else if (typ == 2) begin    // mouse
+                    case (rcvct)
+                    0: mouse_btn <= ukpdat;
+                    1: mouse_dx <= ukpdat;
+                    2: mouse_dy <= ukpdat;
+                    endcase
+                end else if (typ == 3) begin    // gamepad
+                    // A typical report layout:
+                    // - d[3] is X axis (0: left, 255: right)
+                    // - d[4] is Y axis
+                    // - d[5][7:4] is buttons YBAX
+                    // - d[6][5:4] is buttons START,SELECT
+                    // Variations:
+                    // - Some gamepads uses d[0] and d[1] for X and Y axis.
+                    // - Some transmits a different set when d[0][1:0] is 2 (a dualshock adapater)
+                    case (rcvct)
+                    0: begin
+                        if (ukpdat[1:0] != 2'b10) begin
+                            // for DualShock2 adapter, 2'b10 marks an irrelevant record
+                            valid <= 1;
+                            game_l <= 0; game_r <= 0; game_u <= 0; game_d <= 0;
+                        end else
+                            valid <= 0;
+                        if (ukpdat==8'h00) {game_l, game_r} <= 2'b10;
+                        if (ukpdat==8'hff) {game_l, game_r} <= 2'b01;
+                    end
+                    1: begin
+                        if (ukpdat==8'h00) {game_u, game_d} <= 2'b10;
+                        if (ukpdat==8'hff) {game_u, game_d} <= 2'b01;
+                    end
+                    3: if (valid) begin 
+                        if (ukpdat[7:6]==2'b00) {game_l, game_r} <= 2'b10;
+                        if (ukpdat[7:6]==2'b11) {game_l, game_r} <= 2'b01;
+                    end
+                    4: if (valid) begin 
+                        if (ukpdat[7:6]==2'b00) {game_u, game_d} <= 2'b10;
+                        if (ukpdat[7:6]==2'b11) {game_u, game_d} <= 2'b01;
+                    end
+                    5: if (valid) begin
+                        game_x <= ukpdat[4];
+                        game_a <= ukpdat[5];
+                        game_b <= ukpdat[6];
+                        game_y <= ukpdat[7];
+                    end
+                    6: if (valid) begin
+                        game_sel <= ukpdat[4];
+                        game_sta <= ukpdat[5];
+                    end
+                    endcase
+                    // TODO: add any special handling if needed 
+                    // (using the detected controller type in 'dev')                
+                end
+                rcvct <= rcvct + 1;
+            end
+        end
+        if(~data_rdy && data_rdy_r && typ != 0)    // falling edge of ukp data ready
+            report <= 1;
     end
-    if(~data_rdy && data_rdy_r && typ != 0)    // falling edge of ukp data ready
-        report <= 1;
 end
 
 reg save_delayed;

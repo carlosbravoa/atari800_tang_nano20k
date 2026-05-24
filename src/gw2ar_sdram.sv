@@ -25,9 +25,7 @@ module gw2ar_sdram (
     input  wire [24:0] addr,       // byte address
     output reg  [31:0] rdata,      // read data (to core)
     input  wire [31:0] wdata,      // write data (from core / loader)
-    input  wire        we_32,
-    input  wire        we_16,
-    input  wire        we_8,
+    input  wire [3:0]  wmask,      // 4-bit write mask (active high)
     input  wire        refresh,    // refresh request from core
 
     // ── GW2AR-18 embedded SDRAM pins ─────────────────────────────────────────
@@ -38,15 +36,16 @@ module gw2ar_sdram (
     output reg         O_sdram_cas_n,
     output reg         O_sdram_wen_n,
     output reg  [1:0]  O_sdram_ba,
-    output reg  [12:0] O_sdram_addr,
+    output reg  [10:0] O_sdram_addr,
     output reg  [3:0]  O_sdram_dqm,
     inout  wire [31:0] IO_sdram_dq,
 
-    output reg         sdram_ready  // high after SDRAM init completes
+    output reg         sdram_ready = 1'b0  // high after SDRAM init completes
 );
 
 // SDRAM clock = system clock (same domain; at 27 MHz timing is very relaxed)
-assign O_sdram_clk = clk;
+// Inverted physical clock to create 180-degree phase shift
+assign O_sdram_clk = ~clk;
 
 // ── DQ tri-state ──────────────────────────────────────────────────────────────
 reg  [31:0] dq_out;
@@ -65,7 +64,7 @@ localparam CMD_AUTO_REF  = 4'b0001;
 localparam CMD_LOAD_MODE = 4'b0000;
 
 // Mode register: CAS=2, Burst=1, Sequential
-localparam MODE_REG = 13'b000_0_010_0_000_001;
+localparam [10:0] MODE_REG = 11'b000_0_010_0_000;
 
 // ── State machine ─────────────────────────────────────────────────────────────
 typedef enum logic [3:0] {
@@ -82,9 +81,9 @@ typedef enum logic [3:0] {
     S_REF        // AUTO REFRESH from idle
 } state_t;
 
-state_t       state;
-reg [13:0]    cnt;        // general wait counter
-reg [3:0]     ref_cnt;    // init-refresh repetition counter
+state_t       state = S_INIT;
+reg [13:0]    cnt = 14'd5400;        // general wait counter
+reg [3:0]     ref_cnt = 4'd8;    // init-refresh repetition counter
 reg [1:0]     cur_bank;
 reg [10:0]    cur_row;
 reg [7:0]     cur_col;
@@ -99,21 +98,7 @@ task set_cmd;
     {O_sdram_cs_n, O_sdram_ras_n, O_sdram_cas_n, O_sdram_wen_n} = cmd;
 endtask
 
-// DQM calculation for partial writes
-function automatic [3:0] calc_dqm;
-    input [24:0] a;
-    input        w32, w16, w8;
-    if (w32)        calc_dqm = 4'b0000;
-    else if (w16)   calc_dqm = a[1] ? 4'b0011 : 4'b1100;
-    else if (w8)
-        case (a[1:0])
-            2'b00: calc_dqm = 4'b1110;
-            2'b01: calc_dqm = 4'b1101;
-            2'b10: calc_dqm = 4'b1011;
-            default: calc_dqm = 4'b0111;
-        endcase
-    else            calc_dqm = 4'b1111;
-endfunction
+
 
 always_ff @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
@@ -126,7 +111,7 @@ always_ff @(posedge clk or negedge reset_n) begin
         sdram_ready  <= 1'b0;
         set_cmd(CMD_INHIBIT);
         O_sdram_ba   <= 2'b0;
-        O_sdram_addr <= 13'b0;
+        O_sdram_addr <= 11'b0;
         O_sdram_dqm  <= 4'b1111;
     end else begin
         req_complete <= 1'b0;
@@ -146,7 +131,7 @@ always_ff @(posedge clk or negedge reset_n) begin
             S_IPRE: begin
                 // PRECHARGE ALL (A10=1)
                 set_cmd(CMD_PRECHARGE);
-                O_sdram_addr <= 13'b0010000000000;  // A10=1
+                O_sdram_addr <= 11'b10000000000;  // A10=1 (Precharge All)
                 O_sdram_ba   <= 2'b00;
                 cnt          <= 14'd2;
                 state        <= S_IREF;
@@ -183,12 +168,12 @@ always_ff @(posedge clk or negedge reset_n) begin
                     cur_bank  <= addr[22:21];
                     cur_row   <= addr[20:10];
                     cur_col   <= addr[9:2];
-                    cur_dqm   <= calc_dqm(addr, we_32, we_16, we_8);
+                    cur_dqm   <= ~wmask;
                     cur_write <= write_en;
                     // ACTIVATE
                     set_cmd(CMD_ACTIVE);
                     O_sdram_ba   <= addr[22:21];
-                    O_sdram_addr <= {2'b0, addr[20:10]};
+                    O_sdram_addr <= addr[20:10];
                     state        <= S_ACT;
                 end else if (refresh) begin
                     set_cmd(CMD_AUTO_REF);
@@ -202,7 +187,7 @@ always_ff @(posedge clk or negedge reset_n) begin
                 if (cur_write) begin
                     set_cmd(CMD_WRITE);
                     O_sdram_ba   <= cur_bank;
-                    O_sdram_addr <= {3'b010, cur_col};  // A10=auto-precharge
+                    O_sdram_addr <= {3'b100, cur_col};  // A10=1 (Auto-precharge enabled)
                     O_sdram_dqm  <= cur_dqm;
                     dq_out       <= wdata;
                     dq_en        <= 1'b1;
@@ -210,7 +195,7 @@ always_ff @(posedge clk or negedge reset_n) begin
                 end else begin
                     set_cmd(CMD_READ);
                     O_sdram_ba   <= cur_bank;
-                    O_sdram_addr <= {3'b010, cur_col};  // A10=auto-precharge
+                    O_sdram_addr <= {3'b100, cur_col};  // A10=1 (Auto-precharge enabled)
                     O_sdram_dqm  <= 4'b0000;
                     state        <= S_RD;
                 end

@@ -1,2 +1,10 @@
 impl/
 rom/*.hex
+*.log
+*.bin
+*.o
+*.elf
+**/disasm.txt
+.antigravitycli/
+scratch/
+resume.txt

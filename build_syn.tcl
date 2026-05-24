@@ -7,7 +7,7 @@ set rtl_dir  [file normalize "$tang_dir/../rtl"]
 set src_dir  "$tang_dir/src"
 
 create_project -name {atari800_tn20k} -dir "$tang_dir/impl" \
-    -pn GW2AR-LV18QN88PC8/I7 -device_version C -force
+    -pn GW2AR-LV18QN88C8/I7 -device_version C -force
 
 # ── Copy ROM hex files into impl dir so $readmemh can find them ───────────────
 file mkdir "$tang_dir/impl/atari800_tn20k"

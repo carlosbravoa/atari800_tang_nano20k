@@ -9,69 +9,89 @@
 // Notation: each pin name is IOx<N><A|B> where x=L/R/B/T (Left/Right/Bot/Top),
 // N is a block number, A=P-side (diff+), B=N-side (diff−).
 
-// ── System clock (27 MHz oscillator → IOL29A, GCLKT_6) ───────────────────────
-IO_LOC  "sys_clk"     10;
-IO_PORT "sys_clk"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
+// ── System clock (27 MHz oscillator → pin 4 = LPLL1_T_in, Bank 7) ───────────
+// Pin 4 is the dedicated left-side PLL clock input. It is in Bank 7 which the
+// toolchain locks to 1.8V (embedded SDRAM). Use LVCMOS18 to satisfy the
+// constraint checker; the board's VCCIO for this bank is 3.3V in practice.
+// Do NOT move this back to pin 10 (GCLKT_6) — the GCLK buffer on pin 10 adds
+// jitter that prevents the rPLL from locking.
+IO_LOC  "sys_clk"     4;
+IO_PORT "sys_clk"     PULL_MODE=UP IO_TYPE=LVCMOS33;
 
 // ── Buttons (active low) ──────────────────────────────────────────────────────
-IO_LOC  "btn_n[0]"    63;   // IOB29A = GCLKT_3 — "reset" on GPIO header
-IO_LOC  "btn_n[1]"    48;   // IOR49B             — "spare" on GPIO header
-IO_PORT "btn_n[0]"    PULL_MODE=UP IO_TYPE=LVCMOS33;
-IO_PORT "btn_n[1]"    PULL_MODE=UP IO_TYPE=LVCMOS33;
+IO_LOC  "btn_n[0]"    88;   // KEY_S1 (USR_KEY)
+IO_LOC  "btn_n[1]"    87;   // KEY_S2
+IO_PORT "btn_n[0]"    PULL_MODE=DOWN IO_TYPE=LVCMOS33;
+IO_PORT "btn_n[1]"    PULL_MODE=DOWN IO_TYPE=LVCMOS33;
 
 // ── LEDs (active low, Bank 6/7 left-side pins) ───────────────────────────────
-IO_LOC  "leds_n[0]"   16;   // IOL47B
+// LPLL2 feedback pins — do NOT LOC any user signal here.
+// Pin 15 = IOL47A = LPLL2_T_fb  ← rPLL maps to LPLL2; driving these as outputs
+// Pin 16 = IOL47B = LPLL2_C_fb    breaks the PLL feedback path → PLL never locks.
+// leds_n[0] and leds_n[5] are intentionally left un-LOC'd so P&R avoids pins 15/16.
+// The physical LEDs on those pins will be dark; the other 4 LEDs still work.
+// IO_LOC  "leds_n[0]"   16;   // DISABLED — LPLL2_C_fb, must not be driven as output
+// IO_LOC  "leds_n[5]"   15;   // DISABLED — LPLL2_T_fb, must not be driven as output
 IO_LOC  "leds_n[1]"   17;   // IOL49A
 IO_LOC  "leds_n[2]"   18;   // IOL49B
 IO_LOC  "leds_n[3]"   19;   // IOL51A
 IO_LOC  "leds_n[4]"   20;   // IOL51B
-IO_LOC  "leds_n[5]"   15;   // IOL47A
-IO_PORT "leds_n[0]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+// IO_PORT "leds_n[0]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;  // disabled, see above
 IO_PORT "leds_n[1]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "leds_n[2]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "leds_n[3]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "leds_n[4]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
-IO_PORT "leds_n[5]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;
+// IO_PORT "leds_n[5]"   PULL_MODE=NONE IO_TYPE=LVCMOS33;  // disabled, see above
 
 // ── Embedded SDRAM (GW2AR-18 on-chip) ────────────────────────────────────────
 // P&R routes O_sdram_*/IO_sdram_dq automatically — no IO_LOC needed.
 
-// ── HDMI TMDS differential outputs (Bank 5, pins 25–32) ──────────────────────
-IO_LOC  "tmds_clk_p"  25;   // IOB6A  — HDMI TXCP
-IO_LOC  "tmds_clk_n"  26;   // IOB6B  — HDMI TXCN
-IO_LOC  "tmds_p[2]"   31;   // IOB18A — HDMI TX2P
-IO_LOC  "tmds_n[2]"   32;   // IOB18B — HDMI TX2N
-IO_LOC  "tmds_p[1]"   29;   // IOB14A — HDMI TX1P
-IO_LOC  "tmds_n[1]"   30;   // IOB14B — HDMI TX1N
-IO_LOC  "tmds_p[0]"   27;   // IOB8A  — HDMI TX0P
-IO_LOC  "tmds_n[0]"   28;   // IOB8B  — HDMI TX0N
+// ── HDMI TMDS differential outputs (Bank 5, pins 33–40) ──────────────────────
+IO_LOC  "tmds_clk_p"  33;   // IOB24A — HDMI CLKP
+IO_LOC  "tmds_clk_n"  34;   // IOB24B — HDMI CLKN
+IO_LOC  "tmds_p[0]"   35;   // IOB30A — HDMI TX0P
+IO_LOC  "tmds_n[0]"   36;   // IOB30B — HDMI TX0N
+IO_LOC  "tmds_p[1]"   37;   // IOB34A — HDMI TX1P
+IO_LOC  "tmds_n[1]"   38;   // IOB34B — HDMI TX1N
+IO_LOC  "tmds_p[2]"   39;   // IOB40A — HDMI TX2P
+IO_LOC  "tmds_n[2]"   40;   // IOB40B — HDMI TX2N
+
+IO_PORT "tmds_clk_p" IO_TYPE=LVDS25 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_PORT "tmds_p[0]"  IO_TYPE=LVDS25 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_PORT "tmds_p[1]"  IO_TYPE=LVDS25 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_PORT "tmds_p[2]"  IO_TYPE=LVDS25 PULL_MODE=NONE BANK_VCCIO=3.3;
+
 
 // ── SD / TF card (SPI mode — onboard TF slot) ────────────────────────────────
-// All four pins connect to the onboard TF card slot traces.
-IO_LOC  "sd_clk"      36;   // IOB30B
-IO_LOC  "sd_mosi"     37;   // IOB34A
-IO_LOC  "sd_miso"     39;   // IOB40A
-IO_LOC  "sd_cs"       42;   // IOB42B — onboard TF card CS (do not move)
+// Confirmed from nestang.cst (Tang Nano 20K reference design).
+// SD card uses pins 80-85 on the board — NOT the GPIO header.
+IO_LOC  "sd_clk"      83;   // TF card CLK
+IO_LOC  "sd_mosi"     82;   // TF card CMD (MOSI)
+IO_LOC  "sd_miso"     84;   // TF card DAT0 (MISO)
+IO_LOC  "sd_cs"       81;   // TF card DAT3 (CS in SPI mode)
 IO_PORT "sd_clk"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "sd_mosi"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "sd_miso"     PULL_MODE=UP   IO_TYPE=LVCMOS33;
 IO_PORT "sd_cs"       PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
 // ── USB HID host (low-speed USB, nand2mario/usb_hid_host) ────────────────────
-// Uses the former PS/2 header pins — no onboard conflict.
-// Connect USB-A female: D- → pin 49, D+ → pin 51.
+// Pin 51 = RPLL2_T_in (dedicated RPLL2 clock input) — must NOT be used as GPIO
+// or the P&R routes usb_dp as RPLL2's CLKIN instead of sys_clk → PLL never locks.
+// usb_dp moved to pin 53 (IOR38B, safe GPIO after FPGA configuration).
+// Connect USB-A female: D- → pin 49, D+ → pin 53.
 // Add 15 kΩ from D- to GND and 15 kΩ from D+ to GND.
 // Power keyboard from VBUS (5V) on the USB connector.
-IO_LOC  "usb_dm"      49;   // IOR49A — GPIO header (was ps2_clk)
-IO_LOC  "usb_dp"      51;   // IOR45A — GPIO header (was ps2_dat)
+IO_LOC  "usb_dm"      49;   // IOR49A — GPIO header
+IO_LOC  "usb_dp"      53;   // IOR38B — GPIO header (moved off RPLL2_T_in/pin 51)
 IO_PORT "usb_dm"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "usb_dp"      PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
 // ── Audio — sigma-delta PDM output (GPIO header, Bank 5) ──────────────────
 // Add RC low-pass filter per channel: 1 kΩ series + 10 nF to GND → Fc ≈ 15.9 kHz.
 // Connect RC output to left/right of a 3.5 mm stereo jack; sleeve to GND.
-IO_LOC  "audio_l"     33;   // IOB24A — GPIO header
-IO_LOC  "audio_r"     34;   // IOB24B — GPIO header
+// Pins 25,26 are Bank 5 GPIO (freed when HDMI moved to 33-40).
+IO_LOC  "audio_l"     25;   // IOB6A — GPIO header
+IO_LOC  "audio_r"     26;   // IOB6B — GPIO header
 IO_PORT "audio_l"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "audio_r"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
@@ -98,3 +118,18 @@ IO_PORT "joy2_n[1]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy2_n[2]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy2_n[3]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy2_n[4]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
+
+// ── Onboard SPI Flash (as user GPIO for PicoRV32) ──────────────────────────
+IO_LOC "flash_spi_cs_n" 60;
+IO_PORT "flash_spi_cs_n" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "flash_spi_miso" 62;
+IO_PORT "flash_spi_miso" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "flash_spi_mosi" 61;
+IO_PORT "flash_spi_mosi" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "flash_spi_clk" 59;
+IO_PORT "flash_spi_clk" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "flash_spi_wp_n" 57;
+IO_PORT "flash_spi_wp_n" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "flash_spi_hold_n" 63;
+IO_PORT "flash_spi_hold_n" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+

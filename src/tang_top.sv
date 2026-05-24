@@ -1,11 +1,12 @@
 // Atari 800 — Tang Nano 20K top-level
-// Stage 5: POKEY audio — GPIO sigma-delta DAC (pins 33/34) + HDMI audio data islands.
-// Clocks: 27 MHz core/pixel; 135 MHz HDMI serialiser; 12 MHz USB HID host.
+// HDMI: Open-source unencrypted hdmi_audio_out transmitter.
+// Clocks: 27 MHz core (sys_clk direct); 371.25 MHz HDMI 5x; 74.25 MHz HDMI pixel; 12 MHz USB.
 
 module tang_top (
     input  wire        sys_clk,       // 27 MHz onboard oscillator
 
-    // Buttons (active low): S1 = reset, S2 = spare
+    // Buttons (active HIGH, PULL_MODE=DOWN): S1 = reset, S2 = OSD menu toggle
+    // btn_n[x] = 0 when unpressed (pulled low), 1 when pressed (drives VCC)
     input  wire [1:0]  btn_n,
 
     // HDMI TMDS — driven by ELVDS_OBUF inside hdmi_out
@@ -29,22 +30,47 @@ module tang_top (
     input  wire [4:0]  joy2_n,
 
     // Audio — sigma-delta PDM (add RC filter: 1 kΩ + 10 nF to 3.5 mm jack)
-    output wire        audio_l,        // pin 33 (IOB24A)
-    output wire        audio_r,        // pin 34 (IOB24B)
+    output wire        audio_l,        // pin 25 (IOB6A) — GPIO header
+    output wire        audio_r,        // pin 26 (IOB6B) — GPIO header
 
-    // Status LEDs (active low on Tang Nano 20K)
-    output wire [5:0]  leds_n
+    // Status LEDs (active low on Tang Nano 20K) — pins 17-20 only.
+    // Pins 15/16 (leds_n[5]/[0] on schematic) are LPLL2 feedback pads; never drive them.
+    output wire [4:1]  leds_n,
+
+    // Onboard SPI Flash (as user GPIO for PicoRV32)
+    output wire        flash_spi_cs_n,
+    input  wire        flash_spi_miso,
+    output wire        flash_spi_mosi,
+    output wire        flash_spi_clk,
+    output wire        flash_spi_wp_n,
+    output wire        flash_spi_hold_n,
+
+    // Embedded SDRAM (GW2AR-18 on-chip)
+    output wire        O_sdram_clk,
+    output wire        O_sdram_cke,
+    output wire        O_sdram_cs_n,
+    output wire        O_sdram_ras_n,
+    output wire        O_sdram_cas_n,
+    output wire        O_sdram_wen_n,
+    output wire [1:0]  O_sdram_ba,
+    output wire [10:0] O_sdram_addr,
+    output wire [3:0]  O_sdram_dqm,
+    inout  wire [31:0] IO_sdram_dq
 );
 
+// Explicitly disable the Global Set/Reset (GSR) network to prevent auto-inference
+// and avoid routing/reset loops on the custom startup delay circuit.
+GSR GSR_INST (.GSRI(1'b1));
+
 // ── Clocks & reset ─────────────────────────────────────────────────────────
-wire clk_sys = sys_clk;    // 27 MHz — direct
-wire clk_5x;               // 135 MHz — HDMI serialiser
-wire clk_usb;              // 12 MHz  — USB HID host
+wire clk_5x;               // 371.25 MHz — HDMI OSER10 5x clock
+wire clk_pix;              // 74.25 MHz  — HDMI pixel clock (371.25 ÷ 5)
+wire clk_usb;              // 12 MHz     — USB HID host
 wire pll_locked, pll_usb_locked;
 
-rpll_135m pll (
+rpll_371m pll (
     .clk_in  (sys_clk),
-    .clk_135m(clk_5x),
+    .clk_371m(clk_5x),
     .locked  (pll_locked)
 );
 
@@ -54,12 +80,60 @@ rpll_12m pll_usb (
     .locked  (pll_usb_locked)
 );
 
-// Physical reset: button OR either PLL not locked
-wire hw_reset_n = btn_n[0] & pll_locked & pll_usb_locked;
+// Power-on reset timer: guaranteed to release after 1.2 ms (32768 / 27 MHz)
+// S1 (btn_n[0]) is active-HIGH: pressing it drives pin HIGH, which restarts the timer.
+// hw_reset_n stays low while the timer hasn't expired (power-on) OR while S1 is pressed.
+reg [15:0] rst_timer = 16'd0;
+wire       timer_done = rst_timer[15];
+always_ff @(posedge sys_clk) begin
+    if (btn_n[0]) begin          // S1 pressed → hold reset (timer held at 0)
+        rst_timer <= 16'd0;
+    end else if (!timer_done) begin
+        rst_timer <= rst_timer + 16'd1;
+    end
+end
 
-// Core reset: hardware reset AND ROMs loaded
-wire roms_loaded;
-wire core_reset_n = hw_reset_n & roms_loaded;
+// hw_reset_n: released after power-on delay, re-asserted while S1 is pressed (active-HIGH)
+wire hw_reset_n  = timer_done && !btn_n[0];
+wire usb_host_enable;
+wire usb_reset_n = hw_reset_n && usb_host_enable;
+
+// hdmi_rst_n: gate HDMI logic on PLL lock so OSER10 RESET is held until clk_pix is stable.
+wire hdmi_rst_n = hw_reset_n && pll_locked;
+
+// 371.25 MHz ÷ 5 = 74.25 MHz HDMI pixel clock.
+// Hold CLKDIV in reset until PLL locks and system reset is released so clk_pix starts cleanly with stable FCLK in sync with OSER10.
+CLKDIV #(
+    .DIV_MODE ("5"),
+    .GSREN    ("false")
+) clkdiv_hdmi (
+    .CLKOUT (clk_pix),
+    .HCLKIN (clk_5x),
+    .RESETN (hdmi_rst_n),
+    .CALIB  (1'b1)
+);
+
+// Core reset held until ROMs are loaded by PicoRV32.
+reg roms_loaded = 1'b0;
+reg rom_loading_r = 1'b0;
+wire rom_loading;
+
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        roms_loaded   <= 1'b0;
+        rom_loading_r <= 1'b0;
+    end else begin
+        rom_loading_r <= rom_loading;
+        if (rom_loading) begin
+            roms_loaded <= 1'b0;
+        end else if (rom_loading_r && !rom_loading) begin
+            roms_loaded <= 1'b1;
+        end
+    end
+end
+
+wire core_reset_n = hw_reset_n && roms_loaded;
+wire dbg_sd_ready;
 
 // ── Keyboard ───────────────────────────────────────────────────────────────
 wire [5:0]  keyboard_scan;
@@ -67,29 +141,31 @@ wire [1:0]  keyboard_response;
 wire        consol_start;
 wire        consol_select;
 wire        consol_option;
+wire [7:0]  usb_key_mod, usb_key1, usb_key2, usb_key3, usb_key4;
 
 // ── Video ──────────────────────────────────────────────────────────────────
 wire        video_vs, video_hs;
 wire [7:0]  video_r, video_g, video_b;
 wire        video_blank;
+wire        video_pixce;
 
 // ── Audio ──────────────────────────────────────────────────────────────────
 wire [15:0] audio_l_pcm, audio_r_pcm;
 
 // 1 kHz test tone: hold S2 (btn_n[1]) to inject into both HDMI and GPIO audio.
 // 27 MHz / (1000 Hz × 2) = 13500 cycles per half-period.
-reg [13:0] tone_cnt;
-reg        tone_sq;
-always_ff @(posedge clk_sys)
+reg [13:0] tone_cnt = 14'd0;
+reg        tone_sq = 1'b0;
+always_ff @(posedge sys_clk)
     if (tone_cnt == 14'd13499) begin tone_cnt <= 14'd0; tone_sq <= ~tone_sq; end
     else                            tone_cnt <= tone_cnt + 14'd1;
 
 wire [15:0] tone_sample = tone_sq ? 16'h4000 : 16'hC000;  // ±25 % FS square wave
-wire [15:0] audio_l_out = !btn_n[1] ? tone_sample : audio_l_pcm;
-wire [15:0] audio_r_out = !btn_n[1] ? tone_sample : audio_r_pcm;
+wire [15:0] audio_l_out = audio_l_pcm;
+wire [15:0] audio_r_out = audio_r_pcm;
 
-sigma_delta_dac dac_l (.clk(clk_sys), .audio_in(audio_l_out), .dac_out(audio_l));
-sigma_delta_dac dac_r (.clk(clk_sys), .audio_in(audio_r_out), .dac_out(audio_r));
+sigma_delta_dac dac_l (.clk(sys_clk), .audio_in(audio_l_out), .dac_out(audio_l));
+sigma_delta_dac dac_r (.clk(sys_clk), .audio_in(audio_r_out), .dac_out(audio_r));
 
 // ── SIO — stubbed until Stage 6 ───────────────────────────────────────────
 wire sio_command, sio_txd, sio_motor;
@@ -107,114 +183,87 @@ wire        core_sdram_16bit_we;
 wire        core_sdram_8bit_we;
 wire        core_sdram_refresh;
 
-// ── ROM loader SDRAM signals ───────────────────────────────────────────────
-wire        loader_req;
-wire        loader_complete;
-wire        loader_write_en;
-wire [24:0] loader_addr;
-wire [31:0] loader_wdata;
+// PicoRV32 client wires
+wire        rv_valid;
+wire        rv_ready;
+wire [22:0] rv_addr;
+wire [31:0] rv_wdata;
+wire [3:0]  rv_wstrb;
+wire [31:0] rv_rdata;
 wire        sdram_ready;
 
-// ── SDRAM mux: ROM loader has priority until roms_loaded ──────────────────
-wire        sdram_req    = roms_loaded ? core_sdram_req          : loader_req;
-wire        sdram_re     = roms_loaded ? core_sdram_read_en      : 1'b0;
-wire        sdram_we     = roms_loaded ? core_sdram_write_en     : loader_write_en;
-wire [24:0] sdram_addr   = roms_loaded ? core_sdram_addr         : loader_addr;
-wire [31:0] sdram_wdata  = roms_loaded ? core_sdram_data_from_core : loader_wdata;
-wire        sdram_we32   = roms_loaded ? core_sdram_32bit_we     : 1'b1;
-wire        sdram_we16   = roms_loaded ? core_sdram_16bit_we     : 1'b0;
-wire        sdram_we8    = roms_loaded ? core_sdram_8bit_we      : 1'b0;
-wire        sdram_refresh= roms_loaded ? core_sdram_refresh      : 1'b0;
-
+// ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
 wire        sdram_complete;
-assign core_sdram_req_complete = roms_loaded ? sdram_complete : 1'b0;
-assign loader_complete         = roms_loaded ? 1'b0          : sdram_complete;
+reg         sdram_complete_r = 1'b0;
+reg         sdram_owner = 1'b0; // 0 = Atari core, 1 = PicoRV32
 
-wire [31:0] sdram_rdata_out;
-assign core_sdram_data_to_core = sdram_rdata_out;
+assign sdram_complete = sdram_complete_r;
+assign core_sdram_req_complete = sdram_complete && (sdram_owner == 1'b0);
+assign rv_ready                = sdram_complete && (sdram_owner == 1'b1);
 
-// ── SDRC_HS: Gowin embedded SDRAM controller ──────────────────────────────
-// The Gowin SDRC_HS IP owns O_sdram_*/IO_sdram_dq.  These become internal
-// signals here (NOT top-level ports), keeping tang_top within the 53-IO limit.
-// The P&R tool routes them to the GW2AR-18 on-chip SDRAM die.
+wire [31:0] sdram_rd_data_wire;
+wire        sdram_ready_wire;
 
-// Command encoding: I_sdrc_cmd = {RAS_N, CAS_N, WE_N}
-localparam SDRC_WRITE = 3'b100;  // READ: RAS=1 CAS=0 WE=0
-localparam SDRC_READ  = 3'b101;  // READ: RAS=1 CAS=0 WE=1
+assign core_sdram_data_to_core = sdram_rd_data_wire;
+assign rv_rdata                = sdram_rd_data_wire;
+assign sdram_ready             = sdram_ready_wire;
 
-wire        sdrc_init_done;
-wire        sdrc_cmd_ack;
-wire [31:0] sdrc_rd_data;
+// Address translation for PicoRV32: Virtual-to-Physical Bank mapping
+// Virtual Bank 0 (0x000000-0x1FFFFF) -> Physical Bank 1
+// Virtual Bank 1 (0x200000-0x3FFFFF) -> Physical Bank 0
+// Virtual Bank 2 (0x400000-0x5FFFFF) -> Physical Bank 2
+// Virtual Bank 3 (0x600000-0x7FFFFF) -> Physical Bank 3
+wire [24:0] rv_physical_addr = { 2'b00, (rv_addr[22:21] == 2'b00) ? 2'b01 : ((rv_addr[22:21] == 2'b01) ? 2'b00 : rv_addr[22:21]), rv_addr[20:0] };
 
-reg         sdrc_cmd_en;
-reg  [2:0]  sdrc_cmd_r;
-reg  [22:0] sdrc_addr_r;   // I_sdrc_addr: {bank[1:0], 2'b0, row[10:0], col[7:0]}
-reg  [3:0]  sdrc_dqm_r;
-reg  [31:0] sdrc_wdata_r;
+// ── Custom Dual-Client SDRAM Arbiter ─────────────────────────────────────────
+// Reconstruct the 4-bit write mask for the Atari core from its we signals and address:
+wire [3:0] core_sdram_wmask = core_sdram_32bit_we ? 4'b1111 :
+                              core_sdram_16bit_we ? (core_sdram_addr[1] ? 4'b1100 : 4'b0011) :
+                              core_sdram_8bit_we  ? (
+                                  (core_sdram_addr[1:0] == 2'b00) ? 4'b0001 :
+                                  (core_sdram_addr[1:0] == 2'b01) ? 4'b0010 :
+                                  (core_sdram_addr[1:0] == 2'b10) ? 4'b0100 : 4'b1000
+                              ) : 4'b0000;
 
-// DQM calculation for partial writes
-function automatic [3:0] calc_dqm;
-    input [24:0] a;
-    input        w32, w16, w8;
-    if (w32)        calc_dqm = 4'b0000;
-    else if (w16)   calc_dqm = a[1] ? 4'b0011 : 4'b1100;
-    else if (w8)
-        case (a[1:0])
-            2'b00: calc_dqm = 4'b1110;
-            2'b01: calc_dqm = 4'b1101;
-            2'b10: calc_dqm = 4'b1011;
-            default: calc_dqm = 4'b0111;
-        endcase
-    else            calc_dqm = 4'b1111;
-endfunction
+wire actual_core_sdram_req = core_sdram_req && core_reset_n;
 
-// I_sdrc_addr layout: {bank[1:0], row_msb_pad[1:0], row[10:0], col[7:0]}
-// SDRAM_ADDR_ROW_WIDTH=13 → row field is 13 bits; GW2AR-18 uses only [10:0]
-wire [22:0] sdrc_addr_next =
-    {sdram_addr[22:21], 2'b00, sdram_addr[20:10], sdram_addr[9:2]};
+wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : (actual_core_sdram_req ? 1'b0 : 1'b1);
 
-// Adapter state machine: Atari req/complete handshake → SDRC_HS cmd_en/cmd_ack
-typedef enum logic [1:0] { SA_IDLE, SA_BUSY } sadap_t;
-sadap_t sadap_st;
+wire        sdram_ctrl_req      = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : actual_core_sdram_req) : (actual_core_sdram_req || rv_valid);
+wire        sdram_ctrl_read_en  = current_owner ? (~|rv_wstrb) : core_sdram_read_en;
+wire        sdram_ctrl_write_en = current_owner ? (|rv_wstrb)  : core_sdram_write_en;
+wire [24:0] sdram_ctrl_addr     = current_owner ? rv_physical_addr : core_sdram_addr;
+wire [31:0] sdram_ctrl_wdata    = current_owner ? rv_wdata : core_sdram_data_from_core;
+wire [3:0]  sdram_ctrl_wmask    = current_owner ? rv_wstrb : core_sdram_wmask;
+wire        sdram_ctrl_refresh  = current_owner ? 1'b0     : core_sdram_refresh;
 
-reg        sdram_complete_r;
-reg [31:0] sdram_rdata_r;
-reg        sdram_ready_r;
+wire        sdram_complete_wire;
 
-assign sdram_complete  = sdram_complete_r;
-assign sdram_rdata_out = sdram_rdata_r;
-assign sdram_ready     = sdram_ready_r;
+typedef enum logic { SA_IDLE, SA_BUSY } sadap_t;
+sadap_t sadap_st = SA_IDLE;
 
-always_ff @(posedge clk_sys or negedge hw_reset_n) begin
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
-        sdrc_cmd_en      <= 1'b0;
-        sdrc_cmd_r       <= 3'b111;  // NOP
-        sdrc_addr_r      <= 23'd0;
-        sdrc_dqm_r       <= 4'b1111;
-        sdrc_wdata_r     <= 32'd0;
         sdram_complete_r <= 1'b0;
-        sdram_rdata_r    <= 32'd0;
-        sdram_ready_r    <= 1'b0;
         sadap_st         <= SA_IDLE;
+        sdram_owner      <= 1'b0;
     end else begin
-        sdram_ready_r    <= sdrc_init_done;
         sdram_complete_r <= 1'b0;
-        sdrc_cmd_en      <= 1'b0;   // default: no command this cycle
 
         case (sadap_st)
             SA_IDLE: begin
-                if (sdrc_init_done && sdram_req) begin
-                    sdrc_cmd_en  <= 1'b1;
-                    sdrc_cmd_r   <= sdram_we ? SDRC_WRITE : SDRC_READ;
-                    sdrc_addr_r  <= sdrc_addr_next;
-                    sdrc_dqm_r   <= calc_dqm(sdram_addr, sdram_we32, sdram_we16, sdram_we8);
-                    sdrc_wdata_r <= sdram_wdata;
-                    sadap_st     <= SA_BUSY;
+                if (sdram_ready_wire) begin
+                    if (actual_core_sdram_req) begin
+                        sdram_owner  <= 1'b0;
+                        sadap_st     <= SA_BUSY;
+                    end else if (rv_valid) begin
+                        sdram_owner  <= 1'b1;
+                        sadap_st     <= SA_BUSY;
+                    end
                 end
             end
             SA_BUSY: begin
-                if (sdrc_cmd_ack) begin
-                    sdram_rdata_r    <= sdrc_rd_data;
+                if (sdram_complete_wire) begin
                     sdram_complete_r <= 1'b1;
                     sadap_st         <= SA_IDLE;
                 end
@@ -224,65 +273,201 @@ always_ff @(posedge clk_sys or negedge hw_reset_n) begin
     end
 end
 
-// Internal SDRAM bus wires (GW2AR-18 embedded, not top-level ports)
-wire        emb_sdram_clk;
-wire        emb_sdram_cke;
-wire        emb_sdram_cs_n;
-wire        emb_sdram_cas_n;
-wire        emb_sdram_ras_n;
-wire        emb_sdram_wen_n;
-wire [3:0]  emb_sdram_dqm;
-wire [12:0] emb_sdram_addr;
-wire [1:0]  emb_sdram_ba;
-wire [31:0] emb_sdram_dq;
+gw2ar_sdram sdram_ip (
+    .clk          (sys_clk),
+    .reset_n      (hw_reset_n),
 
-Gowin_SDRAM_HS sdram_ip (
-    // Physical embedded SDRAM connections (routed internally by P&R)
-    .O_sdram_clk  (emb_sdram_clk),
-    .O_sdram_cke  (emb_sdram_cke),
-    .O_sdram_cs_n (emb_sdram_cs_n),
-    .O_sdram_cas_n(emb_sdram_cas_n),
-    .O_sdram_ras_n(emb_sdram_ras_n),
-    .O_sdram_wen_n(emb_sdram_wen_n),
-    .O_sdram_dqm  (emb_sdram_dqm),
-    .O_sdram_addr (emb_sdram_addr),
-    .O_sdram_ba   (emb_sdram_ba),
-    .IO_sdram_dq  (emb_sdram_dq),
     // User interface
-    .I_sdrc_rst_n        (hw_reset_n),
-    .I_sdrc_clk          (clk_sys),
-    .I_sdram_clk         (clk_sys),
-    .I_sdrc_cmd_en       (sdrc_cmd_en),
-    .I_sdrc_cmd          (sdrc_cmd_r),
-    .I_sdrc_precharge_ctrl(1'b1),   // always auto-precharge after each access
-    .I_sdram_power_down  (1'b0),
-    .I_sdram_selfrefresh (1'b0),
-    .I_sdrc_addr         (sdrc_addr_r),
-    .I_sdrc_dqm          (sdrc_dqm_r),
-    .I_sdrc_data         (sdrc_wdata_r),
-    .I_sdrc_data_len     (8'd0),    // single-word burst
-    .O_sdrc_data         (sdrc_rd_data),
-    .O_sdrc_init_done    (sdrc_init_done),
-    .O_sdrc_cmd_ack      (sdrc_cmd_ack)
+    .req          (sdram_ctrl_req),
+    .req_complete (sdram_complete_wire),
+    .read_en      (sdram_ctrl_read_en),
+    .write_en     (sdram_ctrl_write_en),
+    .addr         (sdram_ctrl_addr),
+    .rdata        (sdram_rd_data_wire),
+    .wdata        (sdram_ctrl_wdata),
+    .wmask        (sdram_ctrl_wmask),
+    .refresh      (sdram_ctrl_refresh),
+
+    // Physical embedded SDRAM connections
+    .O_sdram_clk  (O_sdram_clk),
+    .O_sdram_cke  (O_sdram_cke),
+    .O_sdram_cs_n (O_sdram_cs_n),
+    .O_sdram_ras_n(O_sdram_ras_n),
+    .O_sdram_cas_n(O_sdram_cas_n),
+    .O_sdram_wen_n(O_sdram_wen_n),
+    .O_sdram_ba   (O_sdram_ba),
+    .O_sdram_addr (O_sdram_addr),
+    .O_sdram_dqm  (O_sdram_dqm),
+    .IO_sdram_dq  (IO_sdram_dq),
+
+    .sdram_ready  (sdram_ready_wire)
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SD card ROM loader
+// PicoRV32 Softcore MCU & SIO Disk Handler
 // ─────────────────────────────────────────────────────────────────────────────
-sd_rom_loader loader (
-    .clk         (clk_sys),
-    .reset_n     (hw_reset_n),
-    .sdram_ready (sdram_ready),
-    .done        (roms_loaded),
-    .req         (loader_req),
-    .complete    (loader_complete),
-    .write_en    (loader_write_en),
-    .addr        (loader_addr),
-    .wdata       (loader_wdata),
-    .spi_clk     (sd_clk),
-    .spi_mosi    (sd_mosi),
-    .spi_miso    (sd_miso),
-    .spi_cs_n    (sd_cs)
+
+// Virtual Keyboard wires from PicoRV32 softcore
+wire [7:0] virt_kbd_mod;
+wire [7:0] virt_kbd_key1;
+wire [7:0] virt_kbd_key2;
+wire [7:0] virt_kbd_key3;
+wire [7:0] virt_kbd_key4;
+
+// Combine USB keyboard keys and PicoRV32 virtual serial keyboard keys
+wire [7:0] effective_usb_key_mod = usb_host_enable ? usb_key_mod : 8'h00;
+wire [7:0] effective_usb_key1    = usb_host_enable ? usb_key1    : 8'h00;
+wire [7:0] effective_usb_key2    = usb_host_enable ? usb_key2    : 8'h00;
+wire [7:0] effective_usb_key3    = usb_host_enable ? usb_key3    : 8'h00;
+wire [7:0] effective_usb_key4    = usb_host_enable ? usb_key4    : 8'h00;
+
+wire [7:0] combined_key_mod = virt_kbd_mod  | effective_usb_key_mod;
+wire [7:0] combined_key1    = (virt_kbd_key1 != 8'h00) ? virt_kbd_key1 : effective_usb_key1;
+wire [7:0] combined_key2    = (virt_kbd_key2 != 8'h00) ? virt_kbd_key2 : effective_usb_key2;
+wire [7:0] combined_key3    = (virt_kbd_key3 != 8'h00) ? virt_kbd_key3 : effective_usb_key3;
+wire [7:0] combined_key4    = (virt_kbd_key4 != 8'h00) ? virt_kbd_key4 : effective_usb_key4;
+
+// OSD navigation: driven by BOTH real USB keyboard and virtual UART keyboard.
+wire key_up    = (combined_key1 == 8'h52) || (combined_key2 == 8'h52) || (combined_key3 == 8'h52) || (combined_key4 == 8'h52); // Up Arrow
+wire key_down  = (combined_key1 == 8'h51) || (combined_key2 == 8'h51) || (combined_key3 == 8'h51) || (combined_key4 == 8'h51); // Down Arrow
+wire key_left  = (combined_key1 == 8'h50) || (combined_key2 == 8'h50) || (combined_key3 == 8'h50) || (combined_key4 == 8'h50); // Left Arrow
+wire key_right = (combined_key1 == 8'h4F) || (combined_key2 == 8'h4F) || (combined_key3 == 8'h4F) || (combined_key4 == 8'h4F); // Right Arrow
+wire key_enter = (combined_key1 == 8'h28) || (combined_key2 == 8'h28) || (combined_key3 == 8'h28) || (combined_key4 == 8'h28); // Enter
+wire key_esc   = (combined_key1 == 8'h29) || (combined_key2 == 8'h29) || (combined_key3 == 8'h29) || (combined_key4 == 8'h29); // Escape
+wire key_f12   = (combined_key1 == 8'h45) || (combined_key2 == 8'h45) || (combined_key3 == 8'h45) || (combined_key4 == 8'h45); // F12
+
+// Combine USB keyboard keys and physical DB9 Joystick 1 (active low, so ~joy1_n)
+wire joy_up    = key_up    || ~joy1_n[0];
+wire joy_down  = key_down  || ~joy1_n[1];
+wire joy_left  = key_left  || ~joy1_n[2];
+wire joy_right = key_right || ~joy1_n[3];
+wire joy_fire  = key_enter || ~joy1_n[4];
+
+// S2 (btn_n[1]) is active-HIGH: 0 when unpressed (PULL_MODE=DOWN), 1 when pressed.
+// Map directly (no inversion) to bit 9 (X) in rv_joy1 so firmware sees 1 only when pressed.
+wire osd_toggle = btn_n[1];
+
+wire [11:0] rv_joy1 = {
+    joy_right,                         // 11: R
+    joy_left,                          // 10: L
+    osd_toggle,                        //  9: X (S2 button)
+    1'b0,                              //  8: A
+    1'b0,                              //  7: RT
+    1'b0,                              //  6: LT
+    joy_down,                          //  5: DN
+    joy_up,                            //  4: UP
+    key_f12,                           //  3: START
+    1'b0,                              //  2: SELECT
+    key_esc,                           //  1: Y
+    joy_fire                           //  0: B
+};
+wire [11:0] rv_joy2 = 12'b0;
+
+
+// OSD overlay signals
+wire        overlay;
+wire [15:0] overlay_color;
+wire [7:0]  osd_x;
+wire [7:0]  osd_y;
+
+// SIO register interface wires
+wire        sio_reg_sel;
+wire [4:0]  sio_reg_addr;
+wire [7:0]  sio_reg_wdata;
+wire        sio_reg_wr;
+wire [15:0] sio_reg_rdata;
+wire        sio_reg_en;
+
+wire        sio_rx_data_in;
+wire        sio_clk_out;
+wire        enable_179_early;
+
+assign dbg_sd_ready = roms_loaded;
+
+// PicoRV32 IO subsystem module
+iosys_picorv32 #(
+    .FREQ(27_000_000),
+    .COLOR_LOGO(15'b00000_10101_00000),
+    .CORE_ID(16'd3) // 3 for Atari
+) mcu (
+    .clk(sys_clk),
+    .hclk(clk_pix),
+    .resetn(hw_reset_n),
+
+    // OSD display interface
+    .overlay(overlay),
+    .overlay_x(osd_x),
+    .overlay_y(osd_y),
+    .overlay_color(overlay_color),
+    .joy1(rv_joy1),
+    .joy2(rv_joy2),
+
+    // ROM loading interface
+    .rom_loading(rom_loading),
+    .rom_do(),
+    .rom_do_valid(),
+
+    // 32-bit wide memory interface for RISC-V softcore
+    .rv_valid(rv_valid),
+    .rv_ready(rv_ready),
+    .rv_addr(rv_addr),
+    .rv_wdata(rv_wdata),
+    .rv_wstrb(rv_wstrb),
+    .rv_rdata(rv_rdata),
+
+    .ram_busy(~sdram_ready),
+
+    // SPI Flash
+    .flash_spi_cs_n(flash_spi_cs_n),
+    .flash_spi_miso(flash_spi_miso),
+    .flash_spi_mosi(flash_spi_mosi),
+    .flash_spi_clk(flash_spi_clk),
+    .flash_spi_wp_n(flash_spi_wp_n),
+    .flash_spi_hold_n(flash_spi_hold_n),
+
+    // UART RX is mapped to pin 53 (usb_dp)
+    .uart_rx(usb_dp),
+    .uart_tx(),
+
+    // Virtual Keyboard outputs
+    .virt_kbd_mod_out(virt_kbd_mod),
+    .virt_kbd_key1_out(virt_kbd_key1),
+    .virt_kbd_key2_out(virt_kbd_key2),
+    .virt_kbd_key3_out(virt_kbd_key3),
+    .virt_kbd_key4_out(virt_kbd_key4),
+    .usb_host_enable_out(usb_host_enable),
+
+    // SD Card (SPI mode)
+    .sd_clk(sd_clk),
+    .sd_cmd(sd_mosi),
+    .sd_dat0(sd_miso),
+    .sd_dat1(),
+    .sd_dat2(),
+    .sd_dat3(sd_cs),
+
+    // SIO register interface
+    .sio_reg_sel(sio_reg_sel),
+    .sio_reg_addr(sio_reg_addr),
+    .sio_reg_wdata(sio_reg_wdata),
+    .sio_reg_wr(sio_reg_wr),
+    .sio_reg_rdata(sio_reg_rdata),
+    .sio_reg_en(sio_reg_en)
+);
+
+// VHDL SIO Disk Handler
+sio_handler sio_inst (
+    .CLK(sys_clk),
+    .ADDR(sio_reg_addr),
+    .CPU_DATA_IN(sio_reg_wdata),
+    .EN(sio_reg_en),
+    .WR_EN(sio_reg_wr),
+    .RESET_N(hw_reset_n),
+    .POKEY_ENABLE(enable_179_early),
+    .SIO_DATA_IN(sio_rx_data_in),
+    .SIO_COMMAND(sio_command),
+    .SIO_DATA_OUT(sio_txd),
+    .SIO_CLK_OUT(sio_clk_out),
+    .DATA_OUT(sio_reg_rdata)
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,12 +477,12 @@ atari800core_simple_sdram #(
     .cycle_length               (16),
     .video_bits                 (8),
     .palette                    (1),    // Altirra palette
-    .internal_rom               (0),    // ROMs in SDRAM (loaded by rom_loader)
+    .internal_rom               (0),    // ROMs in SDRAM
     .internal_ram               (0),
     .low_memory                 (0),
     .covox                      (1)
 ) core (
-    .CLK                        (clk_sys),
+    .CLK                        (sys_clk),
     .RESET_N                    (core_reset_n),
 
     // Video
@@ -307,7 +492,7 @@ atari800core_simple_sdram #(
     .VIDEO_G                    (video_g),
     .VIDEO_R                    (video_r),
     .VIDEO_BLANK                (video_blank),
-    .VIDEO_PIXCE                (),
+    .VIDEO_PIXCE                (video_pixce),
     .VIDEO_BURST                (),
     .VIDEO_START_OF_FIELD       (),
     .VIDEO_ODD_LINE             (),
@@ -334,15 +519,15 @@ atari800core_simple_sdram #(
 
     // SIO
     .SIO_COMMAND                (sio_command),
-    .SIO_RXD                    (1'b1),
+    .SIO_RXD                    (sio_rx_data_in),
     .SIO_TXD                    (sio_txd),
-    .SIO_CLOCK                  (),
+    .SIO_CLOCK                  (sio_clk_out),
     .SIO_CLOCK_IN               (1'b1),
     .SIO_PROC                   (1'b1),
     .SIO_IRQ                    (1'b1),
     .SIO_MOTOR                  (sio_motor),
     .TAPE_AUDIO                 (8'h00),
-    .ENABLE_179_EARLY           (),
+    .ENABLE_179_EARLY           (enable_179_early),
     .PORTA_OUT_EXP              (),
 
     // Console keys
@@ -402,11 +587,9 @@ atari800core_simple_sdram #(
 // ─────────────────────────────────────────────────────────────────────────────
 // USB HID keyboard
 // ─────────────────────────────────────────────────────────────────────────────
-wire [7:0] usb_key_mod, usb_key1, usb_key2, usb_key3, usb_key4;
-
 usb_hid_host usb_hid (
     .usbclk       (clk_usb),
-    .usbrst_n     (hw_reset_n),
+    .usbrst_n     (usb_reset_n),
     .usb_dm       (usb_dm),
     .usb_dp       (usb_dp),
     .typ          (),
@@ -433,14 +616,15 @@ usb_hid_host usb_hid (
     .dbg_hid_report()
 );
 
+
 usb_to_atari800 keyboard (
-    .clk              (clk_sys),
+    .clk              (sys_clk),
     .reset_n          (core_reset_n),
-    .key_modifiers    (usb_key_mod),
-    .key1             (usb_key1),
-    .key2             (usb_key2),
-    .key3             (usb_key3),
-    .key4             (usb_key4),
+    .key_modifiers    (combined_key_mod),
+    .key1             (combined_key1),
+    .key2             (combined_key2),
+    .key3             (combined_key3),
+    .key4             (combined_key4),
     .keyboard_scan    (keyboard_scan),
     .keyboard_response(keyboard_response),
     .consol_start     (consol_start),
@@ -449,18 +633,97 @@ usb_to_atari800 keyboard (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// HDMI video source: scale720p scales Atari core output to 720p/60Hz
+// ─────────────────────────────────────────────────────────────────────────────
+wire [7:0] hdmi_r, hdmi_g, hdmi_b;
+wire       hdmi_hs, hdmi_vs, hdmi_de;
+
+scale720p scaler (
+    .clk_core  (sys_clk),
+    .rst_n     (hdmi_rst_n),
+    .r_in      (video_r), .g_in(video_g), .b_in(video_b),
+    .hs_in     (video_hs), .vs_in(video_vs), .de_in(~video_blank),
+    .pixce     (video_pixce), .clk_pixel(clk_pix),
+    .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
+    .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
+    .osd_x(osd_x), .osd_y(osd_y)
+);
+
+// OSD RGB colors conversion from BGR5:
+// overlay_color[4:0]   -> Red
+// overlay_color[9:5]   -> Green
+// overlay_color[14:10] -> Blue
+wire [7:0] osd_r = {overlay_color[4:0],   overlay_color[4:2]};
+wire [7:0] osd_g = {overlay_color[9:5],   overlay_color[9:7]};
+wire [7:0] osd_b = {overlay_color[14:10], overlay_color[14:12]};
+
+// Draw OSD character/logo pixel if overlay is enabled, active, and color is not transparent (black)
+wire       osd_active = overlay && (overlay_color[14:0] != 15'd0) && hdmi_de;
+
+wire [7:0] mixed_r = osd_active ? osd_r : hdmi_r;
+wire [7:0] mixed_g = osd_active ? osd_g : hdmi_g;
+wire [7:0] mixed_b = osd_active ? osd_b : hdmi_b;
+
+// Pipeline register to eliminate the setup violation from the OSD RAM
+// all the way to the HDMI TMDS encoders.
+reg [7:0] mixed_r_reg = 8'd0;
+reg [7:0] mixed_g_reg = 8'd0;
+reg [7:0] mixed_b_reg = 8'd0;
+reg       hdmi_hs_reg = 1'b0;
+reg       hdmi_vs_reg = 1'b0;
+reg       hdmi_de_reg = 1'b0;
+
+always_ff @(posedge clk_pix) begin
+    mixed_r_reg <= mixed_r;
+    mixed_g_reg <= mixed_g;
+    mixed_b_reg <= mixed_b;
+    hdmi_hs_reg <= hdmi_hs;
+    hdmi_vs_reg <= hdmi_vs;
+    hdmi_de_reg <= hdmi_de;
+end
+
+// `define USE_TEST_PATTERN
+
+`ifdef USE_TEST_PATTERN
+wire [7:0] tp_r, tp_g, tp_b;
+wire       tp_hs, tp_vs, tp_de;
+test_pattern_720p tp (
+    .clk_pixel(clk_pix),
+    .rst_n    (hdmi_rst_n),
+    .r_out    (tp_r),
+    .g_out    (tp_g),
+    .b_out    (tp_b),
+    .hs_out   (tp_hs),
+    .vs_out   (tp_vs),
+    .de_out   (tp_de)
+);
+`endif
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HDMI output (video + audio data islands)
 // ─────────────────────────────────────────────────────────────────────────────
-hdmi_audio_out hdmi (
-    .clk_pix    (clk_sys),
+hdmi_audio_out #(
+    .DVI_OUTPUT(1'b0),
+    .NO_DATA_ISLANDS(1'b0)
+) hdmi (
+    .clk_pix    (clk_pix),
     .clk_5x     (clk_5x),
-    .rst_n      (hw_reset_n),
-    .r          (video_r),
-    .g          (video_g),
-    .b          (video_b),
-    .hs         (video_hs),
-    .vs         (video_vs),
-    .de         (~video_blank),
+    .rst_n      (hdmi_rst_n),
+`ifdef USE_TEST_PATTERN
+    .r          (tp_r),
+    .g          (tp_g),
+    .b          (tp_b),
+    .hs         (tp_hs),
+    .vs         (tp_vs),
+    .de         (tp_de),
+`else
+    .r          (mixed_r_reg),
+    .g          (mixed_g_reg),
+    .b          (mixed_b_reg),
+    .hs         (hdmi_hs_reg),
+    .vs         (hdmi_vs_reg),
+    .de         (hdmi_de_reg),
+`endif
     .audio_l    (audio_l_out),
     .audio_r    (audio_r_out),
     .tmds_p     (tmds_p),
@@ -469,9 +732,44 @@ hdmi_audio_out hdmi (
     .tmds_clk_n (tmds_clk_n)
 );
 
+/*
+DVI_TX_Top hdmi (
+    .I_rst_n       (hdmi_rst_n),
+    .I_serial_clk  (clk_5x),
+    .I_rgb_clk     (clk_pix),
+`ifdef USE_TEST_PATTERN
+    .I_rgb_vs      (tp_vs), 
+    .I_rgb_hs      (tp_hs),    
+    .I_rgb_de      (tp_de), 
+    .I_rgb_r       (tp_r),  
+    .I_rgb_g       (tp_g),  
+    .I_rgb_b       (tp_b),  
+`else
+    .I_rgb_vs      (hdmi_vs_reg), 
+    .I_rgb_hs      (hdmi_hs_reg),    
+    .I_rgb_de      (hdmi_de_reg), 
+    .I_rgb_r       (mixed_r_reg),  
+    .I_rgb_g       (mixed_g_reg),  
+    .I_rgb_b       (mixed_b_reg),  
+`endif
+    .O_tmds_clk_p  (tmds_clk_p),
+    .O_tmds_clk_n  (tmds_clk_n),
+    .O_tmds_data_p (tmds_p),
+    .O_tmds_data_n (tmds_n)
+);
+*/
+
 // ─────────────────────────────────────────────────────────────────────────────
-// LEDs (active low): power, PLL-lock, roms-loaded, VS, HS, SDRAM-ready
+// Diagnostic free-running blinker — no reset, no external inputs.
+// If sys_clk reaches flip-flops, these blink.  blink[26]=0.2 Hz, [25]=0.4 Hz.
 // ─────────────────────────────────────────────────────────────────────────────
-assign leds_n = ~{1'b1, pll_locked, roms_loaded, video_vs, video_hs, sdram_ready};
+reg [26:0] blink_cnt = 27'd0;
+always_ff @(posedge sys_clk) blink_cnt <= blink_cnt + 1'b1;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEDs (active low, pins 17-20):
+//   [4]=blink_cnt[22] ~6 Hz   [3]=dbg_sd_ready (roms_loaded)  [2]=pll_locked   [1]=sdram_ready
+// ─────────────────────────────────────────────────────────────────────────────
+assign leds_n = ~{blink_cnt[22], dbg_sd_ready, pll_locked, sdram_ready};
 
 endmodule

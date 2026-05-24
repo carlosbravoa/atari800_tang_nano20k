@@ -76,20 +76,106 @@ Do not modify files under `rtl/` — sync from upstream Atari800_MiSTer instead.
 Bank 7 (LPLL1/SDRAM area) is 1.8 V — do not assign user I/O there.
 HDMI pins (25–32) are fixed to ELVDS_OBUF inside `hdmi_audio_out.sv`; no CST entry needed.
 
+## Blink / Diagnostic Build
+
+A minimal blink test exists for hardware bringup, separate from the main build:
+
+```bash
+/home/carlos/Documents/gowin/IDE/bin/gw_sh.sh build_blink.tcl
+```
+
+Source: `src/tang_top_blink.sv` (uses `rpll_135m.v` + `rpll_12m.v`, constrained by `constraints/tang_blink.cst`).
+Same output path: `impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs`.
+
 ## Confirmed Hardware Pin Facts
 
-- LEDs: pins **15–20** (active LOW). Pin 11 is NOT an LED — it is IOL29B adjacent to the 27 MHz clock input on pin 10.
+- LEDs: pins **15–20** (active LOW). Pin 11 is NOT an LED — it is IOL29B adjacent to the 27 MHz clock input.
 - LED polarity confirmed on hardware: drive LOW = ON.
+- **Pin 4 = LPLL1_T_in** — the 27 MHz oscillator is wired here. This is the dedicated left-side PLL clock input and **must be used as sys_clk**. Pin 10 (GCLKT_6) must NOT be used — its GCLK buffer adds jitter that prevents the rPLL from locking. Confirmed on hardware.
+  - Bank 7 VCCIO: the toolchain locks Bank 7 to 1.8V due to the embedded SDRAM primitive. Use `IO_TYPE=LVCMOS18` in the CST. The board's physical VCCIO for Bank 7 is 3.3V (embedded SDRAM is internal and does not use external VCCIO pins), so 3.3V signals on pin 4 are safe in practice.
+- Pins 15 and 16 are **LPLL2_T_fb** and **LPLL2_C_fb** — the differential feedback pads for the rPLL's LPLL2 block. **Never drive these as GPIO outputs.** Even with `CLKFB_SEL="internal"`, driving them prevents the PLL from locking.
+  - Pin 15 = IOL47A = LPLL2_T_fb (leds_n[5] on schematic — leave unconnected)
+  - Pin 16 = IOL47B = LPLL2_C_fb (leds_n[0] on schematic — leave unconnected)
+- Pin 51 = IOR45A = **RPLL2_T_in** — dedicated input for the right-side PLL. Do not assign user GPIO here; the P&R can route it as a PLL clock input.
+
+## GW2AR-18C rPLL Notes
+
+### Correct formula (confirmed by EX0210 synthesizer check and UG286E v2.0.2E p.30)
+
+```
+FOUT = FCLKIN * (FBDIV_SEL + 1) / (IDIV_SEL + 1)
+VCO  = FCLKIN * (FBDIV_SEL + 1) * ODIV_SEL / (IDIV_SEL + 1)
+```
+
+The older `FOUT = FCLKIN*(FBDIV_SEL+2) / ((IDIV_SEL+1)*ODIV_SEL)` formula is **wrong** for GW2AR devices.
+
+### 27 MHz → 135 MHz parameters
+
+```
+FBDIV_SEL=4, IDIV_SEL=0, ODIV_SEL=8
+FOUT = 27*5/1 = 135 MHz ✓
+VCO  = 27*5*8 = 1080 MHz  (valid range: 500–1250 MHz)
+```
+
+VCO of 540 MHz (ODIV_SEL=4) is technically in range but has less margin; prefer ODIV_SEL=8 (VCO=1080 MHz).
+
+### 27 MHz → 12 MHz parameters (USB)
+
+```
+FBDIV_SEL=3, IDIV_SEL=8, ODIV_SEL=48
+FOUT = 27*4/9 = 12 MHz ✓
+VCO  = 27*4*48/9 = 576 MHz  (valid range ✓)
+```
+
+**Note:** `src/rpll_12m.v` uses the correct formula (FBDIV_SEL=3, IDIV_SEL=8, ODIV_SEL=48 → 12 MHz, VCO=576 MHz) and defparam style. Fixed 2026-05-20.
+
+### Instantiation style
+
+Use **`defparam`** style matching the Gowin IP generator output (not `#()` inline params). Always set `DYN_DA_EN="true"` and all other parameters explicitly. The `DEVICE` parameter must be exactly `"GW2AR-18C"` — `"GW2AR-18"` triggers `EX0206` (invalid device).
+
+```verilog
+rPLL rpll_inst (.CLKIN(clk_in), .CLKFB(gnd), .RESET(gnd), .RESET_P(gnd),
+    .FBDSEL({gnd,gnd,gnd,gnd,gnd,gnd}), .IDSEL({gnd,gnd,gnd,gnd,gnd,gnd}),
+    .ODSEL({gnd,gnd,gnd,gnd,gnd,gnd}), .PSDA({gnd,gnd,gnd,gnd}),
+    .DUTYDA({gnd,gnd,gnd,gnd}), .FDLY({gnd,gnd,gnd,gnd}),
+    .LOCK(locked), .CLKOUT(clk_out), .CLKOUTP(nc0), .CLKOUTD(nc1), .CLKOUTD3(nc2));
+defparam rpll_inst.FCLKIN = "27";
+defparam rpll_inst.DYN_IDIV_SEL = "false";  defparam rpll_inst.IDIV_SEL = 0;
+defparam rpll_inst.DYN_FBDIV_SEL = "false"; defparam rpll_inst.FBDIV_SEL = 4;
+defparam rpll_inst.DYN_ODIV_SEL = "false";  defparam rpll_inst.ODIV_SEL = 8;
+defparam rpll_inst.PSDA_SEL = "0000";       defparam rpll_inst.DYN_DA_EN = "true";
+defparam rpll_inst.DUTYDA_SEL = "1000";     defparam rpll_inst.CLKOUT_FT_DIR = 1'b1;
+defparam rpll_inst.CLKOUTP_FT_DIR = 1'b1;  defparam rpll_inst.CLKOUT_DLY_STEP = 0;
+defparam rpll_inst.CLKOUTP_DLY_STEP = 0;   defparam rpll_inst.CLKFB_SEL = "internal";
+defparam rpll_inst.CLKOUT_BYPASS = "false"; defparam rpll_inst.CLKOUTP_BYPASS = "false";
+defparam rpll_inst.CLKOUTD_BYPASS = "false";defparam rpll_inst.DYN_SDIV_SEL = 2;
+defparam rpll_inst.CLKOUTD_SRC = "CLKOUT"; defparam rpll_inst.CLKOUTD3_SRC = "CLKOUT";
+defparam rpll_inst.DEVICE = "GW2AR-18C";
+```
+
+### PLL lock status — RESOLVED (2026-05-20)
+
+The rPLL locks reliably at both 371.25 MHz (Sipeed diagnostic params) and 135 MHz (production params) once `sys_clk` is assigned to pin 4 (`LPLL1_T_in`). Root cause of prior failures: `sys_clk` was on pin 10 (`GCLKT_6`) — the GCLK buffer on that path adds jitter that prevents the PLL from locking. The unlocked fallback clock is `CLKIN/8` (~3.375 MHz).
+
+### LOCK signal note (UG286E v2.0.2E)
+
+The LOCK output can glitch during the locking process. It must be monitored for at least 2 ms continuously before declaring the PLL locked.
 
 ## Known Toolchain Quirks
 
 - Use `gw_sh.sh` (not `gw_sh`) for headless builds
-- `NL0002` "swept in optimizing" warnings are module flattening (logic preserved), not errors
-- `PA1019` PLL VCO range warnings are pre-existing and harmless
+- `NL0002` "swept in optimizing" — module removed by optimization (expected for rpll_12m in blink test)
+- `EX0210` — PLL VCO out of range (500–1250 MHz for GW2AR-18C). Treat as an error, not a warning.
+- `EX0206` — invalid DEVICE parameter value. Use exactly `"GW2AR-18C"` for this board.
+- `EX2565` — undriven input port on a primitive; fix by connecting RESET, RESET_P, FDLY explicitly.
 - `SDRC_HS` config files must be copied to the Gowin IP data dir before synthesis (handled in `build.tcl`)
+- P&R reports the device as `GW2AR-18` (version C); this differs from the rPLL DEVICE parameter string `"GW2AR-18C"` — both are correct in their contexts.
 
 ## Roadmap
 
+- **Done:** Stage 3.5 — rPLL locks at 135 MHz. Root cause was sys_clk on wrong pin (10→4).
+- **Active:** Stage 4: USB HID keyboard (nand2mario usb_hid_host; needs 12 MHz PLL + pin 53 for usb_dp)
+- Stage 5: Audio output (sigma-delta DAC + HDMI audio islands)
 - Stage 6: SIO disk emulation (ATR images from SD card)
 - Stage 7: OSD menu
 - Stage 8: Cartridge loading from SD card

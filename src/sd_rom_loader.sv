@@ -12,6 +12,7 @@ module sd_rom_loader (
     input  wire        sdram_ready,   // SDRAM init complete
 
     output wire        done,          // both ROMs written to SDRAM
+    output wire        dbg_sd_ready,  // SD card init done (diagnostic)
 
     // SDRAM write port (32-bit writes, matches rom_loader interface)
     output reg         req,
@@ -89,8 +90,9 @@ reg [1:0]  byte_idx;   // byte position within current 32-bit word (0..3)
 reg [23:0] word_buf;   // bytes 0-2 of the in-progress word (LSByte first)
 reg        saw_basic;  // latched when is_basic first goes high
 
-assign done     = (st == S_DONE);
-assign write_en = req;
+assign done         = (st == S_DONE);
+assign write_en     = req;
+assign dbg_sd_ready = sd_ready;
 
 always_ff @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin

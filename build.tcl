@@ -1,13 +1,16 @@
 # Gowin build script — Atari 800 Tang Nano 20K port
 # Stage 4: USB HID keyboard (nand2mario/usb_hid_host)
 
+# Set license file environment variable for Gowin Place & Route decryption
+set env(LM_LICENSE_FILE) "/home/carlos/Documents/gowin/license/gowin_E_98460A8E46A6.lic"
+
 # Resolve absolute paths before create_project changes the working directory
 set tang_dir [file normalize [file dirname [info script]]]
 set rtl_dir  [file normalize "$tang_dir/rtl"]
 set src_dir  "$tang_dir/src"
 
 create_project -name {atari800_tn20k} -dir "$tang_dir/impl" \
-    -pn GW2AR-LV18QN88PC8/I7 -device_version C -force
+    -pn GW2AR-LV18QN88C8/I7 -device_version C -force
 
 # ── Core chipset (VHDL) ───────────────────────────────────────────────────────
 add_file "$rtl_dir/common/a8core/atari800core.vhd"
@@ -60,10 +63,10 @@ add_file "$rtl_dir/common/components/synchronizer.vhdl"
 
 # ── SIO / disk / tape emulation (VHDL) ───────────────────────────────────────
 add_file "$rtl_dir/common/sioemu/sio_handler.vhdl"
-add_file "$rtl_dir/common/sioemu/fifo_transmit.vhd"
-add_file "$rtl_dir/common/sioemu/fifo_receive.vhd"
+add_file "$src_dir/fifo_transmit.vhd"
+add_file "$src_dir/fifo_receive.vhd"
 add_file "$rtl_dir/common/sioemu/tape_handler.vhdl"
-add_file "$rtl_dir/common/sioemu/fifo_tape.vhd"
+add_file "$src_dir/fifo_tape.vhd"
 
 # ── Portable BRAM (replaces Altera-specific rtl/bram.vhd) ────────────────────
 add_file "$src_dir/bram.vhd"
@@ -72,16 +75,30 @@ add_file "$src_dir/bram.vhd"
 add_file "$src_dir/sdram_statemachine.vhdl"
 
 # ── Stage 2: HDMI ─────────────────────────────────────────────────────────────
-add_file "$src_dir/rpll_135m.v"
-add_file "$src_dir/tmds_encoder.sv"
-add_file "$src_dir/terc4.sv"
+add_file "$src_dir/rpll_371m.v"
+add_file "$src_dir/scale720p.sv"
+add_file "$src_dir/test_pattern_720p.sv"
 add_file "$src_dir/hdmi_audio_out.sv"
+add_file "$src_dir/hdmi2/audio_clock_regeneration_packet.sv"
+add_file "$src_dir/hdmi2/audio_info_frame.sv"
+add_file "$src_dir/hdmi2/audio_sample_packet.sv"
+add_file "$src_dir/hdmi2/auxiliary_video_information_info_frame.sv"
+add_file "$src_dir/hdmi2/hdmi.sv"
+add_file "$src_dir/hdmi2/packet_assembler.sv"
+add_file "$src_dir/hdmi2/packet_picker.sv"
+add_file "$src_dir/hdmi2/serializer.sv"
+add_file "$src_dir/hdmi2/source_product_description_info_frame.sv"
+add_file "$src_dir/hdmi2/tmds_channel.sv"
 
-# ── Stage 3: SD card FAT reader ───────────────────────────────────────────────
-add_file "$src_dir/spi_master.sv"
-add_file "$src_dir/sd_card.sv"
-add_file "$src_dir/fat_reader.sv"
-add_file "$src_dir/sd_rom_loader.sv"
+# ── Stage 3: PicoRV32 Softcore & OSD ─────────────────────────────────────────
+add_file "$src_dir/picorv32.v"
+add_file "$src_dir/iosys_picorv32.v"
+add_file "$src_dir/simplespimaster.v"
+add_file "$src_dir/spi_master.v"
+add_file "$src_dir/spiflash.v"
+add_file "$src_dir/textdisp.v"
+add_file "$src_dir/gowin_dpb_menu.v"
+add_file "$src_dir/simpleuart.v"
 
 # ── Stage 4: USB HID keyboard ─────────────────────────────────────────────────
 # usb_hid_host_rom uses $readmemh — copy hex to impl dir so synthesis finds it
@@ -95,30 +112,29 @@ add_file "$src_dir/usb_to_atari800.sv"
 # ── Stage 5: POKEY audio — sigma-delta DAC ────────────────────────────────────
 add_file "$src_dir/sigma_delta_dac.sv"
 
-# ── Gowin SDRC_HS embedded SDRAM IP ──────────────────────────────────────────
-# SDRAM_Controller_HS_Top.v and sdrc_hs_top.vp both `include "sdrc_hs_defines.v"
-# and "sdrc_hs_name.v".  Gowin synthesis resolves includes relative to the
-# including file, so the config files must live in the SDRC_HS data directory.
-# We copy them there before adding the IP files.
-set sdrc_dir "/home/carlos/Documents/gowin/IDE/ipcore/SDRC_HS/data"
-file copy -force "$src_dir/sdrc_hs_defines.v" "$sdrc_dir/"
-file copy -force "$src_dir/sdrc_hs_name.v"    "$sdrc_dir/"
-add_file "$sdrc_dir/sdrc_hs_defines.v"
-add_file "$sdrc_dir/sdrc_hs_name.v"
-add_file "$sdrc_dir/SDRAM_Controller_HS_Top.v"
-add_file "$sdrc_dir/sdrc_hs_top.vp"
+# ── Custom 27 MHz SDRAM Controller ────────────────────────────────────────────
+add_file "$src_dir/gw2ar_sdram.sv"
 
 # ── Tang Nano top-level ───────────────────────────────────────────────────────
 add_file "$src_dir/tang_top.sv"
 
 # ── Physical constraints (required for P&R) ───────────────────────────────────
 add_file "$tang_dir/constraints/tang_nano_20k.cst"
+add_file "$tang_dir/constraints/tang_nano_20k.sdc"
 
 # ── Synthesis options ─────────────────────────────────────────────────────────
 set_option -top_module       tang_top
 set_option -vhdl_std         vhd2008
 set_option -verilog_std      sysv2017
 set_option -synthesis_tool   gowinsynthesis
+
+set_option -use_mspi_as_gpio 1
+set_option -use_ready_as_gpio 1
+set_option -use_done_as_gpio 1
+set_option -use_i2c_as_gpio 1
+set_option -use_cpu_as_gpio 1
+set_option -use_sspi_as_gpio 1
+set_option -multi_boot 1
 
 # Full build: synthesis + place & route + bitstream
 run all

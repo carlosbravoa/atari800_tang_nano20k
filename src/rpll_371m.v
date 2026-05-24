@@ -1,18 +1,12 @@
-// Gowin rPLL: 27 MHz → 135 MHz (HDMI TMDS serialiser clock)
+// Gowin rPLL: 27 MHz → 371.25 MHz (HDMI TMDS 5x clock for 720p @ 74.25 MHz pixel clock)
 //
-// Formula (UG286E v2.0.2E): FOUT = FCLKIN*(FBDIV_SEL+1)/(IDIV_SEL+1) = 27*5/1 = 135 MHz
-// VCO  = FCLKIN*(FBDIV_SEL+1)*ODIV_SEL/(IDIV_SEL+1) = 27*5*8 = 1080 MHz (500-1250 MHz ✓)
-// CLKIN must be on pin 4 (LPLL1_T_in, Bank 7) — NOT pin 10 (GCLKT_6). Pin 10 adds GCLK buffer
-// jitter that prevents PLL lock. Bank 7 VCCIO is 1.8V per toolchain; use IO_TYPE=LVCMOS18.
-//
-// CRITICAL: rPLL maps to LPLL2. Do NOT drive LPLL2_T_fb (pin15) or LPLL2_C_fb (pin16)
-// as GPIO outputs — even with CLKFB_SEL="internal" this prevents the PLL from locking.
-//
-// DEVICE="GW2AR-18C": confirmed valid; "GW2AR-18" triggers EX0206.
+// Formula: FOUT = FCLKIN*(FBDIV_SEL+1)/(IDIV_SEL+1) = 27*55/4 = 371.25 MHz
+// VCO  = FOUT*ODIV_SEL = 371.25*2 = 742.5 MHz  (500–1250 MHz ✓)
+// CLKIN must be on pin 4 (LPLL1_T_in) — same constraint as rpll_135m.
 
-module rpll_135m (
+module rpll_371m (
     input  wire clk_in,
-    output wire clk_135m,
+    output wire clk_371m,
     output wire locked
 );
 
@@ -31,7 +25,7 @@ rPLL rpll_inst (
     .DUTYDA   ({gnd,gnd,gnd,gnd}),
     .FDLY     ({gnd,gnd,gnd,gnd}),
     .LOCK     (locked),
-    .CLKOUT   (clk_135m),
+    .CLKOUT   (clk_371m),
     .CLKOUTP  (clkoutp_nc),
     .CLKOUTD  (clkoutd_nc),
     .CLKOUTD3 (clkoutd3_nc)
@@ -39,11 +33,11 @@ rPLL rpll_inst (
 
 defparam rpll_inst.FCLKIN          = "27";
 defparam rpll_inst.DYN_IDIV_SEL    = "false";
-defparam rpll_inst.IDIV_SEL        = 0;
+defparam rpll_inst.IDIV_SEL        = 3;     // divide input by 4
 defparam rpll_inst.DYN_FBDIV_SEL   = "false";
-defparam rpll_inst.FBDIV_SEL       = 4;
+defparam rpll_inst.FBDIV_SEL       = 54;    // multiply by 55
 defparam rpll_inst.DYN_ODIV_SEL    = "false";
-defparam rpll_inst.ODIV_SEL        = 8;
+defparam rpll_inst.ODIV_SEL        = 2;     // VCO/2 = 742.5/2 = 371.25 MHz
 defparam rpll_inst.PSDA_SEL        = "0000";
 defparam rpll_inst.DYN_DA_EN       = "true";
 defparam rpll_inst.DUTYDA_SEL      = "1000";
