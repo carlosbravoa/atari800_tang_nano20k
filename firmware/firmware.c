@@ -499,9 +499,9 @@ int load_system_roms(void) {
     *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1
     
     // Load OS.ROM
-    r = f_open(&f, "/OS.ROM", FA_READ);
+    r = f_open(&f, "/ATARIXL.ROM", FA_READ);
     if (r != FR_OK) {
-        r = f_open(&f, "/os.rom", FA_READ);
+        r = f_open(&f, "/atarixl.rom", FA_READ);
     }
     if (r != FR_OK) {
         uart_printf("Failed to open OS.ROM\n");
@@ -1006,8 +1006,9 @@ int main() {
         }
     }
 
-    bool booted = false;
+    bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
     char mounted_atr_name[256] = "None";
+    if (booted) overlay(0);      // hide OSD immediately on auto-boot
 
     for (;;) {
         if (!booted) {
@@ -1022,7 +1023,7 @@ int main() {
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");
             cursor(2, 11);
-            print("2) Boot (No BASIC)\n");
+            print("2) Boot to OS (No BASIC)\n");
             cursor(2, 12);
             print("3) Boot to BASIC\n");
             cursor(2, 13);

@@ -244,7 +244,14 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
     end
 end
 
-wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : (atari_req_pending ? 1'b0 : 1'b1);
+// After each Atari SDRAM access, reserve one slot for PicoRV32 if it is waiting.
+// Without this, Atari's continuous requests starve PicoRV32 instruction fetches
+// and the UART keyboard / menu becomes unresponsive.
+reg rv_slot = 1'b0;
+
+wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner :
+                     (rv_slot && rv_valid)  ? 1'b1 :
+                     (atari_req_pending     ? 1'b0 : 1'b1);
 
 wire        sdram_ctrl_req      = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : atari_req_pending) : (atari_req_pending || rv_valid);
 wire        sdram_ctrl_read_en  = current_owner ? (~|rv_wstrb) : core_sdram_read_en;
@@ -264,18 +271,24 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
         sdram_complete_r <= 1'b0;
         sadap_st         <= SA_IDLE;
         sdram_owner      <= 1'b0;
+        rv_slot          <= 1'b0;
     end else begin
         sdram_complete_r <= 1'b0;
 
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    if (atari_req_pending) begin
-                        sdram_owner  <= 1'b0;
-                        sadap_st     <= SA_BUSY;
+                    if (rv_slot && rv_valid) begin
+                        // PicoRV32's reserved turn after an Atari access
+                        sdram_owner <= 1'b1;
+                        rv_slot     <= 1'b0;
+                        sadap_st    <= SA_BUSY;
+                    end else if (atari_req_pending) begin
+                        sdram_owner <= 1'b0;
+                        sadap_st    <= SA_BUSY;
                     end else if (rv_valid) begin
-                        sdram_owner  <= 1'b1;
-                        sadap_st     <= SA_BUSY;
+                        sdram_owner <= 1'b1;
+                        sadap_st    <= SA_BUSY;
                     end
                 end
             end
@@ -283,6 +296,9 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
                 if (sdram_complete_wire) begin
                     sdram_complete_r <= 1'b1;
                     sadap_st         <= SA_IDLE;
+                    // After an Atari access, reserve a slot for PicoRV32 if it is waiting
+                    if (sdram_owner == 1'b0 && rv_valid)
+                        rv_slot <= 1'b1;
                 end
             end
             default: sadap_st <= SA_IDLE;
@@ -578,7 +594,7 @@ atari800core_simple_sdram #(
 
     // Config
     .RAM_SELECT                 (3'b001),   // 128 KB
-    .PAL                        (1'b1),     // PAL
+    .PAL                        (1'b0),     // NTSC
     .CLIP_SIDES                 (1'b0),
     .RESET_RNMI                 (1'b0),
     .ATARI800MODE               (1'b0),     // XL/XE mode
