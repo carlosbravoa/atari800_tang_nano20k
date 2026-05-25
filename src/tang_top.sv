@@ -149,6 +149,13 @@ wire [7:0]  video_r, video_g, video_b;
 wire        video_blank;
 wire        video_pixce;
 
+// colour_clock_2x fires 376×/active line — overflows the 256-column framebuffer.
+// Divide by 2 → ~188 fires/line (colour_clock_1x rate), which fits within 256 cols.
+reg  pixce_phase = 1'b0;
+always_ff @(posedge sys_clk)
+    if (video_pixce) pixce_phase <= ~pixce_phase;
+wire pixce_1x = video_pixce && pixce_phase;
+
 // ── Audio ──────────────────────────────────────────────────────────────────
 wire [15:0] audio_l_pcm, audio_r_pcm;
 
@@ -278,7 +285,12 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    if (rv_slot && rv_valid) begin
+                    // sdram_complete_r is high for exactly one cycle when rv_ready fires.
+                    // PicoRV32 lowers rv_valid one cycle after seeing rv_ready, so starting
+                    // a new PicoRV32 transaction in that same cycle would launch SA_BUSY
+                    // with rv_valid about to go 0 → sdram_ctrl_req=0 → permanent hang.
+                    // Block PicoRV32 starts when sdram_complete_r is high; Atari can proceed.
+                    if (rv_slot && rv_valid && !sdram_complete_r) begin
                         // PicoRV32's reserved turn after an Atari access
                         sdram_owner <= 1'b1;
                         rv_slot     <= 1'b0;
@@ -286,7 +298,7 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
                     end else if (atari_req_pending) begin
                         sdram_owner <= 1'b0;
                         sadap_st    <= SA_BUSY;
-                    end else if (rv_valid) begin
+                    end else if (rv_valid && !sdram_complete_r) begin
                         sdram_owner <= 1'b1;
                         sadap_st    <= SA_BUSY;
                     end
@@ -676,7 +688,7 @@ scale720p scaler (
     .rst_n     (hdmi_rst_n),
     .r_in      (video_r), .g_in(video_g), .b_in(video_b),
     .hs_in     (video_hs), .vs_in(video_vs), .de_in(~video_blank),
-    .pixce     (video_pixce), .clk_pixel(clk_pix),
+    .pixce     (pixce_1x),    .clk_pixel(clk_pix),
     .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
     .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
     .osd_x(osd_x), .osd_y(osd_y)

@@ -9,6 +9,8 @@
 
 uint32_t CORE_ID;
 
+void uart_keyboard_poll(void);
+
 #define OPTION_FILE "/atari.ini"
 #define OPTION_INVALID 2
 
@@ -1117,6 +1119,7 @@ int main() {
             sio_poll();
             sio_poll();
             sio_poll();
+            uart_keyboard_poll();
 
             // Check for menu toggle (S2 button bit9, or F12 bit3)
             int joy1, joy2;
