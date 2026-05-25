@@ -204,7 +204,7 @@ assign rv_ready                = sdram_complete && (sdram_owner == 1'b1);
 wire [31:0] sdram_rd_data_wire;
 wire        sdram_ready_wire;
 
-assign core_sdram_data_to_core = sdram_rd_data_wire;
+assign core_sdram_data_to_core = sdram_rd_data_wire >> {core_sdram_addr[1:0], 3'b000};
 assign rv_rdata                = sdram_rd_data_wire;
 assign sdram_ready             = sdram_ready_wire;
 
@@ -227,13 +227,30 @@ wire [3:0] core_sdram_wmask = core_sdram_32bit_we ? 4'b1111 :
 
 wire actual_core_sdram_req = core_sdram_req && core_reset_n;
 
-wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : (actual_core_sdram_req ? 1'b0 : 1'b1);
+// The address_decoder asserts SDRAM_REQUEST for exactly ONE clock cycle (only in state_idle).
+// If the SDRAM is busy (PicoRV32 transaction) or in tRP/tWR wait when that pulse arrives,
+// the request is silently lost, deadlocking the 6502.  Latch the pulse until the SDRAM
+// controller can accept it.
+reg atari_req_pending = 1'b0;
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        atari_req_pending <= 1'b0;
+    end else begin
+        if (actual_core_sdram_req) begin
+            atari_req_pending <= 1'b1;
+        end else if (sadap_st == SA_BUSY && sdram_owner == 1'b0 && sdram_complete_wire) begin
+            atari_req_pending <= 1'b0;
+        end
+    end
+end
 
-wire        sdram_ctrl_req      = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : actual_core_sdram_req) : (actual_core_sdram_req || rv_valid);
+wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : (atari_req_pending ? 1'b0 : 1'b1);
+
+wire        sdram_ctrl_req      = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : atari_req_pending) : (atari_req_pending || rv_valid);
 wire        sdram_ctrl_read_en  = current_owner ? (~|rv_wstrb) : core_sdram_read_en;
 wire        sdram_ctrl_write_en = current_owner ? (|rv_wstrb)  : core_sdram_write_en;
 wire [24:0] sdram_ctrl_addr     = current_owner ? rv_physical_addr : core_sdram_addr;
-wire [31:0] sdram_ctrl_wdata    = current_owner ? rv_wdata : core_sdram_data_from_core;
+wire [31:0] sdram_ctrl_wdata    = current_owner ? rv_wdata : {4{core_sdram_data_from_core[7:0]}};
 wire [3:0]  sdram_ctrl_wmask    = current_owner ? rv_wstrb : core_sdram_wmask;
 wire        sdram_ctrl_refresh  = current_owner ? 1'b0     : core_sdram_refresh;
 
@@ -253,7 +270,7 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    if (actual_core_sdram_req) begin
+                    if (atari_req_pending) begin
                         sdram_owner  <= 1'b0;
                         sadap_st     <= SA_BUSY;
                     end else if (rv_valid) begin
