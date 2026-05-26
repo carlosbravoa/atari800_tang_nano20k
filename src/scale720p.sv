@@ -1,7 +1,9 @@
 // scale720p.sv — Atari video → 256×240 frame buffer → 720p HDMI output
 //
 // Write side (clk_core = 27 MHz):
-//   Captures active pixels into 256×256×8 RGB332 frame buffer.
+//   Writes one pixel per VIDEO_PIXCE (colour_clock_2x) pulse during de_in=1.
+//   Column wraps at 255; ~350 pulses/line so the last few clamp harmlessly on col 255.
+//   256 columns × 5× = 1280 = exact integer fill of H_ACTIVE.
 //
 // Read side (clk_pixel = 74.25 MHz):
 //   Fixed 1280×720@60 Hz raster (CEA-861 VIC 4).

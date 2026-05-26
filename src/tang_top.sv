@@ -149,12 +149,6 @@ wire [7:0]  video_r, video_g, video_b;
 wire        video_blank;
 wire        video_pixce;
 
-// colour_clock_2x fires 376×/active line — overflows the 256-column framebuffer.
-// Divide by 2 → ~188 fires/line (colour_clock_1x rate), which fits within 256 cols.
-reg  pixce_phase = 1'b0;
-always_ff @(posedge sys_clk)
-    if (video_pixce) pixce_phase <= ~pixce_phase;
-wire pixce_1x = video_pixce && pixce_phase;
 
 // ── Audio ──────────────────────────────────────────────────────────────────
 wire [15:0] audio_l_pcm, audio_r_pcm;
@@ -688,7 +682,7 @@ scale720p scaler (
     .rst_n     (hdmi_rst_n),
     .r_in      (video_r), .g_in(video_g), .b_in(video_b),
     .hs_in     (video_hs), .vs_in(video_vs), .de_in(~video_blank),
-    .pixce     (pixce_1x),    .clk_pixel(clk_pix),
+    .pixce     (video_pixce), .clk_pixel(clk_pix),
     .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
     .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
     .osd_x(osd_x), .osd_y(osd_y)

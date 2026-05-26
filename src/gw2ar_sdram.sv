@@ -163,6 +163,12 @@ always_ff @(posedge clk or negedge reset_n) begin
             S_IDLE: begin
                 if (cnt != 0) begin
                     cnt <= cnt - 1;
+                // Refresh has priority over reads/writes (matches MiSTer sdram_statemachine
+                // behaviour) to prevent refresh starvation under heavy ANTIC DMA load.
+                end else if (refresh) begin
+                    set_cmd(CMD_AUTO_REF);
+                    cnt   <= 14'd6;
+                    state <= S_REF;
                 end else if (req) begin
                     // Latch address fields
                     cur_bank  <= addr[22:21];
@@ -175,10 +181,6 @@ always_ff @(posedge clk or negedge reset_n) begin
                     O_sdram_ba   <= addr[22:21];
                     O_sdram_addr <= addr[20:10];
                     state        <= S_ACT;
-                end else if (refresh) begin
-                    set_cmd(CMD_AUTO_REF);
-                    cnt   <= 14'd6;
-                    state <= S_REF;
                 end
             end
 
