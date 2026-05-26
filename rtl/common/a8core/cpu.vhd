@@ -113,6 +113,6 @@ BEGIN
 	do <= std_logic_vector(do_unsigned);
 	a <= std_logic_vector(addr_unsigned);
 		
-	CPU_FETCH <= ENABLE and THROTTLE;
+	CPU_FETCH <= ENABLE and THROTTLE and (rdy or we);
 
 END vhdl;
