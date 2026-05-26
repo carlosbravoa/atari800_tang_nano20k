@@ -250,11 +250,16 @@ end
 // and the UART keyboard / menu becomes unresponsive.
 reg rv_slot = 1'b0;
 
-wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner :
-                     (rv_slot && rv_valid)  ? 1'b1 :
-                     (atari_req_pending     ? 1'b0 : 1'b1);
+wire next_owner = (rv_slot && rv_valid && !sdram_complete_r) ? 1'b1 :
+                  atari_req_pending                          ? 1'b0 :
+                  (rv_valid && !sdram_complete_r)           ? 1'b1 : 1'b1;
 
-wire        sdram_ctrl_req      = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : atari_req_pending) : (atari_req_pending || rv_valid);
+wire next_req = (rv_slot && rv_valid && !sdram_complete_r) ||
+                atari_req_pending                          ||
+                (rv_valid && !sdram_complete_r);
+
+wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
+wire sdram_ctrl_req = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : atari_req_pending) : next_req;
 wire        sdram_ctrl_read_en  = current_owner ? (~|rv_wstrb) : core_sdram_read_en;
 wire        sdram_ctrl_write_en = current_owner ? (|rv_wstrb)  : core_sdram_write_en;
 wire [24:0] sdram_ctrl_addr     = current_owner ? rv_physical_addr : core_sdram_addr;
