@@ -260,7 +260,7 @@ wire        sdram_ctrl_write_en = current_owner ? (|rv_wstrb)  : core_sdram_writ
 wire [24:0] sdram_ctrl_addr     = current_owner ? rv_physical_addr : core_sdram_addr;
 wire [31:0] sdram_ctrl_wdata    = current_owner ? rv_wdata : {4{core_sdram_data_from_core[7:0]}};
 wire [3:0]  sdram_ctrl_wmask    = current_owner ? rv_wstrb : core_sdram_wmask;
-wire        sdram_ctrl_refresh  = current_owner ? 1'b0     : core_sdram_refresh;
+wire        sdram_ctrl_refresh  = core_sdram_refresh;
 
 wire        sdram_complete_wire;
 

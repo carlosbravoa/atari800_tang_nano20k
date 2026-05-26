@@ -92,6 +92,8 @@ reg           cur_write;
 
 // Registered read data capture
 reg [31:0]    dq_capture;
+reg           refresh_r;
+reg           refresh_pending;
 
 task set_cmd;
     input [3:0] cmd;
@@ -102,21 +104,30 @@ endtask
 
 always_ff @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
-        state        <= S_INIT;
-        cnt          <= 14'd5400;   // 200 µs at 27 MHz
-        ref_cnt      <= 4'd8;
-        O_sdram_cke  <= 1'b1;
-        dq_en        <= 1'b0;
-        req_complete <= 1'b0;
-        sdram_ready  <= 1'b0;
+        state           <= S_INIT;
+        cnt             <= 14'd5400;   // 200 µs at 27 MHz
+        ref_cnt         <= 4'd8;
+        O_sdram_cke     <= 1'b1;
+        dq_en           <= 1'b0;
+        req_complete    <= 1'b0;
+        sdram_ready     <= 1'b0;
         set_cmd(CMD_INHIBIT);
-        O_sdram_ba   <= 2'b0;
-        O_sdram_addr <= 11'b0;
-        O_sdram_dqm  <= 4'b1111;
+        O_sdram_ba      <= 2'b0;
+        O_sdram_addr    <= 11'b0;
+        O_sdram_dqm     <= 4'b1111;
+        refresh_r       <= 1'b0;
+        refresh_pending <= 1'b0;
     end else begin
         req_complete <= 1'b0;
         dq_en        <= 1'b0;
         set_cmd(CMD_NOP);
+
+        refresh_r <= refresh;
+        if (refresh && !refresh_r) begin
+            refresh_pending <= 1'b1;
+        end else if (state == S_IDLE && cnt == 0 && refresh_pending) begin
+            refresh_pending <= 1'b0;
+        end
 
         case (state)
             // ── Initialisation ────────────────────────────────────────────────
@@ -165,7 +176,7 @@ always_ff @(posedge clk or negedge reset_n) begin
                     cnt <= cnt - 1;
                 // Refresh has priority over reads/writes (matches MiSTer sdram_statemachine
                 // behaviour) to prevent refresh starvation under heavy ANTIC DMA load.
-                end else if (refresh) begin
+                end else if (refresh_pending) begin
                     set_cmd(CMD_AUTO_REF);
                     cnt   <= 14'd6;
                     state <= S_REF;
