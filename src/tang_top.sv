@@ -613,7 +613,7 @@ atari800core_simple_sdram #(
     .VBXE_PALETTE_RGB           (3'd0),
     .VBXE_PALETTE_INDEX         (8'd0),
     .VBXE_PALETTE_COLOR         (7'd0),
-    .HALT                       (1'b0),
+    .HALT                       (overlay),
     .THROTTLE_COUNT_6502        (6'd15),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
