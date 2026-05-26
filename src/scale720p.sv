@@ -6,8 +6,9 @@
 //
 // Read side (clk_pixel = 74.25 MHz):
 //   Fixed 1280×720@60 Hz raster (CEA-861 VIC 4).
-//   4× horizontal: 256×4=1024 px centred in 1280 (128 px black border each side).
+//   5× horizontal: 256×5=1280 px fills H_ACTIVE exactly.
 //   3× vertical:   240×3=720 px fills V_ACTIVE exactly.
+//   With pixce ÷2, ~188 columns carry actual content; columns 188-255 are black.
 //   All signals (DE, HS, VS, pixel data) share identical 2-cycle pipeline latency.
 
 `default_nettype none
@@ -50,19 +51,25 @@ localparam V_TOTAL  = 10'd750;
 (* syn_ramstyle="block_ram" *) reg [7:0] fbuf [0:65535];
 
 // ── Write side (clk_core, 27 MHz) ─────────────────────────────────────────────
+// pixce (VIDEO_PIXCE) fires at 2× colour-clock rate.  Divide by 2 so we capture
+// one sample per colour clock — ~188 unique pixels/line fit within 256 columns.
 reg [7:0] wr_col, wr_row;
 reg       wr_de_r, wr_vs_r;
+reg       pixce_phase;
 
 wire wr_de_fall = wr_de_r && !de_in;
 wire wr_vs_rise = vs_in && !wr_vs_r;
+wire pixce_1x   = pixce && pixce_phase;   // every other PIXCE pulse
 
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
         wr_col <= 8'd0; wr_row <= 8'd0;
         wr_de_r <= 1'b0; wr_vs_r <= 1'b0;
+        pixce_phase <= 1'b0;
     end else begin
         wr_de_r <= de_in;
         wr_vs_r <= vs_in;
+        if (pixce) pixce_phase <= ~pixce_phase;
 
         if (wr_vs_rise)
             wr_row <= 8'd0;
@@ -71,7 +78,7 @@ always_ff @(posedge clk_core or negedge rst_n) begin
 
         if (!de_in)
             wr_col <= 8'd0;
-        else if (pixce) begin
+        else if (pixce_1x) begin
             fbuf[{wr_row, wr_col}] <= {r_in[7:5], g_in[7:5], b_in[7:6]};
             if (wr_col != 8'd255)
                 wr_col <= wr_col + 8'd1;
@@ -95,17 +102,13 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
 end
 
 // ── Stage 0: direct coordinate computation (combinatorial from hx/vy) ─────────
-// 4× H: active window is hx 128..1151 (1024 px); divide offset by 4 via bit-slice.
-localparam H_LEFT = (H_ACTIVE - 256*4) / 2;   // 128
-
-wire [10:0] hx_rel = hx - 11'(H_LEFT);
-wire [7:0]  fb_x   = hx_rel[9:2];             // (hx-128)/4, valid when de_s0
-wire [7:0]  fb_y   = vy / 3;                  // 0..239 (vy 0..719 during active)
+wire [7:0] fb_x = hx / 5;   // 0..255 (hx 0..1279 during active)
+wire [7:0] fb_y = vy / 3;   // 0..239 (vy 0..719 during active)
 
 assign osd_x = fb_x;
 assign osd_y = fb_y;
 
-wire de_s0 = (hx >= 11'(H_LEFT)) && (hx < 11'(H_LEFT + 256*4)) && (vy < V_ACTIVE);
+wire de_s0 = (hx < H_ACTIVE) && (vy < V_ACTIVE);
 wire hs_s0 = (hx >= H_ACTIVE + H_FP) && (hx < H_ACTIVE + H_FP + H_SYNC);
 wire vs_s0 = (vy >= V_ACTIVE + V_FP) && (vy < V_ACTIVE + V_FP + V_SYNC);
 
