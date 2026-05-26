@@ -1070,10 +1070,6 @@ int main() {
                 int load_ok = menu_loadrom(&selected_idx);
                 if (load_ok == 0) {
                     strncpy(mounted_atr_name, file_names[selected_idx], 256);
-                    load_system_roms();
-                    sio_init();    // flush stale SIO bytes accumulated during ROM load / core reset
-                    booted = true;
-                    overlay(0);
                 }
             } else if (choice == 1) {
                 reg_virt_kbd_0 = 0x00410000; // Hold OPTION (F8)

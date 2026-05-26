@@ -232,12 +232,23 @@ wire actual_core_sdram_req = core_sdram_req && core_reset_n;
 // If the SDRAM is busy (PicoRV32 transaction) or in tRP/tWR wait when that pulse arrives,
 // the request is silently lost, deadlocking the 6502.  Latch the pulse until the SDRAM
 // controller can accept it.
+reg actual_core_sdram_req_r = 1'b0;
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        actual_core_sdram_req_r <= 1'b0;
+    end else begin
+        actual_core_sdram_req_r <= actual_core_sdram_req;
+    end
+end
+
+wire atari_req_rise = actual_core_sdram_req && !actual_core_sdram_req_r;
+
 reg atari_req_pending = 1'b0;
 always_ff @(posedge sys_clk or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
         atari_req_pending <= 1'b0;
     end else begin
-        if (actual_core_sdram_req) begin
+        if (atari_req_rise) begin
             atari_req_pending <= 1'b1;
         end else if (sadap_st == SA_BUSY && sdram_owner == 1'b0 && sdram_complete_wire) begin
             atari_req_pending <= 1'b0;
