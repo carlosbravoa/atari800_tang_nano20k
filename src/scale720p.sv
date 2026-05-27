@@ -23,7 +23,9 @@
 `timescale 1ns/1ps
 
 
-module scale720p (
+module scale720p #(
+    parameter bit PIXCE_PHASE_SEL = 1'b0
+) (
     // Atari core domain
     input  wire       clk_core,
     input  wire       rst_n,
@@ -66,7 +68,7 @@ reg       wr_buf_idx;
 
 wire wr_de_fall = wr_de_r && !de_in;
 wire wr_vs_rise = vs_in && !wr_vs_r;
-wire pixce_1x   = pixce && pixce_phase; // every other PIXCE pulse
+wire pixce_1x   = pixce && (pixce_phase == PIXCE_PHASE_SEL); // sample on selected phase
 
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
@@ -78,7 +80,6 @@ always_ff @(posedge clk_core or negedge rst_n) begin
     end else begin
         wr_de_r <= de_in;
         wr_vs_r <= vs_in;
-        if (pixce) pixce_phase <= ~pixce_phase;
 
         if (wr_vs_rise) begin
             wr_buf_idx <= 1'b0;
@@ -87,9 +88,13 @@ always_ff @(posedge clk_core or negedge rst_n) begin
         end
 
         if (!de_in) begin
-            wr_col <= 8'd0;
-        end else if (pixce_1x) begin
-            if (wr_col != 8'd255) wr_col <= wr_col + 8'd1;
+            wr_col      <= 8'd0;
+            pixce_phase <= 1'b0; // Reset phase when de_in is inactive to align with start of line
+        end else if (pixce) begin
+            pixce_phase <= ~pixce_phase;
+            if (pixce_1x) begin
+                if (wr_col != 8'd255) wr_col <= wr_col + 8'd1;
+            end
         end
     end
 end
