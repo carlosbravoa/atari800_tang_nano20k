@@ -69,6 +69,9 @@ module hdmi
     input logic clk_audio,
     // synchronous reset back to 0,0
     input logic reset,
+    input logic serializer_reset,
+    input logic hsync_in,
+    input logic vsync_in,
     input logic [23:0] rgb,
     input logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word [1:0],
 
@@ -92,8 +95,8 @@ module hdmi
 );
 
 localparam int NUM_CHANNELS = 3;
-logic hsync;
-logic vsync;
+wire hsync = hsync_in;
+wire vsync = vsync_in;
 
 logic [BIT_WIDTH-1:0] hsync_pulse_start, hsync_pulse_size;
 logic [BIT_HEIGHT-1:0] vsync_pulse_start, vsync_pulse_size;
@@ -128,7 +131,7 @@ generate
             end
         4:
         begin
-            assign frame_width = 1650;
+            assign frame_width = 1672;
             assign frame_height = 750;
             assign screen_width = 1280;
             assign screen_height = 720;
@@ -189,17 +192,7 @@ generate
     endcase
 endgenerate
 
-always_comb begin
-    hsync <= invert ^ (cx >= screen_width + hsync_pulse_start && cx < screen_width + hsync_pulse_start + hsync_pulse_size);
-    // vsync pulses should begin and end at the start of hsync, so special
-    // handling is required for the lines on which vsync starts and ends
-    if (cy == screen_height + vsync_pulse_start - 1)
-        vsync <= invert ^ (cx >= screen_width + hsync_pulse_start);
-    else if (cy == screen_height + vsync_pulse_start + vsync_pulse_size - 1)
-        vsync <= invert ^ (cx < screen_width + hsync_pulse_start);
-    else
-        vsync <= invert ^ (cy >= screen_height + vsync_pulse_start && cy < screen_height + vsync_pulse_start + vsync_pulse_size);
-end
+// hsync and vsync are driven directly by external inputs hsync_in and vsync_in
 
 localparam real VIDEO_RATE = (VIDEO_ID_CODE == 1 ? 25.2E6
     : VIDEO_ID_CODE == 2 || VIDEO_ID_CODE == 3 ? 27.027E6
@@ -373,6 +366,6 @@ generate
     end
 endgenerate
 
-serializer #(.NUM_CHANNELS(NUM_CHANNELS), .VIDEO_RATE(VIDEO_RATE)) serializer(.clk_pixel(clk_pixel), .clk_pixel_x5(clk_pixel_x5), .reset(reset), .tmds_internal(tmds_internal), .tmds(tmds), .tmds_clock(tmds_clock));
+serializer #(.NUM_CHANNELS(NUM_CHANNELS), .VIDEO_RATE(VIDEO_RATE)) serializer(.clk_pixel(clk_pixel), .clk_pixel_x5(clk_pixel_x5), .reset(serializer_reset), .tmds_internal(tmds_internal), .tmds(tmds), .tmds_clock(tmds_clock));
 
 endmodule

@@ -50,9 +50,11 @@ always_ff @(posedge clk_pix or negedge rst_n) begin
             // We are in VSYNC: get ready to sync on the next active frame start
             waiting_for_frame <= 1'b1;
         end else if (waiting_for_frame && de) begin
-            // This is the first active pixel of the first active line after VSYNC
-            hdmi_reset        <= 1'b0;
+            // Pulse reset for 1 cycle at the first active pixel of the frame
+            hdmi_reset        <= 1'b1;
             waiting_for_frame <= 1'b0;
+        end else begin
+            hdmi_reset        <= 1'b0;
         end
     end
 end
@@ -75,6 +77,9 @@ hdmi #(
     .clk_pixel          (clk_pix),
     .clk_audio          (smp_tick), // 1-cycle sample clock pulse
     .reset              (hdmi_reset),
+    .serializer_reset   (!rst_n),
+    .hsync_in           (hs),
+    .vsync_in           (vs),
     .rgb                ({r, g, b}),
     .audio_sample_word  (audio_sample_word),
     .tmds               (tmds_internal),
