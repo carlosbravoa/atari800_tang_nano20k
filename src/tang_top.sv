@@ -693,7 +693,7 @@ usb_to_atari800 keyboard (
 wire [7:0] hdmi_r, hdmi_g, hdmi_b;
 wire       hdmi_hs, hdmi_vs, hdmi_de;
 
-scale720p #(.PIXCE_PHASE_SEL(1'b1)) scaler (
+scale720p scaler (
     .clk_core  (sys_clk),
     .rst_n     (hdmi_rst_n),
     .r_in      (video_r), .g_in(video_g), .b_in(video_b),
