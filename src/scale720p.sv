@@ -23,9 +23,7 @@
 `timescale 1ns/1ps
 
 
-module scale720p #(
-    parameter bit PIXCE_PHASE_SEL = 1'b0
-) (
+module scale720p (
     // Atari core domain
     input  wire       clk_core,
     input  wire       rst_n,
@@ -61,21 +59,20 @@ localparam V_TOTAL  = 10'd750;
 // ── Write side (clk_core, 27 MHz) ─────────────────────────────────────────────
 // pixce (VIDEO_PIXCE) fires at 2x colour-clock rate. Divide by 2 so we capture
 // one sample per colour clock — ~188 unique pixels/line fit within 256 columns.
-reg [7:0] wr_col;
+// ── Write side (clk_core, 27 MHz) ─────────────────────────────────────────────
+// Sample on every pixce pulse to capture all 320 unique pixels.
+reg [8:0] wr_col;
 reg       wr_de_r, wr_vs_r;
-reg       pixce_phase;
 reg       wr_buf_idx;
 
 wire wr_de_fall = wr_de_r && !de_in;
 wire wr_vs_rise = vs_in && !wr_vs_r;
-wire pixce_1x   = pixce && (pixce_phase == PIXCE_PHASE_SEL); // sample on selected phase
 
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
-        wr_col      <= 8'd0;
+        wr_col      <= 9'd0;
         wr_de_r     <= 1'b0;
         wr_vs_r     <= 1'b0;
-        pixce_phase <= 1'b0;
         wr_buf_idx  <= 1'b0;
     end else begin
         wr_de_r <= de_in;
@@ -88,13 +85,9 @@ always_ff @(posedge clk_core or negedge rst_n) begin
         end
 
         if (!de_in) begin
-            wr_col      <= 8'd0;
-            pixce_phase <= 1'b0; // Reset phase when de_in is inactive to align with start of line
+            wr_col <= 9'd0;
         end else if (pixce) begin
-            pixce_phase <= ~pixce_phase;
-            if (pixce_1x) begin
-                if (wr_col != 8'd255) wr_col <= wr_col + 8'd1;
-            end
+            if (wr_col != 9'd511) wr_col <= wr_col + 9'd1;
         end
     end
 end
@@ -178,32 +171,39 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
     end
 end
 
-reg [2:0] pix_rep_cnt;
-reg [7:0] rd_col;
+reg [1:0] pix_rep_cnt;
+reg [8:0] rd_col;
 
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
-        pix_rep_cnt <= 3'd0;
-        rd_col      <= 8'd0;
+        pix_rep_cnt <= 2'd0;
+        rd_col      <= 9'd0;
     end else begin
-        if (hx < H_ACTIVE) begin
-            if (pix_rep_cnt == 3'd4) begin
-                pix_rep_cnt <= 3'd0;
-                rd_col <= (rd_col == 8'd255) ? 8'd255 : rd_col + 8'd1;
+        if (hx >= 11'd112 && hx < 11'd1168) begin
+            if (pix_rep_cnt == 2'd2) begin
+                pix_rep_cnt <= 2'd0;
+                rd_col <= (rd_col == 9'd511) ? 9'd511 : rd_col + 9'd1;
             end else begin
-                pix_rep_cnt <= pix_rep_cnt + 3'd1;
+                pix_rep_cnt <= pix_rep_cnt + 2'd1;
             end
         end else begin
-            pix_rep_cnt <= 3'd0;
-            rd_col      <= 8'd0;
+            pix_rep_cnt <= 2'd0;
+            rd_col      <= 9'd0;
         end
     end
 end
 
-// OSD coordinate output
+// OSD coordinate output mapping
+// Centered 256-column OSD inside the 352-column Atari frame (starts at BRAM column 48)
 reg [7:0] osd_x_reg;
 always_ff @(posedge clk_pixel) begin
-    osd_x_reg <= rd_col;
+    if (rd_col < 9'd48) begin
+        osd_x_reg <= 8'd0;
+    end else if (rd_col >= 9'd304) begin
+        osd_x_reg <= 8'd255;
+    end else begin
+        osd_x_reg <= rd_col[7:0] - 8'd48;
+    end
 end
 assign osd_x = osd_x_reg;
 assign osd_y = rd_row;
@@ -213,10 +213,10 @@ wire [7:0] rd_data;
 
 scale720p_tdp_ram #(
     .DATA_WIDTH(8),
-    .ADDR_WIDTH(9)
+    .ADDR_WIDTH(10) // Updated to 10 bits for 512-byte pages
 ) line_buffer (
     .clk_a (clk_core),
-    .we_a  (de_in && pixce_1x),
+    .we_a  (de_in && pixce), // Sample every pixce pulse
     .addr_a({wr_buf_idx, wr_col}),
     .din_a ({r_in[7:5], g_in[7:5], b_in[7:6]}),
     .dout_a(), // Write-only on Port A
@@ -229,7 +229,7 @@ scale720p_tdp_ram #(
 );
 
 // ── Pipeline Latency Alignment (2 Cycles) ──────────────────────────────────────
-wire de_s0 = (hx < H_ACTIVE) && (vy >= 10'd51) && (vy < 10'd771);
+wire de_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= 10'd51) && (vy < 10'd771);
 wire hs_s0 = (hx >= H_ACTIVE + H_FP) && (hx < H_ACTIVE + H_FP + H_SYNC);
 wire vs_s0 = (vy < 10'd5);
 
