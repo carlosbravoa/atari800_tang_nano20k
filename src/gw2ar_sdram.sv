@@ -78,7 +78,8 @@ typedef enum logic [3:0] {
     S_RD_W1,     // CAS latency 1
     S_RD_DONE,   // capture data
     S_WR,        // WRITE command + complete
-    S_REF        // AUTO REFRESH from idle
+    S_REF,       // AUTO REFRESH from idle
+    S_CACHE_HIT  // Cache hit complete
 } state_t;
 
 state_t       state = S_INIT;
@@ -94,6 +95,25 @@ reg           cur_write;
 reg [31:0]    dq_capture;
 reg           refresh_r;
 reg           refresh_pending;
+
+// Read cache variables
+reg [20:0]    cache_tag [0:3];
+reg [31:0]    cache_data [0:3];
+reg           cache_valid [0:3];
+reg [1:0]     lru_list [0:3];
+
+logic         cache_hit;
+logic [1:0]   hit_idx;
+always_comb begin
+    cache_hit = 1'b0;
+    hit_idx = 2'd0;
+    for (int i = 0; i < 4; i = i + 1) begin
+        if (cache_valid[i] && (addr[22:2] == cache_tag[i])) begin
+            cache_hit = 1'b1;
+            hit_idx = i[1:0];
+        end
+    end
+end
 
 task set_cmd;
     input [3:0] cmd;
@@ -117,6 +137,14 @@ always_ff @(posedge clk or negedge reset_n) begin
         O_sdram_dqm     <= 4'b1111;
         refresh_r       <= 1'b0;
         refresh_pending <= 1'b0;
+        cache_valid[0]  <= 1'b0;
+        cache_valid[1]  <= 1'b0;
+        cache_valid[2]  <= 1'b0;
+        cache_valid[3]  <= 1'b0;
+        lru_list[0]     <= 2'd0;
+        lru_list[1]     <= 2'd1;
+        lru_list[2]     <= 2'd2;
+        lru_list[3]     <= 2'd3;
     end else begin
         req_complete <= 1'b0;
         dq_en        <= 1'b0;
@@ -181,17 +209,44 @@ always_ff @(posedge clk or negedge reset_n) begin
                     cnt   <= 14'd6;
                     state <= S_REF;
                 end else if (req) begin
-                    // Latch address fields
-                    cur_bank  <= addr[22:21];
-                    cur_row   <= addr[20:10];
-                    cur_col   <= addr[9:2];
-                    cur_dqm   <= ~wmask;
-                    cur_write <= write_en;
-                    // ACTIVATE
-                    set_cmd(CMD_ACTIVE);
-                    O_sdram_ba   <= addr[22:21];
-                    O_sdram_addr <= addr[20:10];
-                    state        <= S_ACT;
+                    if (!write_en && cache_hit) begin
+                        rdata        <= cache_data[hit_idx];
+                        state        <= S_CACHE_HIT;
+                        // Update LRU list: move hit_idx to MRU (lru_list[0])
+                        if (lru_list[0] == hit_idx) begin
+                            // Already at MRU, do nothing
+                        end else if (lru_list[1] == hit_idx) begin
+                            lru_list[1] <= lru_list[0];
+                            lru_list[0] <= hit_idx;
+                        end else if (lru_list[2] == hit_idx) begin
+                            lru_list[2] <= lru_list[1];
+                            lru_list[1] <= lru_list[0];
+                            lru_list[0] <= hit_idx;
+                        end else begin // lru_list[3] == hit_idx
+                            lru_list[3] <= lru_list[2];
+                            lru_list[2] <= lru_list[1];
+                            lru_list[1] <= lru_list[0];
+                            lru_list[0] <= hit_idx;
+                        end
+                    end else begin
+                        // Latch address fields
+                        cur_bank  <= addr[22:21];
+                        cur_row   <= addr[20:10];
+                        cur_col   <= addr[9:2];
+                        cur_dqm   <= ~wmask;
+                        cur_write <= write_en;
+                        if (write_en) begin
+                            cache_valid[0] <= 1'b0;
+                            cache_valid[1] <= 1'b0;
+                            cache_valid[2] <= 1'b0;
+                            cache_valid[3] <= 1'b0;
+                        end
+                        // ACTIVATE
+                        set_cmd(CMD_ACTIVE);
+                        O_sdram_ba   <= addr[22:21];
+                        O_sdram_addr <= addr[20:10];
+                        state        <= S_ACT;
+                    end
                 end
             end
 
@@ -224,10 +279,20 @@ always_ff @(posedge clk or negedge reset_n) begin
             end
 
             S_RD_DONE: begin
-                rdata        <= IO_sdram_dq;
-                req_complete <= 1'b1;
-                cnt          <= 14'd2;   // tRP for auto-precharge row close
-                state        <= S_IDLE;
+                rdata            <= IO_sdram_dq;
+                req_complete     <= 1'b1;
+                cnt              <= 14'd2;   // tRP for auto-precharge row close
+                state            <= S_IDLE;
+                
+                // Update read cache: replace LRU line (lru_list[3])
+                cache_data[lru_list[3]]  <= IO_sdram_dq;
+                cache_tag[lru_list[3]]   <= {cur_bank, cur_row, cur_col};
+                cache_valid[lru_list[3]] <= 1'b1;
+                // Move replaced line to MRU (lru_list[0]) and shift down
+                lru_list[0] <= lru_list[3];
+                lru_list[1] <= lru_list[0];
+                lru_list[2] <= lru_list[1];
+                lru_list[3] <= lru_list[2];
             end
 
             // ── Write complete ────────────────────────────────────────────────
@@ -243,6 +308,12 @@ always_ff @(posedge clk or negedge reset_n) begin
             S_REF: begin
                 if (cnt != 0) cnt <= cnt - 1;
                 else          state <= S_IDLE;
+            end
+
+            // ── Cache hit complete ────────────────────────────────────────────
+            S_CACHE_HIT: begin
+                req_complete <= 1'b1;
+                state        <= S_IDLE;
             end
 
             default: state <= S_IDLE;

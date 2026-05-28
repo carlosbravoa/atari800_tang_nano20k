@@ -63,25 +63,29 @@ localparam V_TOTAL  = 10'd750;
 // Sample on every pixce pulse to capture all 320 unique pixels.
 reg [8:0] wr_col;
 reg       wr_de_r, wr_vs_r;
-reg       wr_buf_idx;
+reg [1:0] wr_buf_idx;
+reg       wr_line_toggle;
 
 wire wr_de_fall = wr_de_r && !de_in;
 wire wr_vs_rise = vs_in && !wr_vs_r;
 
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
-        wr_col      <= 9'd0;
-        wr_de_r     <= 1'b0;
-        wr_vs_r     <= 1'b0;
-        wr_buf_idx  <= 1'b0;
+        wr_col         <= 9'd0;
+        wr_de_r        <= 1'b0;
+        wr_vs_r        <= 1'b0;
+        wr_buf_idx     <= 2'd0;
+        wr_line_toggle <= 1'b0;
     end else begin
         wr_de_r <= de_in;
         wr_vs_r <= vs_in;
 
         if (wr_vs_rise) begin
-            wr_buf_idx <= 1'b0;
+            wr_buf_idx     <= 2'd0;
+            wr_line_toggle <= 1'b0;
         end else if (wr_de_fall) begin
-            wr_buf_idx <= ~wr_buf_idx;
+            wr_buf_idx     <= (wr_buf_idx == 2'd2) ? 2'd0 : wr_buf_idx + 2'd1;
+            wr_line_toggle <= ~wr_line_toggle;
         end
 
         if (!de_in) begin
@@ -94,20 +98,20 @@ end
 
 // ── Clock domain crossing & synchronization ────────────────────────────────────
 reg [2:0] vs_in_sync_reg;
-reg [2:0] wr_buf_idx_sync_reg;
+reg [2:0] wr_line_toggle_sync_reg;
 
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
-        vs_in_sync_reg      <= 3'b111;
-        wr_buf_idx_sync_reg <= 3'b000;
+        vs_in_sync_reg          <= 3'b111;
+        wr_line_toggle_sync_reg <= 3'b000;
     end else begin
-        vs_in_sync_reg      <= {vs_in_sync_reg[1:0], vs_in};
-        wr_buf_idx_sync_reg <= {wr_buf_idx_sync_reg[1:0], wr_buf_idx};
+        vs_in_sync_reg          <= {vs_in_sync_reg[1:0], vs_in};
+        wr_line_toggle_sync_reg <= {wr_line_toggle_sync_reg[1:0], wr_line_toggle};
     end
 end
 
 wire vs_in_sync_fall = (vs_in_sync_reg[2] && !vs_in_sync_reg[1]);
-wire wr_buf_idx_sync = wr_buf_idx_sync_reg[2];
+wire wr_line_edge    = wr_line_toggle_sync_reg[2] ^ wr_line_toggle_sync_reg[1];
 
 // Genlock vertical sync pending flag (registers end-of-line alignment)
 reg vs_pending;
@@ -120,6 +124,18 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
         end else if (hx == H_TOTAL - 11'd1 && vs_pending) begin
             vs_pending <= 1'b0;
         end
+    end
+end
+
+// Track last completed buffer in read clock domain using single-bit sync toggle
+reg [1:0] last_completed_idx;
+always_ff @(posedge clk_pixel or negedge rst_n) begin
+    if (!rst_n) begin
+        last_completed_idx <= 2'd2; // First increment goes to 0
+    end else if (vs_in_sync_fall) begin
+        last_completed_idx <= 2'd2; // Reset to 2 at start of frame
+    end else if (wr_line_edge) begin
+        last_completed_idx <= (last_completed_idx == 2'd2) ? 2'd0 : last_completed_idx + 2'd1;
     end
 end
 
@@ -144,29 +160,30 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
 end
 
 // Repetition counters to avoid division logic
-reg       rd_buf_idx;
+reg [1:0] rd_buf_idx;
 reg [1:0] line_rep_cnt;
 reg [7:0] rd_row;
 
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
-        rd_buf_idx   <= 1'b1;
+        rd_buf_idx   <= 2'd2;
         line_rep_cnt <= 2'd0;
         rd_row       <= 8'd0;
     end else if (hx == H_TOTAL - 11'd1) begin
         if (vs_pending) begin
-            rd_buf_idx   <= 1'b1;
+            rd_buf_idx   <= 2'd2;
             line_rep_cnt <= 2'd0;
             rd_row       <= 8'd0;
         end else if (vy >= 10'd51 && vy < 10'd771) begin
             line_rep_cnt <= (line_rep_cnt == 2'd2) ? 2'd0 : line_rep_cnt + 2'd1;
             if (line_rep_cnt == 2'd2) begin
-                rd_buf_idx <= ~wr_buf_idx_sync;
+                rd_buf_idx <= last_completed_idx;
                 rd_row     <= rd_row + 8'd1;
             end
         end else begin
             line_rep_cnt <= 2'd0;
             rd_row       <= 8'd0;
+            rd_buf_idx   <= last_completed_idx;
         end
     end
 end
@@ -213,7 +230,7 @@ wire [7:0] rd_data;
 
 scale720p_tdp_ram #(
     .DATA_WIDTH(8),
-    .ADDR_WIDTH(10) // Updated to 10 bits for 512-byte pages
+    .ADDR_WIDTH(11) // 3 pages of 512 bytes
 ) line_buffer (
     .clk_a (clk_core),
     .we_a  (de_in && pixce), // Sample every pixce pulse
