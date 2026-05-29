@@ -234,12 +234,17 @@ reg [2:0] rv_done_sys_r     = 3'b000;
 wire      rv_ready_sync     = rv_done_sys_r[2] ^ rv_done_sys_r[1];
 
 // rv_hold: prevents phantom transactions.  After a PicoRV32 transaction
-// completes, the arbiter must not launch another one until rv_valid_core
-// deasserts (i.e. until PicoRV32 has acknowledged rv_ready and the
-// deassert has propagated through the 2-FF sync).  Without this, the arbiter
-// re-launches in the very next clk_core cycle, producing extra toggles that
-// corrupt the toggle-sync and leave PicoRV32 with 0 or 2 rv_ready pulses.
-reg rv_hold = 1'b0;
+// completes the arbiter must not re-launch immediately — rv_ready_sync needs
+// ≈6 clk_core cycles to reach iosys, then iosys deasserts rv_valid (1 sys_clk
+// = 2 clk_core), then rv_valid_core falls (2 clk_core).  Total worst-case: 14.
+//
+// Counter-based (16 cycles) instead of rv_valid_core-based: the original
+// rv_valid_core clearing caused a deadlock when Atari's continuous SDRAM
+// requests held atari_req_pending=1 so often that rv_slot was never consumed
+// in the !sdram_complete_r=0 window — see commit log for full analysis.
+// A fixed 16-cycle countdown always expires, guaranteeing progress.
+reg [3:0] rv_hold_cnt = 4'b0;
+wire      rv_hold     = rv_hold_cnt != 4'b0;
 wire rv_req = rv_valid_core && !rv_hold;  // PicoRV32 has a real new request
 
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
@@ -310,16 +315,12 @@ end
 // and the UART keyboard / menu becomes unresponsive.
 reg rv_slot = 1'b0;
 
-// rv_slot path drops !sdram_complete_r so PicoRV32 can claim its reserved slot
-// in the very SA_IDLE cycle after an Atari completion (sdram_complete_r=1).
-// rv_hold already blocks phantom relaunches when PicoRV32 itself just finished.
-// The unsolicited rv_req path (no slot) keeps !sdram_complete_r as a safety guard.
-wire next_owner = (rv_slot && rv_req)                    ? 1'b1 :
-                  atari_req_pending                       ? 1'b0 :
-                  (rv_req && !sdram_complete_r)           ? 1'b1 : 1'b1;
+wire next_owner = (rv_slot && rv_req && !sdram_complete_r) ? 1'b1 :
+                  atari_req_pending                         ? 1'b0 :
+                  (rv_req && !sdram_complete_r)             ? 1'b1 : 1'b1;
 
-wire next_req = (rv_slot && rv_req)          ||
-                atari_req_pending             ||
+wire next_req = (rv_slot && rv_req && !sdram_complete_r) ||
+                atari_req_pending                         ||
                 (rv_req && !sdram_complete_r);
 
 wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
@@ -345,20 +346,24 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
         sdram_owner      <= 1'b0;
         rv_slot          <= 1'b0;
         rv_done_toggle_r <= 1'b0;
-        rv_hold          <= 1'b0;
+        rv_hold_cnt      <= 4'b0;
     end else begin
         sdram_complete_r <= 1'b0;
 
-        // rv_hold: set when a PicoRV32 transaction completes; cleared when
-        // rv_valid_core deasserts.  Prevents phantom re-launches while waiting
-        // for the rv_ready toggle-sync pulse to reach iosys (≈8 clk_core cycles).
-        if (sdram_complete_r && sdram_owner == 1'b1) rv_hold <= 1'b1;
-        if (!rv_valid_core)                          rv_hold <= 1'b0;
+        // 16-cycle countdown: reloaded on each PicoRV32 SDRAM completion.
+        // Prevents phantom re-launches while the toggle-sync rv_ready pulse
+        // propagates to iosys (~6 clk_core) and iosys deasserts rv_valid
+        // (~2+2 clk_core).  Fixed timeout avoids the rv_valid_core-based
+        // deadlock where Atari's continuous requests blocked rv_slot consumption.
+        if (sdram_complete_r && sdram_owner == 1'b1)
+            rv_hold_cnt <= 4'd15;
+        else if (rv_hold_cnt != 4'b0)
+            rv_hold_cnt <= rv_hold_cnt - 4'b1;
 
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    if (rv_slot && rv_req) begin
+                    if (rv_slot && rv_req && !sdram_complete_r) begin
                         sdram_owner <= 1'b1;
                         rv_slot     <= 1'b0;
                         sadap_st    <= SA_BUSY;
