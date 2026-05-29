@@ -310,12 +310,16 @@ end
 // and the UART keyboard / menu becomes unresponsive.
 reg rv_slot = 1'b0;
 
-wire next_owner = (rv_slot && rv_req && !sdram_complete_r) ? 1'b1 :
-                  atari_req_pending                         ? 1'b0 :
-                  (rv_req && !sdram_complete_r)             ? 1'b1 : 1'b1;
+// rv_slot path drops !sdram_complete_r so PicoRV32 can claim its reserved slot
+// in the very SA_IDLE cycle after an Atari completion (sdram_complete_r=1).
+// rv_hold already blocks phantom relaunches when PicoRV32 itself just finished.
+// The unsolicited rv_req path (no slot) keeps !sdram_complete_r as a safety guard.
+wire next_owner = (rv_slot && rv_req)                    ? 1'b1 :
+                  atari_req_pending                       ? 1'b0 :
+                  (rv_req && !sdram_complete_r)           ? 1'b1 : 1'b1;
 
-wire next_req = (rv_slot && rv_req && !sdram_complete_r) ||
-                atari_req_pending                         ||
+wire next_req = (rv_slot && rv_req)          ||
+                atari_req_pending             ||
                 (rv_req && !sdram_complete_r);
 
 wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
@@ -354,7 +358,7 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    if (rv_slot && rv_req && !sdram_complete_r) begin
+                    if (rv_slot && rv_req) begin
                         sdram_owner <= 1'b1;
                         rv_slot     <= 1'b0;
                         sadap_st    <= SA_BUSY;
