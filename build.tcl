@@ -76,6 +76,7 @@ add_file "$src_dir/sdram_statemachine.vhdl"
 
 # ── Stage 2: HDMI ─────────────────────────────────────────────────────────────
 add_file "$src_dir/rpll_371m.v"
+add_file "$src_dir/rpll_108m.v"
 add_file "$src_dir/scale720p.sv"
 add_file "$src_dir/test_pattern_720p.sv"
 add_file "$src_dir/hdmi_audio_out.sv"
@@ -104,7 +105,7 @@ add_file "$src_dir/simpleuart.v"
 # usb_hid_host_rom uses $readmemh — copy hex to impl dir so synthesis finds it
 file mkdir "$tang_dir/impl/atari800_tn20k"
 file copy -force "$src_dir/usb_hid_host_rom.hex" "$tang_dir/impl/atari800_tn20k/"
-add_file "$src_dir/rpll_12m.v"
+# rpll_12m replaced by rpll_108m (dual-output: 108 MHz + 12 MHz from a single PLL)
 add_file "$src_dir/usb_hid_host_rom.v"
 add_file "$src_dir/usb_hid_host.v"
 add_file "$src_dir/usb_to_atari800.sv"

@@ -1,6 +1,10 @@
 // Atari 800 — Tang Nano 20K top-level
 // HDMI: Open-source unencrypted hdmi_audio_out transmitter.
-// Clocks: 27 MHz core (sys_clk direct); 371.25 MHz HDMI 5x; 74.25 MHz HDMI pixel; 12 MHz USB.
+// Clocks: 54 MHz core (rpll_54m); 371.25 MHz HDMI 5x; 74.25 MHz HDMI pixel; 12 MHz USB.
+// cycle_length=32 at 54 MHz → 32 SDRAM cycles per Atari bus cycle (budget fix for video garble).
+// Atari CPU speed stays 54/32 = 1.6875 MHz (same as 27/16). SDRC state machine runs 2× faster
+// in wall time so transactions complete within the 32-cycle window (shared_enable.vhdl only works
+// with power-of-2 cycle_lengths; 30 triggers an index-out-of-range error).
 
 module tang_top (
     input  wire        sys_clk,       // 27 MHz onboard oscillator
@@ -65,8 +69,10 @@ GSR GSR_INST (.GSRI(1'b1));
 // ── Clocks & reset ─────────────────────────────────────────────────────────
 wire clk_5x;               // 371.25 MHz — HDMI OSER10 5x clock
 wire clk_pix;              // 74.25 MHz  — HDMI pixel clock (371.25 ÷ 5)
-wire clk_usb;              // 12 MHz     — USB HID host
-wire pll_locked, pll_usb_locked;
+wire clk_usb;              // 12 MHz     — USB HID host (rpll_108m CLKOUTD ÷18)
+wire clk_108m;             // 216 MHz    — intermediate (rpll_108m CLKOUT)
+wire clk_core;             // 54 MHz     — Atari core + SDRAM (clk_108m ÷ 4 via CLKDIV)
+wire pll_locked, pll_core_locked;
 
 rpll_371m pll (
     .clk_in  (sys_clk),
@@ -74,10 +80,23 @@ rpll_371m pll (
     .locked  (pll_locked)
 );
 
-rpll_12m pll_usb (
+// rpll_108m replaces both rpll_12m and rpll_54m within the 2-PLL device limit:
+// CLKOUT=216 MHz feeds CLKDIV÷4 → clk_core=54 MHz; CLKOUTD(÷18)=12 MHz → clk_usb.
+rpll_108m pll_core_inst (
     .clk_in  (sys_clk),
+    .clk_108m(clk_108m),
     .clk_12m (clk_usb),
-    .locked  (pll_usb_locked)
+    .locked  (pll_core_locked)
+);
+
+CLKDIV #(
+    .DIV_MODE ("4"),
+    .GSREN    ("false")
+) clkdiv_core (
+    .CLKOUT (clk_core),
+    .HCLKIN (clk_108m),
+    .RESETN (pll_core_locked),
+    .CALIB  (1'b1)
 );
 
 // Power-on reset timer: guaranteed to release after 1.2 ms (32768 / 27 MHz)
@@ -93,8 +112,8 @@ always_ff @(posedge sys_clk) begin
     end
 end
 
-// hw_reset_n: released after power-on delay, re-asserted while S1 is pressed (active-HIGH)
-wire hw_reset_n  = timer_done && !btn_n[0];
+// hw_reset_n: released after power-on delay, PLLs locked, and S1 not pressed.
+wire hw_reset_n  = timer_done && !btn_n[0] && pll_core_locked;
 wire usb_host_enable;
 wire usb_reset_n = hw_reset_n && usb_host_enable;
 
@@ -233,7 +252,7 @@ wire actual_core_sdram_req = core_sdram_req && core_reset_n;
 // the request is silently lost, deadlocking the 6502.  Latch the pulse until the SDRAM
 // controller can accept it.
 reg actual_core_sdram_req_r = 1'b0;
-always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
         actual_core_sdram_req_r <= 1'b0;
     end else begin
@@ -244,7 +263,7 @@ end
 wire atari_req_rise = actual_core_sdram_req && !actual_core_sdram_req_r;
 
 reg atari_req_pending = 1'b0;
-always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
         atari_req_pending <= 1'b0;
     end else begin
@@ -283,7 +302,7 @@ wire        sdram_complete_wire;
 typedef enum logic { SA_IDLE, SA_BUSY } sadap_t;
 sadap_t sadap_st = SA_IDLE;
 
-always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
         sdram_complete_r <= 1'b0;
         sadap_st         <= SA_IDLE;
@@ -329,7 +348,7 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
 end
 
 gw2ar_sdram sdram_ip (
-    .clk          (sys_clk),
+    .clk          (clk_core),
     .reset_n      (hw_reset_n),
 
     // User interface
@@ -529,7 +548,7 @@ sio_handler sio_inst (
 // Atari 800 core
 // ─────────────────────────────────────────────────────────────────────────────
 atari800core_simple_sdram #(
-    .cycle_length               (16),
+    .cycle_length               (32),
     .video_bits                 (8),
     .palette                    (1),    // Altirra palette
     .internal_rom               (0),    // ROMs in SDRAM
@@ -537,7 +556,7 @@ atari800core_simple_sdram #(
     .low_memory                 (0),
     .covox                      (1)
 ) core (
-    .CLK                        (sys_clk),
+    .CLK                        (clk_core),
     .RESET_N                    (core_reset_n),
 
     // Video
@@ -630,7 +649,7 @@ atari800core_simple_sdram #(
     .VBXE_PALETTE_INDEX         (8'd0),
     .VBXE_PALETTE_COLOR         (7'd0),
     .HALT                       (overlay),
-    .THROTTLE_COUNT_6502        (6'd15),
+    .THROTTLE_COUNT_6502        (6'd31),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
     .EMU_FLASH_REQUEST          (),
@@ -694,7 +713,7 @@ wire [7:0] hdmi_r, hdmi_g, hdmi_b;
 wire       hdmi_hs, hdmi_vs, hdmi_de;
 
 scale720p scaler (
-    .clk_core  (sys_clk),
+    .clk_core  (clk_core),
     .rst_n     (hdmi_rst_n),
     .r_in      (video_r), .g_in(video_g), .b_in(video_b),
     .hs_in     (video_hs), .vs_in(video_vs), .de_in(~video_blank),
