@@ -234,17 +234,12 @@ reg [2:0] rv_done_sys_r     = 3'b000;
 wire      rv_ready_sync     = rv_done_sys_r[2] ^ rv_done_sys_r[1];
 
 // rv_hold: prevents phantom transactions.  After a PicoRV32 transaction
-// completes the arbiter must not re-launch immediately — rv_ready_sync needs
-// ≈6 clk_core cycles to reach iosys, then iosys deasserts rv_valid (1 sys_clk
-// = 2 clk_core), then rv_valid_core falls (2 clk_core).  Total worst-case: 14.
-//
-// Counter-based (16 cycles) instead of rv_valid_core-based: the original
-// rv_valid_core clearing caused a deadlock when Atari's continuous SDRAM
-// requests held atari_req_pending=1 so often that rv_slot was never consumed
-// in the !sdram_complete_r=0 window — see commit log for full analysis.
-// A fixed 16-cycle countdown always expires, guaranteeing progress.
-reg [3:0] rv_hold_cnt = 4'b0;
-wire      rv_hold     = rv_hold_cnt != 4'b0;
+// completes, the arbiter must not launch another one until rv_valid_core
+// deasserts (i.e. until PicoRV32 has acknowledged rv_ready and the
+// deassert has propagated through the 2-FF sync).  Without this, the arbiter
+// re-launches in the very next clk_core cycle, producing extra toggles that
+// corrupt the toggle-sync and leave PicoRV32 with 0 or 2 rv_ready pulses.
+reg rv_hold = 1'b0;
 wire rv_req = rv_valid_core && !rv_hold;  // PicoRV32 has a real new request
 
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
@@ -260,20 +255,8 @@ wire [31:0] sdram_rd_data_wire;
 wire        sdram_ready_wire;
 
 assign core_sdram_data_to_core = sdram_rd_data_wire >> {core_sdram_addr[1:0], 3'b000};
+assign rv_rdata                = sdram_rd_data_wire;
 assign sdram_ready             = sdram_ready_wire;
-
-// rv_rdata must be held stable from PicoRV32's SDRAM completion until rv_ready_sync
-// fires (~5 clk_core cycles later).  If we wire rv_rdata directly to sdram_rd_data_wire,
-// an Atari cache-hit transaction that starts at T+1 can overwrite gw2ar_sdram's
-// data_out_reg before rv_ready_sync reaches iosys, giving PicoRV32 Atari's data
-// instead of its own instruction — firmware crash.
-// Latch the data at PicoRV32's completion and hold it in rv_rdata_hold.
-reg [31:0] rv_rdata_hold = 32'b0;
-always_ff @(posedge clk_core) begin
-    if (sdram_complete_wire && sadap_st == SA_BUSY && sdram_owner == 1'b1)
-        rv_rdata_hold <= sdram_rd_data_wire;
-end
-assign rv_rdata = rv_rdata_hold;
 
 // Address translation for PicoRV32: Virtual-to-Physical Bank mapping
 // Virtual Bank 0 (0x000000-0x1FFFFF) -> Physical Bank 1
@@ -358,19 +341,15 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
         sdram_owner      <= 1'b0;
         rv_slot          <= 1'b0;
         rv_done_toggle_r <= 1'b0;
-        rv_hold_cnt      <= 4'b0;
+        rv_hold          <= 1'b0;
     end else begin
         sdram_complete_r <= 1'b0;
 
-        // 16-cycle countdown: reloaded on each PicoRV32 SDRAM completion.
-        // Prevents phantom re-launches while the toggle-sync rv_ready pulse
-        // propagates to iosys (~6 clk_core) and iosys deasserts rv_valid
-        // (~2+2 clk_core).  Fixed timeout avoids the rv_valid_core-based
-        // deadlock where Atari's continuous requests blocked rv_slot consumption.
-        if (sdram_complete_r && sdram_owner == 1'b1)
-            rv_hold_cnt <= 4'd15;
-        else if (rv_hold_cnt != 4'b0)
-            rv_hold_cnt <= rv_hold_cnt - 4'b1;
+        // rv_hold: set when a PicoRV32 transaction completes; cleared when
+        // rv_valid_core deasserts.  Prevents phantom re-launches while waiting
+        // for the rv_ready toggle-sync pulse to reach iosys (≈8 clk_core cycles).
+        if (sdram_complete_r && sdram_owner == 1'b1) rv_hold <= 1'b1;
+        if (!rv_valid_core)                          rv_hold <= 1'b0;
 
         case (sadap_st)
             SA_IDLE: begin
@@ -520,36 +499,6 @@ wire        sio_rx_data_in;
 wire        sio_clk_out;
 wire        enable_179_early;
 
-// ── CDC: overlay (sys_clk=27 MHz) → HALT (clk_core=54 MHz) ──────────────────
-// overlay_buf in iosys starts at 1 so initialize both FFs to 1 (Atari halted
-// during ROM loading) to avoid a spurious HALT=0 glitch at the first clk_core
-// edge.
-// overlay already declared above (line ~485) as iosys output in sys_clk domain
-reg  [1:0]  overlay_core_r = 2'b11;
-always_ff @(posedge clk_core or negedge hw_reset_n) begin
-    if (!hw_reset_n) overlay_core_r <= 2'b11;
-    else             overlay_core_r <= {overlay_core_r[0], overlay};
-end
-wire overlay_core = overlay_core_r[1];  // clk_core-domain HALT signal
-
-// ── CDC: enable_179_early (clk_core, 1-cycle 18.5 ns pulse) → sys_clk ───────
-// sio_handler POKEY_ENABLE must be visible at sys_clk=27 MHz (37 ns period).
-// A 1-cycle clk_core pulse is only 18.5 ns — ~50 % chance of being missed.
-// Toggle-synchronizer: toggle a bit on each pulse in clk_core, sync 3 stages
-// into sys_clk, XOR edge-detect → reliable 1-cycle sys_clk POKEY_ENABLE pulse.
-reg       e179_toggle_r  = 1'b0;
-reg [2:0] e179_sys_r     = 3'b000;
-wire      enable_179_sys = e179_sys_r[2] ^ e179_sys_r[1];
-
-always_ff @(posedge clk_core or negedge hw_reset_n) begin
-    if (!hw_reset_n) e179_toggle_r <= 1'b0;
-    else if (enable_179_early) e179_toggle_r <= ~e179_toggle_r;
-end
-always_ff @(posedge sys_clk or negedge hw_reset_n) begin
-    if (!hw_reset_n) e179_sys_r <= 3'b000;
-    else             e179_sys_r <= {e179_sys_r[1:0], e179_toggle_r};
-end
-
 assign dbg_sd_ready = roms_loaded;
 
 // PicoRV32 IO subsystem module
@@ -633,7 +582,7 @@ sio_handler sio_inst (
     .EN(sio_reg_en),
     .WR_EN(sio_reg_wr),
     .RESET_N(hw_reset_n),
-    .POKEY_ENABLE(enable_179_sys),
+    .POKEY_ENABLE(enable_179_early),
     .SIO_DATA_IN(sio_rx_data_in),
     .SIO_COMMAND(sio_command),
     .SIO_DATA_OUT(sio_txd),
@@ -745,7 +694,7 @@ atari800core_simple_sdram #(
     .VBXE_PALETTE_RGB           (3'd0),
     .VBXE_PALETTE_INDEX         (8'd0),
     .VBXE_PALETTE_COLOR         (7'd0),
-    .HALT                       (overlay_core),
+    .HALT                       (overlay),
     .THROTTLE_COUNT_6502        (6'd31),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
@@ -939,11 +888,8 @@ always_ff @(posedge sys_clk) blink_cnt <= blink_cnt + 1'b1;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LEDs (active low, pins 17-20):
-//   [4]=blink_cnt[22] ~6 Hz   [3]=dbg_sd_ready (roms_loaded)
-//   [2]=overlay (OSD visible / Atari halted — diagnostic)   [1]=sdram_ready
-// overlay replaces pll_locked: if S2 press toggles LED 3 (pin 18), iosys is
-// alive.  If the LED never changes, the firmware is stuck.
+//   [4]=blink_cnt[22] ~6 Hz   [3]=dbg_sd_ready (roms_loaded)  [2]=pll_locked   [1]=sdram_ready
 // ─────────────────────────────────────────────────────────────────────────────
-assign leds_n = ~{blink_cnt[22], dbg_sd_ready, overlay, sdram_ready};
+assign leds_n = ~{blink_cnt[22], dbg_sd_ready, pll_locked, sdram_ready};
 
 endmodule
