@@ -260,8 +260,20 @@ wire [31:0] sdram_rd_data_wire;
 wire        sdram_ready_wire;
 
 assign core_sdram_data_to_core = sdram_rd_data_wire >> {core_sdram_addr[1:0], 3'b000};
-assign rv_rdata                = sdram_rd_data_wire;
 assign sdram_ready             = sdram_ready_wire;
+
+// rv_rdata must be held stable from PicoRV32's SDRAM completion until rv_ready_sync
+// fires (~5 clk_core cycles later).  If we wire rv_rdata directly to sdram_rd_data_wire,
+// an Atari cache-hit transaction that starts at T+1 can overwrite gw2ar_sdram's
+// data_out_reg before rv_ready_sync reaches iosys, giving PicoRV32 Atari's data
+// instead of its own instruction — firmware crash.
+// Latch the data at PicoRV32's completion and hold it in rv_rdata_hold.
+reg [31:0] rv_rdata_hold = 32'b0;
+always_ff @(posedge clk_core) begin
+    if (sdram_complete_wire && sadap_st == SA_BUSY && sdram_owner == 1'b1)
+        rv_rdata_hold <= sdram_rd_data_wire;
+end
+assign rv_rdata = rv_rdata_hold;
 
 // Address translation for PicoRV32: Virtual-to-Physical Bank mapping
 // Virtual Bank 0 (0x000000-0x1FFFFF) -> Physical Bank 1
