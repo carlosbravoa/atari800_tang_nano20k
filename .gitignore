@@ -1,5 +1,7 @@
 impl/
 rom/*.hex
+*.bak
+*.vo
 *.log
 *.bin
 *.o
