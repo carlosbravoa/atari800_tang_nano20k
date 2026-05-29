@@ -212,6 +212,25 @@ wire [3:0]  rv_wstrb;
 wire [31:0] rv_rdata;
 wire        sdram_ready;
 
+// ── PicoRV32 ↔ SDRAM arbiter CDC ─────────────────────────────────────────────
+// PicoRV32 is on sys_clk (27 MHz); arbiter + SDRAM IP are on clk_core (54 MHz).
+//
+// rv_valid (sys_clk → clk_core): level signal held until acknowledged.
+// A 2-FF synchronizer is sufficient.
+reg [1:0] rv_valid_sync_r = 2'b00;
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
+    if (!hw_reset_n) rv_valid_sync_r <= 2'b00;
+    else             rv_valid_sync_r <= {rv_valid_sync_r[0], rv_valid};
+end
+wire rv_valid_core = rv_valid_sync_r[1];
+
+// rv_ready (clk_core → sys_clk): 1-cycle clk_core pulse → toggle synchronizer.
+// Toggle a bit each time a PicoRV32 transaction completes; sync the toggle into
+// sys_clk domain and detect the edge to produce a sys_clk-domain pulse.
+reg       rv_done_toggle_r = 1'b0;
+reg [2:0] rv_done_sys_r    = 3'b000;
+wire      rv_ready_sync    = rv_done_sys_r[2] ^ rv_done_sys_r[1];
+
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
 wire        sdram_complete;
 reg         sdram_complete_r = 1'b0;
@@ -219,7 +238,7 @@ reg         sdram_owner = 1'b0; // 0 = Atari core, 1 = PicoRV32
 
 assign sdram_complete = sdram_complete_r;
 assign core_sdram_req_complete = sdram_complete && (sdram_owner == 1'b0);
-assign rv_ready                = sdram_complete && (sdram_owner == 1'b1);
+assign rv_ready                = rv_ready_sync;
 
 wire [31:0] sdram_rd_data_wire;
 wire        sdram_ready_wire;
@@ -280,16 +299,16 @@ end
 // and the UART keyboard / menu becomes unresponsive.
 reg rv_slot = 1'b0;
 
-wire next_owner = (rv_slot && rv_valid && !sdram_complete_r) ? 1'b1 :
-                  atari_req_pending                          ? 1'b0 :
-                  (rv_valid && !sdram_complete_r)           ? 1'b1 : 1'b1;
+wire next_owner = (rv_slot && rv_valid_core && !sdram_complete_r) ? 1'b1 :
+                  atari_req_pending                              ? 1'b0 :
+                  (rv_valid_core && !sdram_complete_r)           ? 1'b1 : 1'b1;
 
-wire next_req = (rv_slot && rv_valid && !sdram_complete_r) ||
-                atari_req_pending                          ||
-                (rv_valid && !sdram_complete_r);
+wire next_req = (rv_slot && rv_valid_core && !sdram_complete_r) ||
+                atari_req_pending                               ||
+                (rv_valid_core && !sdram_complete_r);
 
 wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
-wire sdram_ctrl_req = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid : atari_req_pending) : next_req;
+wire sdram_ctrl_req = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid_core : atari_req_pending) : next_req;
 wire        sdram_ctrl_read_en  = current_owner ? (~|rv_wstrb) : core_sdram_read_en;
 wire        sdram_ctrl_write_en = current_owner ? (|rv_wstrb)  : core_sdram_write_en;
 wire [24:0] sdram_ctrl_addr     = current_owner ? rv_physical_addr : core_sdram_addr;
@@ -304,10 +323,11 @@ sadap_t sadap_st = SA_IDLE;
 
 always_ff @(posedge clk_core or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
-        sdram_complete_r <= 1'b0;
-        sadap_st         <= SA_IDLE;
-        sdram_owner      <= 1'b0;
-        rv_slot          <= 1'b0;
+        sdram_complete_r  <= 1'b0;
+        sadap_st          <= SA_IDLE;
+        sdram_owner       <= 1'b0;
+        rv_slot           <= 1'b0;
+        rv_done_toggle_r  <= 1'b0;
     end else begin
         sdram_complete_r <= 1'b0;
 
@@ -317,9 +337,9 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
                     // sdram_complete_r is high for exactly one cycle when rv_ready fires.
                     // PicoRV32 lowers rv_valid one cycle after seeing rv_ready, so starting
                     // a new PicoRV32 transaction in that same cycle would launch SA_BUSY
-                    // with rv_valid about to go 0 → sdram_ctrl_req=0 → permanent hang.
+                    // with rv_valid_core about to go 0 → sdram_ctrl_req=0 → permanent hang.
                     // Block PicoRV32 starts when sdram_complete_r is high; Atari can proceed.
-                    if (rv_slot && rv_valid && !sdram_complete_r) begin
+                    if (rv_slot && rv_valid_core && !sdram_complete_r) begin
                         // PicoRV32's reserved turn after an Atari access
                         sdram_owner <= 1'b1;
                         rv_slot     <= 1'b0;
@@ -327,7 +347,7 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
                     end else if (atari_req_pending) begin
                         sdram_owner <= 1'b0;
                         sadap_st    <= SA_BUSY;
-                    end else if (rv_valid && !sdram_complete_r) begin
+                    end else if (rv_valid_core && !sdram_complete_r) begin
                         sdram_owner <= 1'b1;
                         sadap_st    <= SA_BUSY;
                     end
@@ -338,13 +358,22 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
                     sdram_complete_r <= 1'b1;
                     sadap_st         <= SA_IDLE;
                     // After an Atari access, reserve a slot for PicoRV32 if it is waiting
-                    if (sdram_owner == 1'b0 && rv_valid)
+                    if (sdram_owner == 1'b0 && rv_valid_core)
                         rv_slot <= 1'b1;
+                    // Toggle rv_done for PicoRV32 completions; synced to sys_clk for rv_ready
+                    if (sdram_owner == 1'b1)
+                        rv_done_toggle_r <= ~rv_done_toggle_r;
                 end
             end
             default: sadap_st <= SA_IDLE;
         endcase
     end
+end
+
+// rv_done_toggle_r (clk_core) → rv_done_sys_r (sys_clk): 3-stage for edge detect
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) rv_done_sys_r <= 3'b000;
+    else             rv_done_sys_r <= {rv_done_sys_r[1:0], rv_done_toggle_r};
 end
 
 gw2ar_sdram sdram_ip (
