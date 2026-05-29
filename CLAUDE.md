@@ -39,18 +39,37 @@ Key files in `src/`:
 ## Architecture
 
 ### Clock domains
-- `clk_sys` = 27 MHz (pixel clock, Atari core, SDRAM adapter, audio tick)
-- `clk_5x` = 135 MHz (OSER10 HDMI serialiser)
-- `clk_usb` = 12 MHz (USB HID host)
+
+| Signal | Freq | Source | Drives |
+|---|---|---|---|
+| `sys_clk` | 27 MHz | Pin 4 oscillator | PLL inputs, iosys/PicoRV32, USB, audio DACs, reset timer |
+| `clk_5x` | 371.25 MHz | `rpll_371m` | HDMI OSER10 serializers |
+| `clk_pix` | 74.25 MHz | `clk_5x` ÷ 5 via `CLKDIV` | HDMI pixel logic, scaler read side |
+| `clk_108m` | 216 MHz | `rpll_108m` CLKOUT | Intermediate for core clock |
+| `clk_core` | 54 MHz | `clk_108m` ÷ 4 via `CLKDIV` | Atari core, SDRAM IP+arbiter, scaler write side |
+| `clk_usb` | 12 MHz | `rpll_108m` CLKOUTD (÷18) | USB HID host |
+
+GW2AR-18 has **2 rPLLs total**: `rpll_371m` (HDMI) + `rpll_108m` (core+USB). Both are used.
+`rpll_108m`: FBDIV=7, IDIV=0, ODIV=4 → FOUT=216 MHz, VCO=864 MHz; CLKOUTD=12 MHz (even divisor 18).
+
+**Why 54 MHz for the core?** At 27 MHz/`cycle_length=16`, the SDRC_HS state machine takes
+~20 steps × 37 ns = 740 ns per SDRAM access, exceeding the 16-cycle / 592 ns Atari bus window.
+At 54 MHz/`cycle_length=32` the same 20 steps take only 370 ns < 592 ns — no cycle stretch,
+no ANTIC DMA corruption. Atari speed unchanged: 54/32 = 1.6875 MHz.
+
+**iosys/PicoRV32 stays on sys_clk (27 MHz)** — SD card SPI firmware has hardcoded timing for
+the ≤400 kHz SD init phase. CDC to the 54 MHz arbiter: rv_valid 2-FF sync, rv_ready
+toggle-sync (rv_done_toggle_r → rv_done_sys_r XOR detect → rv_ready_sync), rv_hold anti-phantom
+gate (clears when rv_valid_core deasserts after iosys acks).
 
 ### Reset hierarchy
-- `hw_reset_n` = button AND both PLLs locked
+- `hw_reset_n` = button AND `pll_core_locked` (rpll_108m) AND ~1.2 ms power-on timer
 - `core_reset_n` = hw_reset_n AND roms_loaded (Atari core held in reset until SD load completes)
 
 ### Memory
-The GW2AR-18 has embedded 64 Mbit SDRAM accessed via the Gowin `SDRC_HS` IP.
-`tang_top.sv` contains a simple request/ack adapter (SA_IDLE/SA_BUSY).
-ROM loader has SDRAM priority until `roms_loaded`; then the Atari core takes over.
+The GW2AR-18 has embedded 64 Mbit SDRAM accessed via `gw2ar_sdram.sv` (custom controller).
+`tang_top.sv` contains a two-client SA_IDLE/SA_BUSY arbiter running on `clk_core` (54 MHz).
+ROM loader (iosys) has SDRAM priority until `roms_loaded`; then the Atari core takes over.
 
 ### HDMI audio (hdmi_audio_out.sv)
 State machine per horizontal blanking: S_ACTIVE → S_CTRL → S_PRE(8) → S_LGB(2) → S_DATA(32) → S_TGB(2) → repeat up to 2 islands.
@@ -61,7 +80,7 @@ State machine per horizontal blanking: S_ACTIVE → S_CTRL → S_PRE(8) → S_LG
 
 ### Upstream VHDL core (`rtl/`)
 `atari800core_simple_sdram` is the top-level Atari core entity. Its key generics
-set in `tang_top.sv`: `cycle_length=16`, `palette=1` (Altirra), ROMs/RAM in SDRAM.
+set in `tang_top.sv`: `cycle_length=32`, `palette=1` (Altirra), ROMs/RAM in SDRAM.
 Do not modify files under `rtl/` — sync from upstream Atari800_MiSTer instead.
 
 ## Adding Source Files
@@ -174,8 +193,12 @@ The LOCK output can glitch during the locking process. It must be monitored for 
 ## Roadmap
 
 - **Done:** Stage 3.5 — rPLL locks at 135 MHz. Root cause was sys_clk on wrong pin (10→4).
-- **Active:** Stage 4: USB HID keyboard (nand2mario usb_hid_host; needs 12 MHz PLL + pin 53 for usb_dp)
-- Stage 5: Audio output (sigma-delta DAC + HDMI audio islands)
-- Stage 6: SIO disk emulation (ATR images from SD card)
-- Stage 7: OSD menu
-- Stage 8: Cartridge loading from SD card
+- **Done:** Stage 4: USB HID keyboard (nand2mario usb_hid_host; 12 MHz from rpll_108m CLKOUTD, pin 51).
+- **Done:** Stage 5: Audio output (sigma-delta DAC + HDMI audio islands).
+- **Done:** Stage 6: SIO disk emulation (ATR images from SD card).
+- **Done:** Stage 7: OSD menu.
+- **Done:** Stage 7.5 — Video garble fixed. Root cause: SDRAM cycle budget at 27 MHz/cycle_length=16
+  too tight (740 ns > 592 ns). Fix: clk_core=54 MHz (rpll_108m + CLKDIV÷4) + cycle_length=32.
+  First correct Atari boot image confirmed on hardware 2026-05-29.
+- **Active:** USB keyboard and OSD not responding after clock change — next to investigate.
+- Stage 8: Cartridge loading from SD card.

@@ -25,6 +25,27 @@ adapted for the Gowin FPGA toolchain.
 
 ---
 
+## Status
+
+| Feature | Status |
+|---|---|
+| Atari boot (BASIC, self-test) | ✅ Working |
+| HDMI video 720p/60 Hz | ✅ Working (fixed 2026-05-29) |
+| HDMI audio (48 kHz PCM) | ✅ Working |
+| GPIO sigma-delta audio | ✅ Working |
+| SD card ROM loader | ✅ Working |
+| SIO disk emulation (.atr) | ✅ Working |
+| OSD menu | ⚠️ OSD display works; S2 toggle and joystick navigation not responding after clock change — under investigation |
+| USB HID keyboard | ⚠️ Not responding after clock change — under investigation |
+| DB9 joystick | ✅ Working (in-game) |
+
+> **Video garble root cause and fix:** At the original 27 MHz / `cycle_length=16` the SDRAM
+> controller state machine needed ~740 ns per access but only had a 592 ns window.
+> Fixed by running the Atari core and SDRAM at **54 MHz / `cycle_length=32`** — the same
+> SDRAM steps now complete in ~370 ns, well within the window.
+
+---
+
 ## Hardware Required
 
 | Item | Notes |

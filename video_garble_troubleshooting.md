@@ -17,12 +17,13 @@ is in the Atari core's memory access pattern.
 | Parameter | Value |
 |---|---|
 | FPGA | Gowin GW2AR-18 (Tang Nano 20K) |
-| sys_clk | 27 MHz |
-| cycle_length | 16 FPGA clocks per Atari machine cycle |
-| Effective Atari speed | 27/16 = 1.6875 MHz ≈ 1.79 MHz |
+| sys_clk | 27 MHz (oscillator — iosys, USB, audio) |
+| clk_core | 54 MHz (rpll_108m → CLKDIV÷4 — Atari core + SDRAM) |
+| cycle_length | 32 FPGA clocks per Atari machine cycle |
+| Effective Atari speed | 54/32 = 1.6875 MHz ≈ 1.79 MHz |
 | SDRAM | Embedded 32-bit, 8 MB, 4 banks × 2048 rows × 256 cols |
-| SDRAM latency | ~7 clock cycles (CL=2 + overhead) |
-| HDMI pixel clock | 74.25 MHz (from PLL) |
+| SDRAM latency | ~7 clock cycles (CL=2 + overhead) at 54 MHz |
+| HDMI pixel clock | 74.25 MHz (from rpll_371m → CLKDIV÷5) |
 
 The Atari's two bus masters — **ANTIC** (display DMA) and **SALLY** (6502 CPU) —
 share a single SDRAM controller via a software arbiter in `tang_top.sv`. ANTIC
@@ -166,53 +167,71 @@ other would produce wrong pixel timing → guaranteed garbling.
 `THROTTLE_COUNT_6502 = 6'd15` is the standard 1.79 MHz setting. The `turbo` mode
 via this register is noted as broken in the source comments.
 
-### Theory B — Increase cycle_length + Higher PLL
-**Not yet implemented.**
-Running at `cycle_length=30` with `sys_clk=54 MHz` would keep the Atari at
-~1.8 MHz but give the SDRAM controller 30 FPGA cycles (≈556 ns) per Atari cycle
-instead of 16 cycles (≈592 ns at 27 MHz). The ratio of SDRAM latency to cycle
-budget improves significantly (7/30 vs 7/16).
+### Theory B — Increase cycle_length + Higher Core Clock  ✅ IMPLEMENTED — SOLVED
 
-Requires PLL reconfiguration. Medium risk.
+**Root cause confirmed:**  The Gowin SDRC_HS state machine needs more clock cycles
+than the 16-tick Atari bus window allows at 27 MHz.  At 27 MHz / cycle_length=16
+each Atari cycle is 592 ns but the SDRAM controller's own state machine takes
+~20–25 steps; when it overruns, the core's `address_decoder.vhdl` stretches the
+Atari cycle to wait for `SDRAM_REQUEST_COMPLETE`.  That stretch distorts ANTIC's
+colour-clock timing, shifting pixel data by fractional colour clocks and producing
+the garbled scan lines.
 
-### Theory C — VHDL-Level Arbitration Fix (SALLY vs ANTIC)
-**Not yet implemented.**
-The `address_decoder.vhdl` and `shared_enable.vhdl` serialise bus ownership
-between SALLY and ANTIC internally before the request even reaches the SDRAM
-controller. The `MEMORY_READY_CPU` / `MEMORY_READY_ANTIC` signals gate whether
-each CPU advances its state machine.
+**Why halting the CPU helped:** With SALLY halted there are no competing SDRAM
+requests; ANTIC's DMA always gets immediate bus access, the SDRAM returns within
+the window, and no cycles are stretched → clean image.
 
-If the SDRAM controller takes longer than `cycle_length` clocks to respond (e.g.
-during a refresh), the `shared_enable` FSM may stall in an unexpected state,
-desynchronising ANTIC's DMA from its pixel counter. This would produce exactly
-the symptom observed — garbled image when CPU runs.
+**Fix implemented (branch `test-cycle30-54mhz-sdram-budget`):**
 
-This would require reading and possibly patching `shared_enable.vhdl` and/or the
-SDRAM controller to guarantee responses within `cycle_length` clocks.
-
----
-
-## Current State of Modified Files
-
-| File | Change | Status |
+| Parameter | Before | After |
 |---|---|---|
-| [tang_top.sv](file:///home/carlos/devel/fpga/atari800_tang_nano20k_parallel/src/tang_top.sv) | Atari-priority arbiter + `internal_ram=16384` | In tree |
-| [gw2ar_sdram.sv](file:///home/carlos/devel/fpga/atari800_tang_nano20k_parallel/src/gw2ar_sdram.sv) | 4-line LRU cache + `S_CACHE_HIT` fix | In tree |
-| [scale720p.sv](file:///home/carlos/devel/fpga/atari800_tang_nano20k_parallel/src/scale720p.sv) | 3-stage line buffer | In tree |
+| `clk_core` | 27 MHz (raw osc) | 54 MHz (rpll_108m → CLKDIV÷4) |
+| `cycle_length` | 16 | 32 |
+| `THROTTLE_COUNT_6502` | 15 | 31 |
+| Atari CPU speed | 27/16 = 1.6875 MHz | 54/32 = 1.6875 MHz (identical) |
+| SDRAM cycles/Atari cycle | 16 @ 27 MHz | 32 @ 54 MHz |
+| SDRAM step wall time | 37 ns | 18.5 ns |
+| SDRAM total latency | ~20 × 37 ns = 740 ns (overruns) | ~20 × 18.5 ns = 370 ns < 592 ns ✓ |
+
+The Atari speed is unchanged, but the SDRAM completes in half the wall time — well
+within the 32-tick budget — so no Atari cycle ever stretches.
+
+**PLL constraint (GW2AR has only 2 rPLLs):**
+`cycle_length=30` was tried first but `shared_enable.vhdl` only tolerates
+power-of-2 cycle lengths (index formula `cycle_length/(2^i)-1` underflows at
+i=cycle_length_bits when cycle_length is not a power of 2).  `cycle_length=32`
+was used instead.
+
+`rpll_12m` (USB 12 MHz) was removed and replaced by `rpll_108m`, a single PLL
+generating 216 MHz (CLKOUT) + 12 MHz (CLKOUTD÷18).  A `CLKDIV÷4` primitive on
+the 216 MHz output produces the 54 MHz core clock.  The 2-PLL device limit is
+preserved.
+
+**CDC between iosys (27 MHz) and arbiter (54 MHz):**
+`iosys_picorv32` must remain on 27 MHz — its firmware has hardcoded SPI timing
+for the SD card init phase (≤400 kHz), which would double and fail at 54 MHz.
+A three-layer CDC bridge in `tang_top.sv` handles the crossing:
+
+1. `rv_valid` (27 → 54 MHz): 2-FF level synchroniser → `rv_valid_core`
+2. `rv_ready` (54 → 27 MHz): toggle synchroniser (`rv_done_toggle_r`, 3-stage
+   `rv_done_sys_r`, XOR edge-detect → `rv_ready_sync`)
+3. `rv_hold`: set on PicoRV32 transaction completion; cleared when `rv_valid_core`
+   deasserts.  Prevents phantom re-launches during the ≈8 clk_core cycles between
+   completion and iosys acknowledging `rv_ready`.
 
 ---
 
-## Recommended Next Steps (for future session)
+## Resolution
 
-1. **Theory C (VHDL arbitration):** Audit `shared_enable.vhdl` — specifically the
-   `oldcycle_state` FSM — to check whether an SDRAM stall beyond `cycle_length`
-   clocks can desync the ANTIC enable from its pixel counter.
+**✅ SOLVED.** First correct Atari video confirmed on hardware after the
+`cycle_length=32` / `clk_core=54 MHz` change.
 
-2. **Guarantee sub-cycle SDRAM response:** Modify `gw2ar_sdram.sv` so that if a
-   request cannot complete within `cycle_length-1` clocks (e.g. during refresh),
-   it asserts a stall signal that both `MEMORY_READY_CPU` and `MEMORY_READY_ANTIC`
-   can observe, rather than simply being slow.
+### Final State of Modified Files
 
-3. **Compare against a working reference:** Find another Tang Nano 20K Atari core
-   (e.g. from MiSTer or other open-source projects) that produces correct video,
-   and diff its SDRAM controller and arbiter design against ours.
+| File | Change |
+|---|---|
+| `src/tang_top.sv` | 54 MHz core clock, cycle_length=32, THROTTLE=31, CDC bridge |
+| `src/rpll_108m.v` | New dual-output PLL (216 MHz + 12 MHz) |
+| `build.tcl` | rpll_12m → rpll_108m |
+| `src/gw2ar_sdram.sv` | 4-line LRU cache (remains) |
+| `src/scale720p.sv` | Ping-pong line buffer scaler (remains) |
