@@ -129,7 +129,12 @@ wire [63:0] atari_keyboard =
 
 // Modifiers
 wire shift_pressed   = key_modifiers[1] | key_modifiers[5]; // LShift | RShift
-wire control_pressed = key_modifiers[0] | key_modifiers[4]; // LCtrl  | RCtrl
+wire arrow_pressed   = (key1 >= 8'h4F && key1 <= 8'h52) |
+                       (key2 >= 8'h4F && key2 <= 8'h52) |
+                       (key3 >= 8'h4F && key3 <= 8'h52) |
+                       (key4 >= 8'h4F && key4 <= 8'h52);
+wire control_pressed = key_modifiers[0] | key_modifiers[4] | arrow_pressed; // LCtrl  | RCtrl | arrow keys auto-Ctrl
+
 
 // Break: Grave/Tilde (0x35) or Num Lock (0x53)
 wire break_pressed =
