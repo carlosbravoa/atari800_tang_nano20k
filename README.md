@@ -19,7 +19,8 @@ adapted for the Gowin FPGA toolchain.
 - **SD card ROM loader** — reads `OS.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - **On-Screen Display (OSD)** — file browser, disk image selection, options menu (navigable via DB9 Joystick + S2 button!)
 - **OSD Keyboard-less Navigation** — toggle OSD via onboard S2 button; navigate and select files using physical DB9 Joystick 1
-- **USB HID keyboard** — low-speed USB (requires 15 kΩ pull-down resistors, see below)
+- **UART / Serial Keyboard (Primary)** — supports raw USB HID reports sent over serial frames via an external CH9350 board or Raspberry Pi Pico (no resistors required, uses Pin 53)
+- **USB HID Keyboard (Secondary)** — direct low-speed USB keyboard connection to the FPGA GPIO pins (requires 15 kΩ pull-down resistors, see below)
 - **Atari DB9 joystick ports × 2** — active-low GPIO, no resistors needed
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
 
