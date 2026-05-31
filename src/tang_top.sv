@@ -255,8 +255,19 @@ wire [31:0] sdram_rd_data_wire;
 wire        sdram_ready_wire;
 
 assign core_sdram_data_to_core = sdram_rd_data_wire >> {core_sdram_addr[1:0], 3'b000};
-assign rv_rdata                = sdram_rd_data_wire;
 assign sdram_ready             = sdram_ready_wire;
+
+// Latch PicoRV32's read data at the exact completion edge of its SDRAM access.
+// Since the PicoRV32 CDC ready pulse takes ~5 clk_core cycles to sync back,
+// concurrent Atari core reads can overwrite sdram_rd_data_wire. Latching prevents this.
+reg [31:0] rv_rdata_hold = 32'b0;
+always_ff @(posedge clk_core) begin
+    if (sdram_complete_wire && sadap_st == SA_BUSY && sdram_owner == 1'b1) begin
+        rv_rdata_hold <= sdram_rd_data_wire;
+    end
+end
+assign rv_rdata = rv_rdata_hold;
+
 
 // Address translation for PicoRV32: Virtual-to-Physical Bank mapping
 // Virtual Bank 0 (0x000000-0x1FFFFF) -> Physical Bank 1
@@ -499,6 +510,36 @@ wire        sio_rx_data_in;
 wire        sio_clk_out;
 wire        enable_179_early;
 
+// ── CDC: overlay (sys_clk=27 MHz) → HALT (clk_core=54 MHz) ──────────────────
+// overlay_buf in iosys starts at 1 so initialize both FFs to 1 (Atari halted
+// during ROM loading) to avoid a spurious HALT=0 glitch at the first clk_core
+// edge.
+reg  [1:0]  overlay_core_r = 2'b11;
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
+    if (!hw_reset_n) overlay_core_r <= 2'b11;
+    else             overlay_core_r <= {overlay_core_r[0], overlay};
+end
+wire overlay_core = overlay_core_r[1];  // clk_core-domain HALT signal
+
+// ── CDC: enable_179_early (clk_core, 1-cycle 18.5 ns pulse) → sys_clk ───────
+// sio_handler POKEY_ENABLE must be visible at sys_clk=27 MHz (37 ns period).
+// A 1-cycle clk_core pulse is only 18.5 ns — ~50 % chance of being missed.
+// Toggle-synchronizer: toggle a bit on each pulse in clk_core, sync 3 stages
+// into sys_clk, XOR edge-detect → reliable 1-cycle sys_clk POKEY_ENABLE pulse.
+reg       e179_toggle_r  = 1'b0;
+reg [2:0] e179_sys_r     = 3'b000;
+wire      enable_179_sys = e179_sys_r[2] ^ e179_sys_r[1];
+
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
+    if (!hw_reset_n) e179_toggle_r <= 1'b0;
+    else if (enable_179_early) e179_toggle_r <= ~e179_toggle_r;
+end
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) e179_sys_r <= 3'b000;
+    else             e179_sys_r <= {e179_sys_r[1:0], e179_toggle_r};
+end
+
+
 assign dbg_sd_ready = roms_loaded;
 
 // PicoRV32 IO subsystem module
@@ -582,7 +623,7 @@ sio_handler sio_inst (
     .EN(sio_reg_en),
     .WR_EN(sio_reg_wr),
     .RESET_N(hw_reset_n),
-    .POKEY_ENABLE(enable_179_early),
+    .POKEY_ENABLE(enable_179_sys),
     .SIO_DATA_IN(sio_rx_data_in),
     .SIO_COMMAND(sio_command),
     .SIO_DATA_OUT(sio_txd),
@@ -694,7 +735,7 @@ atari800core_simple_sdram #(
     .VBXE_PALETTE_RGB           (3'd0),
     .VBXE_PALETTE_INDEX         (8'd0),
     .VBXE_PALETTE_COLOR         (7'd0),
-    .HALT                       (overlay),
+    .HALT                       (overlay_core),
     .THROTTLE_COUNT_6502        (6'd31),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
@@ -888,8 +929,9 @@ always_ff @(posedge sys_clk) blink_cnt <= blink_cnt + 1'b1;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LEDs (active low, pins 17-20):
-//   [4]=blink_cnt[22] ~6 Hz   [3]=dbg_sd_ready (roms_loaded)  [2]=pll_locked   [1]=sdram_ready
+//   [4]=blink_cnt[22] ~6 Hz   [3]=dbg_sd_ready (roms_loaded)  [2]=overlay   [1]=sdram_ready
 // ─────────────────────────────────────────────────────────────────────────────
-assign leds_n = ~{blink_cnt[22], dbg_sd_ready, pll_locked, sdram_ready};
+assign leds_n = ~{blink_cnt[22], dbg_sd_ready, overlay, sdram_ready};
+
 
 endmodule
