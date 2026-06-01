@@ -431,6 +431,35 @@ wire [7:0] virt_kbd_key2;
 wire [7:0] virt_kbd_key3;
 wire [7:0] virt_kbd_key4;
 
+// ── Hardware CH9350 keyboard decoder (SDRAM-decoupled Stage 1) ────────────────
+// Taps the same UART RX (pin 51 / usb_dp) as the firmware, decodes CH9350 frames
+// in hardware, and drives the key matrix without the PicoRV32/SDRAM path.
+// See docs/hw_keyboard_decouple.md.
+wire [7:0] hk_mod, hk_key1, hk_key2, hk_key3, hk_key4;
+
+uart_kbd_ch9350 #(
+    .CLK_HZ(27_000_000), .BAUD(115200), .TIMEOUT_MS(1000)
+) uart_kbd (
+    .clk(sys_clk), .reset_n(hw_reset_n), .uart_rx(usb_dp),
+    .kbd_mod(hk_mod), .kbd_key1(hk_key1), .kbd_key2(hk_key2),
+    .kbd_key3(hk_key3), .kbd_key4(hk_key4)
+);
+
+// CDC: held bytes (sys_clk) → clk_core (the core matrix domain). 2-FF per bit;
+// bytes are quasi-static between updates so no handshake is needed.
+reg [7:0] hk_mod_m,  hk_mod_s;
+reg [7:0] hk_k1_m,   hk_k1_s;
+reg [7:0] hk_k2_m,   hk_k2_s;
+reg [7:0] hk_k3_m,   hk_k3_s;
+reg [7:0] hk_k4_m,   hk_k4_s;
+always_ff @(posedge clk_core) begin
+    {hk_mod_s, hk_mod_m} <= {hk_mod_m, hk_mod};
+    {hk_k1_s,  hk_k1_m}  <= {hk_k1_m,  hk_key1};
+    {hk_k2_s,  hk_k2_m}  <= {hk_k2_m,  hk_key2};
+    {hk_k3_s,  hk_k3_m}  <= {hk_k3_m,  hk_key3};
+    {hk_k4_s,  hk_k4_m}  <= {hk_k4_m,  hk_key4};
+end
+
 // Combine USB keyboard keys and PicoRV32 virtual serial keyboard keys
 wire [7:0] effective_usb_key_mod = usb_host_enable ? usb_key_mod : 8'h00;
 wire [7:0] effective_usb_key1    = usb_host_enable ? usb_key1    : 8'h00;
@@ -438,11 +467,18 @@ wire [7:0] effective_usb_key2    = usb_host_enable ? usb_key2    : 8'h00;
 wire [7:0] effective_usb_key3    = usb_host_enable ? usb_key3    : 8'h00;
 wire [7:0] effective_usb_key4    = usb_host_enable ? usb_key4    : 8'h00;
 
-wire [7:0] combined_key_mod = virt_kbd_mod  | effective_usb_key_mod;
-wire [7:0] combined_key1    = (virt_kbd_key1 != 8'h00) ? virt_kbd_key1 : effective_usb_key1;
-wire [7:0] combined_key2    = (virt_kbd_key2 != 8'h00) ? virt_kbd_key2 : effective_usb_key2;
-wire [7:0] combined_key3    = (virt_kbd_key3 != 8'h00) ? virt_kbd_key3 : effective_usb_key3;
-wire [7:0] combined_key4    = (virt_kbd_key4 != 8'h00) ? virt_kbd_key4 : effective_usb_key4;
+// Priority: hardware CH9350 decoder > firmware virt_kbd (OPTION-hold injection,
+// boot keys) > USB-HID fallback.  Per-slot "non-zero wins" (0x00 = empty HID slot).
+wire [7:0] hv_key1 = (hk_k1_s != 8'h00) ? hk_k1_s : virt_kbd_key1;
+wire [7:0] hv_key2 = (hk_k2_s != 8'h00) ? hk_k2_s : virt_kbd_key2;
+wire [7:0] hv_key3 = (hk_k3_s != 8'h00) ? hk_k3_s : virt_kbd_key3;
+wire [7:0] hv_key4 = (hk_k4_s != 8'h00) ? hk_k4_s : virt_kbd_key4;
+
+wire [7:0] combined_key_mod = hk_mod_s | virt_kbd_mod | effective_usb_key_mod;
+wire [7:0] combined_key1    = (hv_key1 != 8'h00) ? hv_key1 : effective_usb_key1;
+wire [7:0] combined_key2    = (hv_key2 != 8'h00) ? hv_key2 : effective_usb_key2;
+wire [7:0] combined_key3    = (hv_key3 != 8'h00) ? hv_key3 : effective_usb_key3;
+wire [7:0] combined_key4    = (hv_key4 != 8'h00) ? hv_key4 : effective_usb_key4;
 
 // OSD navigation: driven by BOTH real USB keyboard and virtual UART keyboard.
 wire key_up    = (combined_key1 == 8'h52) || (combined_key2 == 8'h52) || (combined_key3 == 8'h52) || (combined_key4 == 8'h52); // Up Arrow

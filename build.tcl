@@ -109,6 +109,7 @@ file copy -force "$src_dir/usb_hid_host_rom.hex" "$tang_dir/impl/atari800_tn20k/
 add_file "$src_dir/usb_hid_host_rom.v"
 add_file "$src_dir/usb_hid_host.v"
 add_file "$src_dir/usb_to_atari800.sv"
+add_file "$src_dir/uart_kbd_ch9350.sv"
 
 # ── Stage 5: POKEY audio — sigma-delta DAC ────────────────────────────────────
 add_file "$src_dir/sigma_delta_dac.sv"
