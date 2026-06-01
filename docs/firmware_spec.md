@@ -137,6 +137,20 @@ Mark each KEEP / DROP / SLIM during review.
 - De-risking step before committing: a minimal 1-bank $readmemh BSRAM probe that provably reaches
   an output, reset-live, to confirm Gowin maps+retains it without DFF explosion.
 
+### DE-RISKING PROBE RESULT (2026-06-01) — PASSED ✓
+
+A throwaway `probe_rom.v` (512×32-bit `$readmemh` ROM, read by a free-running counter, output
+XOR-folded into an LED so it can't be pruned) was built into the full design:
+- Synthesis log: `Extracting RAM for identifier 'mem'` — recognized as RAM, not registers.
+- BSRAM usage 9/46 → **10/46**: mapped to exactly one real BSRAM block, NOT pruned.
+- Register count 4348 → **4355** (+7, just the counter): NO DFF explosion.
+
+**Conclusion:** a reset-live `$readmemh` BSRAM ROM maps cleanly and is retained on this Gowin
+flow. The prior `feature/picorv32-bram-firmware` failure was NOT a fundamental Gowin limit — it
+was (a) the `flash_loaded`/`mem_valid` gate letting the optimizer prove the read path dead →
+pruned, and (b) overreaching size. Our architecture (boot CPU directly from BSRAM, reset-live
+read, no flash gate) avoids both. **Option A is GO.** Probe removed after confirming.
+
 ---
 
 ## 5. Target budget after slimming (goal)
