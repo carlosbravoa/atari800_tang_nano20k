@@ -11,6 +11,12 @@ create_clock -name clk_pix -period 13.468 -waveform {0 6.734} [get_pins {clkdiv_
 # clk_usb: 12 MHz from rPLL
 create_clock -name clk_usb -period 83.333 [get_nets {clk_usb}]
 
-# Treat system clock, USB clock, and HDMI clocks as asynchronous clock groups
-set_clock_groups -asynchronous -group [get_clocks {sys_clk}] -group [get_clocks {clk_pix clk_5x}] -group [get_clocks {clk_usb}]
+# clk_core: 54 MHz CLKDIV output (216 MHz ÷ 4) — Atari core + SDRAM arbiter + iosys CDC.
+# Previously UNCONSTRAINED, so P&R never closed timing on this domain (achievable Fmax
+# was only ~43 MHz vs the 54 MHz it is actually clocked at). Constrain it so the tool
+# optimizes these paths and reports the true critical path.
+create_clock -name clk_core -period 18.518 [get_pins {clkdiv_core/CLKOUT}]
+
+# Treat system clock, USB clock, core clock, and HDMI clocks as asynchronous clock groups
+set_clock_groups -asynchronous -group [get_clocks {sys_clk}] -group [get_clocks {clk_pix clk_5x}] -group [get_clocks {clk_usb}] -group [get_clocks {clk_core}]
 

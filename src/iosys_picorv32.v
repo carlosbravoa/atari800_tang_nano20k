@@ -95,7 +95,23 @@ module iosys_picorv32 #(
     output wire [7:0]  virt_kbd_key2_out,
     output wire [7:0]  virt_kbd_key3_out,
     output wire [7:0]  virt_kbd_key4_out,
-    output wire        usb_host_enable_out
+    output wire        usb_host_enable_out,
+
+    // DIAGNOSTIC: heartbeat that toggles every time firmware reads reg_joystick
+    // (i.e. every joy_get() call in the background loop). If this toggles, the
+    // firmware loop is reaching the S2/F12 check.
+    output reg         joy_poll_dbg,
+
+    // DIAGNOSTIC: toggles on every completed CPU memory transaction. If this is
+    // blinking, the PicoRV32 is executing (so a dark joy_poll_dbg means it is
+    // stuck in a firmware loop). If this is dark, the CPU is hung (e.g. SDRAM
+    // access never completing).
+    output reg         cpu_progress_dbg,
+
+    // DIAGNOSTIC: classification of a persistent CPU bus stall (sticky).
+    output wire        dbg_stall_undec_out, // stuck on undecoded address
+    output wire        dbg_stall_peri_out,  // stuck on a peripheral wait handshake
+    output wire        dbg_stall_ram_out    // stuck on a RAM access
 );
 
 /* verilator lint_off PINMISSING */
@@ -221,6 +237,42 @@ assign mem_ready = ram_ready || textdisp_reg_char_sel || simpleuart_reg_div_sel 
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel;
+
+// ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
+// The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
+// persistent stall three ways so we know WHICH kind of access wedged the CPU:
+//   dbg_stall_undec : mem_valid high, NO select matched (undecoded address)
+//   dbg_stall_peri  : a peripheral select matched but mem_ready still low
+//                     (a *_wait / *_ready handshake that never completes)
+//   dbg_stall_ram   : stalled on a RAM access (ram_sel high, ram_ready low)
+// Sticky once latched. ~0.5 ms threshold (huge vs any legit access).
+wire any_sel_dbg = ram_sel || textdisp_reg_char_sel || simpleuart_reg_div_sel ||
+            simpleuart_reg_dat_sel || simplespimaster_reg_byte_sel || simplespimaster_reg_word_sel ||
+            simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
+            romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel ||
+            time_reg_sel || cycle_reg_sel || id_reg_sel ||
+            spiflash_reg_byte_sel || spiflash_reg_word_sel || spiflash_reg_ctrl_sel ||
+            sio_reg_sel || virt_kbd_reg0_sel || virt_kbd_reg1_sel;
+reg        dbg_stall_undec = 1'b0;
+reg        dbg_stall_peri  = 1'b0;
+reg        dbg_stall_ram   = 1'b0;
+reg [15:0] dbg_stall_cnt   = 16'd0;
+always @(posedge clk) begin
+    if (~resetn) begin
+        dbg_stall_undec <= 1'b0; dbg_stall_peri <= 1'b0; dbg_stall_ram <= 1'b0;
+        dbg_stall_cnt   <= 16'd0;
+    end else if (mem_valid && !mem_ready) begin
+        if (dbg_stall_cnt == 16'hFFFF) begin
+            if      (!any_sel_dbg) dbg_stall_undec <= 1'b1;   // no decoder matched
+            else if (ram_sel)      dbg_stall_ram   <= 1'b1;   // RAM access not completing
+            else                   dbg_stall_peri  <= 1'b1;   // peripheral wait stuck
+        end else begin
+            dbg_stall_cnt <= dbg_stall_cnt + 16'd1;
+        end
+    end else begin
+        dbg_stall_cnt <= 16'd0;   // access completed; reset timer (flags stay sticky)
+    end
+end
 
 assign mem_rdata = ram_ready ? ram_rdata :
         joystick_reg_sel ? {4'b0, joy2, 4'b0, joy1} :
@@ -428,12 +480,29 @@ always @(posedge clk) begin
     end
 end
 
+// DIAGNOSTIC: toggle joy_poll_dbg on each reg_joystick read so a slow human-
+// visible heartbeat can be derived in tang_top from the firmware poll rate.
+always @(posedge clk) begin
+    if (~resetn) joy_poll_dbg <= 1'b0;
+    else if (joystick_reg_sel) joy_poll_dbg <= ~joy_poll_dbg;
+end
+
+// DIAGNOSTIC: CPU memory-transaction progress
+always @(posedge clk) begin
+    if (~resetn) cpu_progress_dbg <= 1'b0;
+    else if (mem_valid && mem_ready) cpu_progress_dbg <= ~cpu_progress_dbg;
+end
+
 assign virt_kbd_mod_out  = virt_kbd_mod;
 assign virt_kbd_key1_out = virt_kbd_key1;
 assign virt_kbd_key2_out = virt_kbd_key2;
 assign virt_kbd_key3_out = virt_kbd_key3;
 assign virt_kbd_key4_out = virt_kbd_key4;
 assign usb_host_enable_out = usb_host_enable;
+
+assign dbg_stall_undec_out = dbg_stall_undec;
+assign dbg_stall_peri_out  = dbg_stall_peri;
+assign dbg_stall_ram_out   = dbg_stall_ram;
 
 endmodule
 

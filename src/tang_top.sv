@@ -89,6 +89,9 @@ rpll_108m pll_core_inst (
     .locked  (pll_core_locked)
 );
 
+// clk_core = 216 ÷ 4 = 54 MHz (Atari machine speed 54/32 = 1.6875 MHz).
+// (The 43.2 MHz ÷5 was only a Stage-1 reliability test; timing was never the bug —
+// the deadlock was rv_rdata corruption + SDRAM contention, now fixed otherwise.)
 CLKDIV #(
     .DIV_MODE ("4"),
     .GSREN    ("false")
@@ -240,7 +243,58 @@ wire      rv_ready_sync     = rv_done_sys_r[2] ^ rv_done_sys_r[1];
 // re-launches in the very next clk_core cycle, producing extra toggles that
 // corrupt the toggle-sync and leave PicoRV32 with 0 or 2 rv_ready pulses.
 reg rv_hold = 1'b0;
-wire rv_req = rv_valid_core && !rv_hold;  // PicoRV32 has a real new request
+
+// PicoRV32 SDRAM access is FROZEN while the Atari core is running, because the
+// firmware executes from SDRAM and its continuous instruction fetches otherwise
+// steal the Atari's SDRAM bus window (an in-flight CPU access can't be preempted
+// and pushes the Atari past its cycle_length=32 budget → ANTIC corruption / no
+// boot).  We gate rv_req (the access *launch*), so any access already in SA_BUSY
+// still completes cleanly.  Real long-term fix: firmware off SDRAM — see memory
+// project-firmware-off-sdram.  This is the interim that lets the Atari boot.
+//
+// CPU runs when: overlay is up (menu shown → Atari HALTed, no contention), OR a
+// hardware wake is latched.  Wake is needed because the firmware itself raises the
+// overlay in response to S2/F12 — but a frozen CPU can't poll those keys, so the
+// wake must come from HARDWARE (outside the CPU): S2 button (btn_n[1]) or F12
+// (key_f12, from the hardware keyboard decoder — both SDRAM-independent).
+//   - wake set by S2/F12 → CPU unfreezes → firmware sees the key, raises overlay
+//   - once overlay is up, it holds the CPU running; the wake latch is then cleared
+//   - user dismisses menu → firmware lowers overlay → CPU re-freezes → Atari resumes
+// Wake-latch: gives the frozen CPU a momentary window to notice an S2/F12 press
+// and raise the overlay; once overlay is up it holds the CPU running.
+// Key insight for the "Atari breaks on dismiss" bug:
+//   - KICK only on the rising edge of S2/F12 AND only while overlay is DOWN, i.e.
+//     only when ENTERING the menu from the frozen state.  When overlay is already
+//     UP (the press means DISMISS), we must NOT kick — the CPU is already running
+//     via overlay, and on dismiss it should simply re-freeze the instant overlay
+//     drops, so the resumed Atari gets the full SDRAM bus with NO contention window.
+//   - HOLD the latch until overlay actually comes up (CPU acknowledged), then clear.
+//     (Edge-triggered set + brief tap still works, because the edge is captured.)
+reg [2:0] overlay_sync_r = 3'b111; // sync overlay into clk_core; default running (ROM load)
+reg [2:0] s2_sync_r      = 3'b000;
+reg [2:0] f12_sync_r     = 3'b000;
+reg       wake_latch     = 1'b0;
+wire s2_rise  = s2_sync_r[2:1]  == 2'b01;   // synced rising edge
+wire f12_rise = f12_sync_r[2:1] == 2'b01;
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        overlay_sync_r <= 3'b111;
+        s2_sync_r      <= 3'b000;
+        f12_sync_r     <= 3'b000;
+        wake_latch     <= 1'b0;
+    end else begin
+        overlay_sync_r <= {overlay_sync_r[1:0], overlay};
+        s2_sync_r      <= {s2_sync_r[1:0],      btn_n[1]};
+        f12_sync_r     <= {f12_sync_r[1:0],     key_f12};
+        if ((s2_rise || f12_rise) && !overlay_sync_r[2])
+            wake_latch <= 1'b1;          // kick to ENTER menu from frozen state
+        else if (overlay_sync_r[2])
+            wake_latch <= 1'b0;          // overlay up → it now holds the CPU running
+    end
+end
+wire cpu_run_allowed = overlay_sync_r[2] || wake_latch;
+
+wire rv_req = rv_valid_core && !rv_hold && cpu_run_allowed;  // gated new request
 
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
 wire        sdram_complete;
@@ -255,7 +309,10 @@ wire [31:0] sdram_rd_data_wire;
 wire        sdram_ready_wire;
 
 assign core_sdram_data_to_core = sdram_rd_data_wire >> {core_sdram_addr[1:0], 3'b000};
-assign rv_rdata                = sdram_rd_data_wire;
+// rv_rdata reads from a latch captured at PicoRV32 transaction completion (see the
+// SA_BUSY completion block) so Atari reads can't overwrite it before the CPU samples it.
+reg [31:0] rv_rdata_hold = 32'd0;
+assign rv_rdata                = rv_rdata_hold;
 assign sdram_ready             = sdram_ready_wire;
 
 // Address translation for PicoRV32: Virtual-to-Physical Bank mapping
@@ -305,17 +362,26 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
     end
 end
 
-// After each Atari SDRAM access, reserve one slot for PicoRV32 if it is waiting.
-// Without this, Atari's continuous requests starve PicoRV32 instruction fetches
-// and the UART keyboard / menu becomes unresponsive.
-reg rv_slot = 1'b0;
+// Arbitration policy: STRICT ATARI PRIORITY.
+// The Atari core must always get the SDRAM the moment it has a pending request,
+// or its access misses the cycle_length=32 bus window and ANTIC DMA corrupts /
+// the machine fails to boot.  PicoRV32 uses only genuinely idle cycles.
+//
+// The previous design used `rv_slot` to force PicoRV32 a guaranteed slot after
+// every Atari access (round-robin), to keep the UART keyboard / OSD responsive.
+// That reason is now OBSOLETE:
+//   - the keyboard is decoded in hardware (SDRAM-independent), and
+//   - the OSD only runs while the Atari core is HALTed (overlay → .HALT), so the
+//     Atari isn't requesting SDRAM then and PicoRV32 gets the bus anyway.
+// Forced fairness pushed the Atari past its window and prevented boot, so it is
+// removed.  See memory: project-firmware-off-sdram (the real long-term fix is
+// moving firmware off SDRAM; do NOT re-add softcore priority here).
+reg rv_slot = 1'b0;  // retained (assigned but unused) to minimise churn; always 0 in policy
 
-wire next_owner = (rv_slot && rv_req && !sdram_complete_r) ? 1'b1 :
-                  atari_req_pending                         ? 1'b0 :
-                  (rv_req && !sdram_complete_r)             ? 1'b1 : 1'b1;
+wire next_owner = atari_req_pending             ? 1'b0 :
+                  (rv_req && !sdram_complete_r) ? 1'b1 : 1'b1;
 
-wire next_req = (rv_slot && rv_req && !sdram_complete_r) ||
-                atari_req_pending                         ||
+wire next_req = atari_req_pending ||
                 (rv_req && !sdram_complete_r);
 
 wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
@@ -354,11 +420,9 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    if (rv_slot && rv_req && !sdram_complete_r) begin
-                        sdram_owner <= 1'b1;
-                        rv_slot     <= 1'b0;
-                        sadap_st    <= SA_BUSY;
-                    end else if (atari_req_pending) begin
+                    // Strict Atari priority: Atari wins whenever it has a pending
+                    // request; PicoRV32 is served only when the Atari is idle.
+                    if (atari_req_pending) begin
                         sdram_owner <= 1'b0;
                         sadap_st    <= SA_BUSY;
                     end else if (rv_req && !sdram_complete_r) begin
@@ -371,12 +435,19 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
                 if (sdram_complete_wire) begin
                     sdram_complete_r <= 1'b1;
                     sadap_st         <= SA_IDLE;
-                    // Reserve a slot for iosys if it has a new request waiting
-                    if (sdram_owner == 1'b0 && rv_req)
-                        rv_slot <= 1'b1;
-                    // Pulse the toggle-sync for iosys rv_ready
-                    if (sdram_owner == 1'b1)
+                    // (rv_slot forced-fairness removed — strict Atari priority now.)
+                    rv_slot <= 1'b0;
+                    // Pulse the toggle-sync for iosys rv_ready, and CAPTURE the
+                    // read data NOW.  sdram_rd_data_wire is the controller's single
+                    // shared rdata register; if we left rv_rdata combinational, an
+                    // Atari read in the ~3-cycle window before PicoRV32 captures it
+                    // (completion toggle crossing clk_core→sys_clk) would overwrite
+                    // it → PicoRV32 latches Atari data → corrupted firmware word →
+                    // wild jump → undecoded-address hang.  Latching here prevents it.
+                    if (sdram_owner == 1'b1) begin
                         rv_done_toggle_r <= ~rv_done_toggle_r;
+                        rv_rdata_hold    <= sdram_rd_data_wire;
+                    end
                 end
             end
             default: sadap_st <= SA_IDLE;
@@ -388,6 +459,63 @@ end
 always_ff @(posedge sys_clk or negedge hw_reset_n) begin
     if (!hw_reset_n) rv_done_sys_r <= 3'b000;
     else             rv_done_sys_r <= {rv_done_sys_r[1:0], rv_done_toggle_r};
+end
+
+// ── DEADLOCK DISCRIMINATOR (sys_clk domain — what the CPU actually sees) ──────
+// Distinguishes the two candidate deadlock mechanisms:
+//   diag_req_no_grant : rv_valid held high a long time with NO rv_ready returning
+//                       → request never served end-to-end (arbiter starves it)
+//   diag_grant_no_ack : the clk_core arbiter toggled rv_done_toggle_r (work
+//                       completed) but no rv_ready edge was produced for the CPU
+//                       → completion lost crossing clk_core→sys_clk
+// Both are sticky (latched until reset) so a momentary deadlock is captured.
+reg        diag_req_no_grant = 1'b0;
+reg [19:0] diag_stall_cnt    = 20'd0;   // ~38 ms at 27 MHz before declaring stall
+reg        rv_done_sys_prev  = 1'b0;    // last value of synced toggle stage [2]
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        diag_req_no_grant <= 1'b0;
+        diag_stall_cnt    <= 20'd0;
+        rv_done_sys_prev  <= 1'b0;
+    end else begin
+        // Track the synced completion toggle: a change at stage [2] means the
+        // arbiter completed an rv access (a "grant" reached the CPU domain).
+        rv_done_sys_prev <= rv_done_sys_r[2];
+
+        // Stall timer: counts while CPU is requesting (rv_valid) but no completion
+        // toggle change has arrived. Reset whenever a completion crosses over.
+        if (rv_done_sys_r[2] != rv_done_sys_prev) begin
+            diag_stall_cnt <= 20'd0;                 // a grant/ack crossed — healthy
+        end else if (rv_valid) begin
+            if (diag_stall_cnt == 20'hFFFFF) begin
+                // CPU has been waiting a long time with no completion crossing.
+                diag_req_no_grant <= 1'b1;
+            end else begin
+                diag_stall_cnt <= diag_stall_cnt + 20'd1;
+            end
+        end
+    end
+end
+
+// rv-completion activity window (clk_core): lit while the arbiter has completed
+// an rv access recently (~0.2 s).  Read TOGETHER with diag_req_no_grant:
+//   LED2(req_no_grant)=ON, LED3(rv_act)=ON  → arbiter still completing but CPU
+//                                              never gets rv_ready  ⇒ ACK LOST in CDC
+//   LED2=ON, LED3=OFF                        → arbiter stopped completing rv
+//                                              accesses entirely    ⇒ NEVER GRANTED
+localparam RVACT_WINDOW = 27_000_000/5;   // ~0.2 s at clk_core (≤54 MHz, fits 23b margin)
+reg        rv_done_toggle_prev = 1'b0;
+reg [23:0] rv_act_cnt = 24'd0;
+wire       rv_act_recent = (rv_act_cnt != 0);
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        rv_done_toggle_prev <= 1'b0;
+        rv_act_cnt          <= 24'd0;
+    end else begin
+        rv_done_toggle_prev <= rv_done_toggle_r;
+        if (rv_done_toggle_r != rv_done_toggle_prev) rv_act_cnt <= RVACT_WINDOW[23:0];
+        else if (rv_act_cnt != 0)                    rv_act_cnt <= rv_act_cnt - 24'd1;
+    end
 end
 
 gw2ar_sdram sdram_ip (
@@ -592,6 +720,11 @@ iosys_picorv32 #(
     .virt_kbd_key3_out(virt_kbd_key3),
     .virt_kbd_key4_out(virt_kbd_key4),
     .usb_host_enable_out(usb_host_enable),
+    .joy_poll_dbg(joy_poll_dbg),
+    .cpu_progress_dbg(cpu_progress_dbg),
+    .dbg_stall_undec_out(dbg_stall_undec),
+    .dbg_stall_peri_out(dbg_stall_peri),
+    .dbg_stall_ram_out(dbg_stall_ram),
 
     // SD Card (SPI mode)
     .sd_clk(sd_clk),
@@ -730,7 +863,13 @@ atari800core_simple_sdram #(
     .VBXE_PALETTE_RGB           (3'd0),
     .VBXE_PALETTE_INDEX         (8'd0),
     .VBXE_PALETTE_COLOR         (7'd0),
-    .HALT                       (overlay),
+    // HALT the Atari whenever the PicoRV32 is permitted SDRAM access, NOT just when
+    // the overlay is up.  cpu_run_allowed = overlay || wake_latch, so the instant
+    // S2/F12 wakes the CPU (wake_latch) the Atari is halted FIRST — guaranteeing the
+    // two are mutually exclusive on SDRAM (exactly one runs at a time).  Tying HALT
+    // only to overlay left a window where wake_latch ran the CPU while the Atari was
+    // still live → both hammered SDRAM → emulation broke on menu entry.
+    .HALT                       (cpu_run_allowed),
     .THROTTLE_COUNT_6502        (6'd31),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
@@ -923,9 +1062,27 @@ reg [26:0] blink_cnt = 27'd0;
 always_ff @(posedge sys_clk) blink_cnt <= blink_cnt + 1'b1;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEDs (active low, pins 17-20):
-//   [4]=blink_cnt[22] ~6 Hz   [3]=dbg_sd_ready (roms_loaded)  [2]=pll_locked   [1]=sdram_ready
+// LEDs (active low) — DIAGNOSTIC MAPPING for OSD-stuck investigation.
+// leds_n[4:1] → pins 17,18,19,20 → physical LED2,LED3,LED4,LED5 (see CLAUDE.md).
+//   leds_n[1] pin17 LED2 = cpu_progress_hb : PicoRV32 executing memory txns
+//   leds_n[2] pin18 LED3 = joy_poll_hb     : firmware loop reaching joy_get()
+//   leds_n[3] pin19 LED4 = dbg_sd_ready    : ROMs loaded / past init
+//   leds_n[4] pin20 LED5 = blink_cnt[22]   : ~6 Hz FPGA-alive free-run heartbeat
+// Interpretation (with no Pico, no ATR):
+//   LED2 dark              → CPU hung (e.g. SDRAM access never completes) ROOT = arbiter/CDC
+//   LED2 blink, LED3 dark  → CPU runs but stuck in a firmware loop before joy_get()
+//   LED2 blink, LED3 blink → loop alive; S2/F12 read or compare is the issue
 // ─────────────────────────────────────────────────────────────────────────────
-assign leds_n = ~{blink_cnt[22], dbg_sd_ready, pll_locked, sdram_ready};
+wire joy_poll_dbg;
+wire cpu_progress_dbg;
+wire dbg_stall_undec, dbg_stall_peri, dbg_stall_ram;
+
+// BUS-STALL CLASSIFIER LED map (pins via leds_n[4:1] = pins17,18,19,20 = LED2,3,4,5):
+//   LED2 pin17 = dbg_stall_undec : CPU hung on an UNDECODED address
+//   LED3 pin18 = dbg_stall_peri  : CPU hung on a PERIPHERAL wait handshake
+//   LED4 pin19 = dbg_stall_ram   : CPU hung on a RAM access  (was roms_loaded)
+//   LED5 pin20 = blink_cnt[22]   : ~6 Hz FPGA-alive
+// Exactly one of LED2/3/4 should latch ON when the CPU wedges, telling us the class.
+assign leds_n = ~{blink_cnt[22], dbg_stall_ram, dbg_stall_peri, dbg_stall_undec};
 
 endmodule

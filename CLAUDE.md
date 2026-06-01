@@ -106,10 +106,48 @@ A minimal blink test exists for hardware bringup, separate from the main build:
 Source: `src/tang_top_blink.sv` (uses `rpll_135m.v` + `rpll_12m.v`, constrained by `constraints/tang_blink.cst`).
 Same output path: `impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs`.
 
+## Expected Boot Behavior (REQUIREMENT — do not regress)
+
+- **The Atari MUST auto-boot first, with NO menu shown.** On power-on the firmware loads
+  the ROMs and the Atari comes straight up (e.g. to BASIC). The OSD menu only appears
+  *afterwards*, when the user explicitly calls it up (F12 key or S2 button). The user then
+  decides what to do (mount disk, reset, etc.) and returns to the running machine.
+- **If the OSD menu appears on its own at power-on, that is a BUG** (it means auto-boot did
+  not happen — usually ROM load failed, or the Atari core is held halted/reset). Do not treat
+  a self-appearing menu as normal.
+- Firmware logic: `main()` sets `booted = (rom_ok == 0)`; on success it calls `overlay(0)`
+  immediately so the menu is hidden and the Atari runs. Menu shows only while `!booted`.
+- Note: when the OSD overlay is ON, the Atari core is held in HALT (`tang_top.sv .HALT(overlay)`),
+  so the machine is paused while the menu is up — by design.
+
+## Machine Configuration (DO NOT CHANGE without explicit instruction)
+
+- **This is an NTSC machine. Keep `PAL=1'b0` in the `atari800core_simple_sdram`
+  instantiation in `tang_top.sv`.** The user's reference hardware is NTSC; do NOT switch
+  the core to PAL. NTSC framing = 59.94 Hz, machine clock target = 32 × 1.7898 MHz ≈ 57.3 MHz
+  (when `cycle_length=32`).
+
 ## Confirmed Hardware Pin Facts
 
 - LEDs: pins **15–20** (active LOW). Pin 11 is NOT an LED — it is IOL29B adjacent to the 27 MHz clock input.
 - LED polarity confirmed on hardware: drive LOW = ON.
+- **Physical LED label ↔ pin mapping (board silkscreen, confirmed by user — memorize this):**
+
+  | Physical LED | Pin |
+  |---|---|
+  | LED0 | 15 |
+  | LED1 | 16 |
+  | LED2 | 17 |
+  | LED3 | 18 |
+  | LED4 | 19 |
+  | LED5 | 20 |
+
+  **CRITICAL:** the physical LED number is NOT the RTL bus index. In `tang_top.sv` the port is
+  `leds_n[4:1]` LOC'd to pins 17–20 (pins 15/16 = LED0/LED5 are LPLL2 feedback pads, intentionally
+  left undriven). So `leds_n[1]`→pin17→**LED2**, `leds_n[2]`→pin18→**LED3**, `leds_n[3]`→pin19→**LED4**,
+  `leds_n[4]`→pin20→**LED5**. When reporting/observing LEDs, always translate via the pin number,
+  not the bus index. LED0 (pin15) and LED5… wait — pin 20 IS LED5 and it is driven; only pins 15/16
+  (LED0, LED1) are the LPLL2 pads left dark. Always reason in pins.
 - **Pin 4 = LPLL1_T_in** — the 27 MHz oscillator is wired here. This is the dedicated left-side PLL clock input and **must be used as sys_clk**. Pin 10 (GCLKT_6) must NOT be used — its GCLK buffer adds jitter that prevents the rPLL from locking. Confirmed on hardware.
   - Bank 7 VCCIO: the toolchain locks Bank 7 to 1.8V due to the embedded SDRAM primitive. Use `IO_TYPE=LVCMOS18` in the CST. The board's physical VCCIO for Bank 7 is 3.3V (embedded SDRAM is internal and does not use external VCCIO pins), so 3.3V signals on pin 4 are safe in practice.
 - Pins 15 and 16 are **LPLL2_T_fb** and **LPLL2_C_fb** — the differential feedback pads for the rPLL's LPLL2 block. **Never drive these as GPIO outputs.** Even with `CLKFB_SEL="internal"`, driving them prevents the PLL from locking.
