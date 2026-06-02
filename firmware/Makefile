@@ -24,7 +24,13 @@ else
   Q = @
 endif
 
-default: $(TARGET_BIN)
+# BSRAM boot-RAM depth in 32-bit words (64 KB = 16384 words = 32 BSRAM blocks).
+# This is the ceiling: only 37 BSRAM blocks are free; 64 KB uses 32, leaving margin.
+BRAM_DEPTH = 16384
+BRAM_DIR   = ../src
+BRAM_HEX   = $(BRAM_DIR)/fw_lane0.hex
+
+default: $(TARGET_BIN) $(BRAM_HEX)
 all: default
 
 %.o: %.c $(HDRS)
@@ -54,7 +60,16 @@ endif
 	$(Q)$(OBJCOPY) $(TARGET_ELF) $(TARGET_BIN) -O binary
 	$(Q)$(OBJDUMP) -d $(TARGET_ELF) > disasm.txt
 
+# Generate BSRAM init hex (4 byte lanes + word-wide) from the firmware binary.
+$(BRAM_HEX): $(TARGET_BIN) bin2bram.py
+ifneq ($(VERBOSE),1)
+	@echo BIN2BRAM "->" $(BRAM_DIR)/fw_lane{0..3}.hex
+endif
+	$(Q)python3 bin2bram.py $(TARGET_BIN) $(BRAM_DIR) $(BRAM_DEPTH)
+
 clean:
-	$(Q)rm -f $(OBJS) $(TARGET_ELF) $(TARGET_BIN)
+	$(Q)rm -f $(OBJS) $(TARGET_ELF) $(TARGET_BIN) \
+		$(BRAM_DIR)/fw_lane0.hex $(BRAM_DIR)/fw_lane1.hex \
+		$(BRAM_DIR)/fw_lane2.hex $(BRAM_DIR)/fw_lane3.hex $(BRAM_DIR)/fw_words.hex
 
 .PHONY: default all clean
