@@ -119,57 +119,20 @@ module iosys_picorv32 #(
 
 localparam FIRMWARE_SIZE = 256*1024;
 
-reg flash_loaded;
-reg flash_loading;
-reg [20:0] flash_addr = {21{1'b1}};
-
-reg flash_start;
-wire [7:0] flash_dout;
-wire flash_out_strb;
+// Firmware now lives in BSRAM (loaded at FPGA config time via $readmemh), so the
+// old "copy 256 KB from SPI flash into SDRAM at boot" state machine is GONE. The
+// spiflash module is retained only for its optional MMIO register interface
+// (reg_spiflash_*); the auto-load (flash_start/flash_loading) is tied off.
+// flash_loaded reports 1 / flash_loading 0 so any status read looks "done".
+wire [7:0] flash_dout;          // unused (no auto-load)
+wire flash_out_strb;            // unused
+wire flash_start = 1'b0;        // never trigger a flash read
 assign flash_spi_hold_n = 1;
 assign flash_spi_wp_n = 1;      // disable write protection
-reg [7:0] flash_d;
-reg [3:0] flash_wstrb;
-reg flash_wr;
 wire [31:0] spiflash_reg_do;
 wire spiflash_reg_wait;
-
-always @(posedge clk) begin
-    if (~resetn) begin
-        flash_loaded <= 0;
-        flash_addr = {21{1'b1}};
-    end else begin
-        flash_start <= 0;
-        flash_wr <= 0;
-
-        if (~flash_loaded && ~flash_loading && ~ram_busy) begin
-            // start loading
-            flash_start <= 1;
-            flash_loading <= 1;
-        end
-
-        if (flash_loading) begin
-            if (flash_out_strb) begin
-                reg [20:0] next_addr = flash_addr + 1;
-                flash_addr <= next_addr;
-                flash_d <= flash_dout;
-                flash_wr <= 1;
-
-                case (next_addr[1:0])
-                2'b00: flash_wstrb <= 4'b0001;
-                2'b01: flash_wstrb <= 4'b0010;
-                2'b10: flash_wstrb <= 4'b0100;
-                2'b11: flash_wstrb <= 4'b1000;
-                endcase
-
-                if (next_addr == FIRMWARE_SIZE-1) begin
-                    flash_loading <= 0;
-                    flash_loaded <= 1;
-                end
-            end
-        end
-    end
-end
+wire flash_loaded  = 1'b1;      // firmware already in BSRAM
+wire flash_loading = 1'b0;
 
 // picorv32 softcore
 wire mem_valid /* synthesis syn_keep=1 */;
@@ -181,7 +144,28 @@ wire [31:0] mem_rdata /* synthesis syn_keep=1 */;
 reg ram_ready /* synthesis syn_keep=1 */;
 reg [31:0] ram_rdata;
 
-wire        ram_sel = mem_valid && mem_addr[31:23] == 0;
+// Low 8 MB region (addr[31:23]==0) is split:
+//   addr < 64 KB (0x0000_0000..0x0000_FFFF) → on-chip BSRAM = firmware code/data/stack
+//   addr >= 64 KB                            → SDRAM (Atari memory: ROM load 0x700000/
+//                                              0x704000, COLDST 0x200244, etc.)
+// Firmware EXECUTES from BSRAM so its instruction fetches never touch SDRAM —
+// this is the whole point (ends CPU↔ANTIC SDRAM contention).
+wire        lowregion_sel = mem_valid && mem_addr[31:23] == 0;
+wire        bram_sel = lowregion_sel && (mem_addr[22:16] == 7'd0);  // < 64 KB
+wire        ram_sel  = lowregion_sel && (mem_addr[22:16] != 7'd0);  // SDRAM (Atari mem)
+
+// ── Firmware BSRAM boot RAM (64 KB, byte-laned, $readmemh-initialised) ────────
+wire [31:0] bram_rdata;
+wire        bram_ready;
+fw_bram fw_bram_inst (
+    .clk   (clk),
+    .sel   (bram_sel),
+    .waddr (mem_addr[15:2]),     // 14-bit word address within 64 KB
+    .wdata (mem_wdata),
+    .wstrb (bram_sel ? mem_wstrb : 4'b0000),
+    .rdata (bram_rdata),
+    .ready (bram_ready)
+);
 
 wire        textdisp_reg_char_sel /* synthesis syn_keep=1 */= mem_valid && (mem_addr == 32'h 0200_0000);
 
@@ -230,7 +214,7 @@ always @(posedge clk) begin
         sio_ready <= sio_reg_sel && !sio_ready;
 end
 
-assign mem_ready = ram_ready || textdisp_reg_char_sel || simpleuart_reg_div_sel || 
+assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuart_reg_div_sel ||
             romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel || time_reg_sel || cycle_reg_sel || id_reg_sel ||
             (simpleuart_reg_dat_sel && !simpleuart_reg_dat_wait) ||
             ((simplespimaster_reg_byte_sel || simplespimaster_reg_word_sel) && !simplespimaster_reg_wait) ||
@@ -246,7 +230,7 @@ assign mem_ready = ram_ready || textdisp_reg_char_sel || simpleuart_reg_div_sel 
 //                     (a *_wait / *_ready handshake that never completes)
 //   dbg_stall_ram   : stalled on a RAM access (ram_sel high, ram_ready low)
 // Sticky once latched. ~0.5 ms threshold (huge vs any legit access).
-wire any_sel_dbg = ram_sel || textdisp_reg_char_sel || simpleuart_reg_div_sel ||
+wire any_sel_dbg = bram_sel || ram_sel || textdisp_reg_char_sel || simpleuart_reg_div_sel ||
             simpleuart_reg_dat_sel || simplespimaster_reg_byte_sel || simplespimaster_reg_word_sel ||
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
             romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel ||
@@ -274,7 +258,8 @@ always @(posedge clk) begin
     end
 end
 
-assign mem_rdata = ram_ready ? ram_rdata :
+assign mem_rdata = bram_ready ? bram_rdata :
+        ram_ready ? ram_rdata :
         joystick_reg_sel ? {4'b0, joy2, 4'b0, joy1} :
         simpleuart_reg_div_sel ? simpleuart_reg_div_do :
         simpleuart_reg_dat_sel ? simpleuart_reg_dat_do : 
@@ -301,8 +286,12 @@ picorv32 #(
     .CATCH_MISALIGN (0),
     .TWO_STAGE_SHIFT(0)
 ) rv32 (
-    .clk(clk), .resetn(resetn & flash_loaded),
-    .mem_valid(mem_valid), .mem_ready(mem_ready), .mem_addr(mem_addr), 
+    // Boot directly from BSRAM at reset — firmware is loaded into BSRAM at FPGA
+    // config time ($readmemh), so no flash_loaded gate is needed. Removing that
+    // gate is also what prevents Gowin from constant-folding the BSRAM read path
+    // dead and pruning it (the prior feature/picorv32-bram-firmware failure).
+    .clk(clk), .resetn(resetn),
+    .mem_valid(mem_valid), .mem_ready(mem_ready), .mem_addr(mem_addr),
     .mem_wdata(mem_wdata), .mem_wstrb(mem_wstrb), .mem_rdata(mem_rdata)
 );
 
@@ -425,12 +414,15 @@ spiflash #(.ADDR(24'h500000), .LEN(FIRMWARE_SIZE)) flash (
     .reg_di(mem_wdata), .reg_do(spiflash_reg_do), .reg_wait(spiflash_reg_wait)
 );
 
-// RV memory access
-assign rv_addr = flash_loading ? flash_addr : mem_addr;
-assign rv_wdata = flash_loading ? {flash_d, flash_d, flash_d, flash_d} : mem_wdata;
-assign rv_wstrb = flash_loading ? flash_wstrb : mem_wstrb;
+// RV memory access — SDRAM now serves ONLY the high part of the low region
+// (ram_sel = addr>=64KB: Atari memory / ROM load). Firmware code/data is in
+// BSRAM. The flash-load-into-SDRAM machinery is gone (firmware is in BSRAM at
+// config time), so these are plain pass-throughs.
+assign rv_addr  = mem_addr;
+assign rv_wdata = mem_wdata;
+assign rv_wstrb = mem_wstrb;
 assign ram_rdata = rv_rdata;
-assign rv_valid = flash_loading ? flash_wr : (mem_valid & ram_sel);
+assign rv_valid = mem_valid & ram_sel;
 assign ram_ready = rv_ready;
 
 // Time counter register
