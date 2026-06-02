@@ -743,6 +743,47 @@ iosys_picorv32 #(
     .sio_reg_en(sio_reg_en)
 );
 
+// Clock Domain Crossing (CDC) Synchronization for SIO Handler
+// POKEY_ENABLE toggle synchronizer (from 54 MHz clk_core to 27 MHz sys_clk)
+// Use hw_reset_n to avoid CDC reset timing issues.
+reg enable_179_early_toggle = 1'b0;
+always_ff @(posedge clk_core or negedge hw_reset_n) begin
+    if (!hw_reset_n)
+        enable_179_early_toggle <= 1'b0;
+    else if (enable_179_early)
+        enable_179_early_toggle <= ~enable_179_early_toggle;
+end
+
+reg [2:0] enable_179_early_sync = 3'b0;
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n)
+        enable_179_early_sync <= 3'b0;
+    else
+        enable_179_early_sync <= {enable_179_early_sync[1:0], enable_179_early_toggle};
+end
+wire enable_179_early_sys = enable_179_early_sync[2] ^ enable_179_early_sync[1];
+
+// Double synchronizers for asynchronous SIO input lines (Atari outputs to sys_clk)
+reg [1:0] SIO_COMMAND_sync = 2'b11;
+reg [1:0] SIO_TXD_sync     = 2'b11;
+reg [1:0] SIO_CLOCK_sync   = 2'b11;
+
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        SIO_COMMAND_sync <= 2'b11;
+        SIO_TXD_sync     <= 2'b11;
+        SIO_CLOCK_sync   <= 2'b11;
+    end else begin
+        SIO_COMMAND_sync <= {SIO_COMMAND_sync[0], sio_command};
+        SIO_TXD_sync     <= {SIO_TXD_sync[0], sio_txd};
+        SIO_CLOCK_sync   <= {SIO_CLOCK_sync[0], sio_clk_out};
+    end
+end
+
+wire sio_command_sys = SIO_COMMAND_sync[1];
+wire sio_txd_sys     = SIO_TXD_sync[1];
+wire sio_clk_out_sys = SIO_CLOCK_sync[1];
+
 // VHDL SIO Disk Handler
 sio_handler sio_inst (
     .CLK(sys_clk),
@@ -751,11 +792,11 @@ sio_handler sio_inst (
     .EN(sio_reg_en),
     .WR_EN(sio_reg_wr),
     .RESET_N(hw_reset_n),
-    .POKEY_ENABLE(enable_179_early),
+    .POKEY_ENABLE(enable_179_early_sys),
     .SIO_DATA_IN(sio_rx_data_in),
-    .SIO_COMMAND(sio_command),
-    .SIO_DATA_OUT(sio_txd),
-    .SIO_CLK_OUT(sio_clk_out),
+    .SIO_COMMAND(sio_command_sys),
+    .SIO_DATA_OUT(sio_txd_sys),
+    .SIO_CLK_OUT(sio_clk_out_sys),
     .DATA_OUT(sio_reg_rdata)
 );
 
@@ -1077,12 +1118,12 @@ wire joy_poll_dbg;
 wire cpu_progress_dbg;
 wire dbg_stall_undec, dbg_stall_peri, dbg_stall_ram;
 
-// BUS-STALL CLASSIFIER LED map (pins via leds_n[4:1] = pins17,18,19,20 = LED2,3,4,5):
-//   LED2 pin17 = dbg_stall_undec : CPU hung on an UNDECODED address
-//   LED3 pin18 = dbg_stall_peri  : CPU hung on a PERIPHERAL wait handshake
-//   LED4 pin19 = dbg_stall_ram   : CPU hung on a RAM access  (was roms_loaded)
-//   LED5 pin20 = blink_cnt[22]   : ~6 Hz FPGA-alive
-// Exactly one of LED2/3/4 should latch ON when the CPU wedges, telling us the class.
-assign leds_n = ~{blink_cnt[22], dbg_stall_ram, dbg_stall_peri, dbg_stall_undec};
+// SIO DIAGNOSTIC LED map (pins via leds_n[4:1] = pins17,18,19,20 = LED2,3,4,5):
+//   LED2 pin17 (leds_n[1]) = sio_command    : ON when SIO Command is active (low)
+//   LED3 pin18 (leds_n[2]) = sio_rx_data_in : Flashes when drive transmits to Atari
+//   LED4 pin19 (leds_n[3]) = sio_txd        : Flashes when Atari transmits to drive
+//   LED5 pin20 (leds_n[4]) = ~blink_cnt[22] : ~6 Hz heartbeat
+assign leds_n = {~blink_cnt[22], sio_txd, sio_rx_data_in, sio_command};
+
 
 endmodule

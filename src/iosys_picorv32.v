@@ -203,7 +203,7 @@ wire        virt_kbd_reg1_sel = mem_valid && (mem_addr == 32'h0200_00a4);
 assign sio_reg_sel = mem_valid && (mem_addr[31:5] == 27'h0100_004);
 assign sio_reg_addr = mem_addr[6:2];
 assign sio_reg_wdata = mem_wdata[7:0];
-assign sio_reg_wr = |mem_wstrb;
+assign sio_reg_wr = (|mem_wstrb) && sio_reg_en;
 assign sio_reg_en = sio_reg_sel && !sio_ready;
 
 reg sio_ready;
