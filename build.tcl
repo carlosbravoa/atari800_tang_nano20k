@@ -105,11 +105,16 @@ add_file "$src_dir/simpleuart.v"
 # usb_hid_host_rom uses $readmemh — copy hex to impl dir so synthesis finds it
 file mkdir "$tang_dir/impl/atari800_tn20k"
 file copy -force "$src_dir/usb_hid_host_rom.hex" "$tang_dir/impl/atari800_tn20k/"
+file copy -force "$src_dir/fw_lane0.hex" "$tang_dir/impl/atari800_tn20k/"
+file copy -force "$src_dir/fw_lane1.hex" "$tang_dir/impl/atari800_tn20k/"
+file copy -force "$src_dir/fw_lane2.hex" "$tang_dir/impl/atari800_tn20k/"
+file copy -force "$src_dir/fw_lane3.hex" "$tang_dir/impl/atari800_tn20k/"
 # rpll_12m replaced by rpll_108m (dual-output: 108 MHz + 12 MHz from a single PLL)
 add_file "$src_dir/usb_hid_host_rom.v"
 add_file "$src_dir/usb_hid_host.v"
 add_file "$src_dir/usb_to_atari800.sv"
 add_file "$src_dir/uart_kbd_ch9350.sv"
+add_file "$src_dir/fw_bram.v"
 
 # ── Stage 5: POKEY audio — sigma-delta DAC ────────────────────────────────────
 add_file "$src_dir/sigma_delta_dac.sv"
