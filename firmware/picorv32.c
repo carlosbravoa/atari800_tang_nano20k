@@ -224,9 +224,11 @@ int joy_choice(int start_line, int len, int *active, int overlay_key_code) {
 
    if ((joy1 & 0x10) || (joy2 & 0x10)) {
       if (*active > 0) (*active)--;
+      else return 5;      // UP at first item → caller may page back
    }
    if ((joy1 & 0x20) || (joy2 & 0x20)) {
       if (*active < len-1) (*active)++;
+      else return 4;      // DOWN at last item → caller may page forward
    }
    if ((joy1 & 0x40) || (joy2 & 0x40))
       return 3;      // previous page

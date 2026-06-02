@@ -17,6 +17,29 @@ Output bitstream: `impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs`
 
 Flash: use Gowin Programmer GUI or `programmer_cli --device GW2AR-LV18QN88PC8/I7`.
 
+### Firmware is baked into the bitstream — NOT a separate flashable image
+
+The PicoRV32 firmware runs from **BSRAM** (boot-RAM), initialized at synthesis time.
+`src/fw_bram.v` `$readmemh`-loads four byte-lane files — `src/fw_lane0.hex` … `fw_lane3.hex`
+— and `build.tcl` copies them into the synthesis dir (`build.tcl:108-111`) so they get baked
+into `atari800_tn20k.fs`. There is **no separate firmware `.bin` to flash** —
+`firmware/firmware.bin` is only an intermediate artifact. (`bin2bram.py` also emits
+`src/fw_words.hex`, a word-wide variant that the current build does NOT use — the byte-lane
+files are authoritative.)
+
+**To deploy a firmware change you MUST rebuild the bitstream:**
+
+```bash
+cd firmware && make          # rebuilds firmware.bin AND regenerates ../src/fw_*.hex
+cd .. && QT_QPA_PLATFORM=offscreen /home/carlos/Documents/gowin/IDE/bin/gw_sh.sh build.tcl 2>&1 | tee build.log
+# then flash impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
+```
+
+`firmware/make` alone does nothing visible on hardware — the new `fw_lane*.hex` only take
+effect after re-running `build.tcl` (which reads them as BSRAM init) and re-flashing. The
+`fw_*.hex` files are checked into git; commit them together with firmware source changes so
+the tree stays self-consistent.
+
 ## Repository Layout
 
 ```

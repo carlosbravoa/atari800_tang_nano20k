@@ -406,7 +406,7 @@ int menu_loadrom(int *choice) {
                 int r = joy_choice(TOPLINE, file_len, &active, OSD_KEY_CODE);
                 int j1, j2;
                 joy_get(&j1, &j2);
-                if (j1 & 0x200) {
+                if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
                     delay(300);
                     return 1; // Return to main menu
                 }
@@ -431,6 +431,16 @@ int menu_loadrom(int *choice) {
                         }
                         active = 0;
                         page = 0;
+                        // Wait for the confirm key to be released before redrawing.
+                        // Otherwise a still-held Enter immediately re-confirms on the
+                        // ".." entry (active 0) and climbs up level after level.
+                        while (1) {
+                            int jj1, jj2;
+                            joy_get(&jj1, &jj2);
+                            if (!((jj1 & 0x1) || (jj1 & 0x100) ||
+                                  (jj2 & 0x1) || (jj2 & 0x100)))
+                                break;
+                        }
                         break;
                     } else {
                         // Mount the ATR file
@@ -473,11 +483,20 @@ int menu_loadrom(int *choice) {
                         return 0; // Success
                     }
                 }
-                if (r == 2 && page < pages-1) {
+                if ((r == 2 || r == 4) && page < pages-1) {
+                    // RIGHT arrow, or DOWN past the last item → next page
                     page++;
+                    active = 0;
                     break;
                 } else if (r == 3 && page > 0) {
+                    // LEFT arrow → previous page (top)
                     page--;
+                    active = 0;
+                    break;
+                } else if (r == 5 && page > 0) {
+                    // UP past the first item → previous page (bottom)
+                    page--;
+                    active = PAGESIZE - 1;  // clamped to last entry on redraw
                     break;
                 }
             }
@@ -893,7 +912,7 @@ void menu_options() {
             }
             int j1, j2;
             joy_get(&j1, &j2);
-            if (j1 & 0x200) {
+            if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
                 delay(300);
                 return; // Return to main menu
             }
@@ -1071,7 +1090,7 @@ int main() {
             cursor(2, 15);
             print("6) Options\n");
             cursor(2, 16);
-            print("7) Return to Game (F12)\n");
+            print("7) Return to Atari (F12)\n");
 
             cursor(2, 18);
             print("Press Enter to select");
@@ -1089,7 +1108,7 @@ int main() {
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);
-                if (j1 & 0x200) {
+                if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
                     booted = true;
                     overlay(0);
                     delay(300);
@@ -1139,12 +1158,9 @@ int main() {
                 delay(300);
                 menu_options();
             } else if (choice == 6) {
-                if (atr_mounted || booted) {
-                    booted = true;
-                    overlay(0);
-                } else {
-                    message("No disk mounted yet!", 1);
-                }
+                // Return to Atari: always just dismiss the OSD, disk or not.
+                booted = true;
+                overlay(0);
             }
         } else {
             // Background polling loop — call sio_poll as fast as possible.
