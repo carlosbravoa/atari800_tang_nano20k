@@ -30,20 +30,34 @@ adapted for the Gowin FPGA toolchain.
 
 | Feature | Status |
 |---|---|
-| Atari boot (BASIC, self-test) | ✅ Working |
-| HDMI video 720p/60 Hz | ✅ Working (fixed 2026-05-29) |
+| Atari boot (BASIC) — auto-boots on power-on | ✅ Working |
+| HDMI video 720p/60 Hz | ✅ Working |
 | HDMI audio (48 kHz PCM) | ✅ Working |
 | GPIO sigma-delta audio | ✅ Working |
 | SD card ROM loader | ✅ Working |
-| SIO disk emulation (.atr) | ✅ Working |
-| OSD menu | ⚠️ OSD display works; S2 toggle and joystick navigation not responding after clock change — under investigation |
-| USB HID keyboard | ⚠️ Not responding after clock change — under investigation |
-| DB9 joystick | ✅ Working (in-game) |
+| OSD menu (S2 button + DB9 joystick + keyboard) | ✅ Working — rock-solid |
+| UART / serial keyboard (CH9350 / Pi Pico) | ✅ Working (hardware decoder) |
+| USB HID keyboard | ✅ Working |
+| DB9 joystick | ✅ Working |
+| SIO disk emulation (.atr) | ⏳ Temporarily disabled — revival in progress |
 
-> **Video garble root cause and fix:** At the original 27 MHz / `cycle_length=16` the SDRAM
-> controller state machine needed ~740 ns per access but only had a 592 ns window.
-> Fixed by running the Atari core and SDRAM at **54 MHz / `cycle_length=32`** — the same
-> SDRAM steps now complete in ~370 ns, well within the window.
+> **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
+> access, keyboard) executes from on-chip **BSRAM**, not SDRAM. This removes its instruction
+> fetches from the SDRAM bus so they no longer contend with the Atari core's CPU/ANTIC DMA —
+> which is what makes the OSD menu rock-solid while the machine runs. The firmware image is
+> baked into the bitstream at FPGA-config time (no separate firmware flash step).
+>
+> **Keyboard runs in hardware:** the CH9350/UART keyboard is decoded by a dedicated RTL module
+> (`uart_kbd_ch9350.sv`), independent of the softcore and the SDRAM bus.
+
+> **Video / clock:** The Atari core and SDRAM run at **54 MHz / `cycle_length=32`** so each
+> SDRAM access completes within the Atari bus window (the original 27 MHz / `cycle_length=16`
+> exceeded it, causing video garble). The HDMI scaler genlocks to this 54 MHz line cadence.
+
+> **Known caveats (this baseline):** ① The Atari currently runs slightly fast (timing tuning
+> pending). ② `clk_core` is modestly above the tool's reported Fmax; it boots reliably in
+> practice but the timing margin work is tracked. ③ The status LEDs presently carry diagnostic
+> signals (see [Status LEDs](#status-leds)), not the normal status set.
 
 ---
 
@@ -71,18 +85,20 @@ Format a MicroSD card as **FAT32**. Place these files in the root directory:
 
 > You must supply your own ROM images — they are not included in this repository.
 
-The PicoRV32 firmware loads both ROMs into SDRAM on every boot before releasing the Atari core from reset.
+The PicoRV32 firmware (running from BSRAM) loads both ROMs into SDRAM on every boot, then
+releases the Atari core from reset so it auto-boots to BASIC.
 
 ---
 
 ## Quick Start
 
-1. Flash the FPGA bitstream (see [Build](#build) or use a pre-built `.fs`)
-2. Flash the firmware (see below)
-3. Insert SD card with `OS.ROM` and `BASIC.ROM`
-4. Connect HDMI
-5. Connect a DB9 Joystick to port 1
-6. Power on — the OSD menu appears within ~2 seconds (press the S2 button on the Tang Nano 20K to open/close, and use Joystick 1 to navigate and select files)
+1. Insert SD card with `OS.ROM` and `BASIC.ROM` (FAT32)
+2. Flash the FPGA bitstream (see [Build](#build) or use a pre-built `.fs`) — the firmware is
+   baked into the bitstream, so there is **no separate firmware flash step**
+3. Connect HDMI
+4. Connect a DB9 Joystick to port 1 and/or a keyboard (see below)
+5. Power on — the Atari **auto-boots to BASIC**. Press the onboard **S2** button (or **F12**) to
+   open the OSD menu; navigate with Joystick 1 or the keyboard.
 
 ---
 
@@ -109,21 +125,21 @@ Output: `impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs`
 make -C firmware
 ```
 
-Output: `firmware/firmware.bin`
+This compiles the firmware and generates the BSRAM init hex (`src/fw_lane{0..3}.hex`,
+`src/fw_words.hex`) via `firmware/bin2bram.py`. The hex files are consumed by `build.tcl` (via
+`$readmemh`) and embedded into the bitstream — so **rebuild the firmware before the bitstream**
+whenever firmware changes. (The generated hex are tracked in git, so a bitstream-only build works
+without the RISC-V toolchain.)
 
 ### Flash
 
-**Flash the bitstream:**
+**Flash the bitstream only** — the firmware is inside it (loaded into BSRAM at config time):
 ```bash
 openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
 ```
 
-**Flash the firmware** (stored in SPI flash at offset 5 MB):
-```bash
-openFPGALoader -b tangnano20k -f -o 0x500000 firmware/firmware.bin
-```
-
-Both must be flashed for the system to work. The bitstream loads first; the PicoRV32 inside then reads the firmware from the SPI flash.
+> There is **no separate firmware flash step** anymore. The firmware runs from on-chip BSRAM,
+> not from SPI flash → SDRAM as in earlier versions.
 
 ---
 
@@ -303,48 +319,53 @@ RC cutoff: 1 / (2π × 1 kΩ × 10 nF) ≈ **15.9 kHz** — adequate for POKEY a
 
 ## Status LEDs
 
-The Tang Nano 20K has 4 active-low LEDs on pins 17–20:
+The Tang Nano 20K has 4 usable active-low LEDs on pins 17–20. Physical labels vs RTL bus index
+differ — reason in **pins** (the RTL port is `leds_n[4:1]` → pins 17,18,19,20 → physical
+**LED2,LED3,LED4,LED5**).
 
-| LED | FPGA pin | Signal | Meaning |
-|-----|----------|--------|---------|
-| LED 1 | 17 | `sdram_ready` | SDRAM initialised |
-| LED 2 | 18 | `pll_locked` | Main PLL locked |
-| LED 3 | 19 | `roms_loaded` | ROMs loaded from SD card |
-| LED 4 | 20 | heartbeat (~6 Hz blink) | FPGA running |
+> **This baseline carries DIAGNOSTIC signals on the LEDs**, not the normal status set, while the
+> firmware-off-SDRAM / timing work is in progress:
+>
+> | Pin | Physical LED | Signal | Meaning |
+> |-----|------|--------|---------|
+> | 17 | LED2 | `dbg_stall_undec` | PicoRV32 hung on an undecoded address (should stay OFF) |
+> | 18 | LED3 | `dbg_stall_peri` | PicoRV32 hung on a peripheral wait (should stay OFF) |
+> | 19 | LED4 | `dbg_stall_ram` | PicoRV32 hung on a RAM access (should stay OFF) |
+> | 20 | LED5 | heartbeat (~6 Hz blink) | FPGA running |
+>
+> Normal good state: only the ~6 Hz heartbeat (pin 20) blinks; the three stall LEDs stay dark. If
+> the machine fails to boot with only the heartbeat blinking and no stall LED, the Atari core
+> isn't running (a timing/placement issue), not a firmware hang.
 
-**Normal boot sequence:**
-1. LED 4 blinks immediately (FPGA running, 27 MHz clock OK)
-2. LED 1 turns ON (~200 µs — SDRAM initialised)
-3. LED 2 turns ON (~1 ms — PLL locked)
-4. LED 3 turns ON (~2 s — ROMs loaded from SD card)
-5. Atari core releases from reset → OSD menu appears
-
-If LED 3 never turns on, check:
-- SD card is FAT32 formatted
-- `OS.ROM` and `BASIC.ROM` are in the root directory (correct filenames, correct sizes)
-- SD card is fully inserted
+If the Atari does not boot to BASIC, check:
+- SD card is FAT32 formatted, fully inserted
+- `OS.ROM`/`ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) are in the root directory
 
 ---
 
 ## OSD Menu
 
-Press the joystick fire button (or navigate with Up/Down on joystick) to open the menu:
+The Atari auto-boots first. Press **S2** (or **F12**) to open/close the menu:
 
 ```
-=== Atari800Tang ===
+=== Tang Atari 800 ===
 
 Mounted: None
 
 1) Select ATR Disk Image
-2) Boot / Reset Atari
-3) Return to game
-4) Options
+2) Boot to OS (No BASIC)
+3) Boot to BASIC
+4) Soft Reset
+5) Hard Reset
+6) Options
+7) Return to Game (F12)
 ```
 
 - **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
-- **Boot / Reset Atari** — reset the Atari 800 core
-- **Return to game** — close the OSD
-- **Options** — emulator options (PAL/NTSC, joystick swap, etc.)
+- **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
+- **Soft / Hard Reset** — warm or cold restart
+- **Options** — emulator options (OSD hotkey, keyboard type)
+- **Return to Game** — close the OSD (also via S2 / F12)
 
 ---
 
@@ -384,18 +405,21 @@ atari800_tang_nano20k_parallel/
 │   └── tang_nano_20k.cst      # Physical pin constraints
 ├── firmware/
 │   ├── firmware.c             # PicoRV32 firmware (OSD, ROM loader, keyboard)
-│   ├── firmware.bin           # Compiled firmware binary
+│   ├── bin2bram.py            # firmware.bin → BSRAM init hex (4 byte lanes)
+│   ├── baremetal.ld           # linker: single 64 KB BSRAM region from 0
 │   └── Makefile
 ├── rtl/                       # Upstream Atari core VHDL
 │   └── common/a8core/         # 6502, ANTIC, GTIA, POKEY, PIA, SIO
 └── src/                       # Tang Nano-specific SystemVerilog / Verilog
     ├── tang_top.sv            # Top-level module
     ├── gw2ar_sdram.sv         # Custom GW2AR-18 embedded SDRAM controller
-    ├── iosys_picorv32.v       # PicoRV32 IO subsystem (OSD, SD, SPI flash)
+    ├── iosys_picorv32.v       # PicoRV32 IO subsystem (OSD, SD); firmware in BSRAM
+    ├── fw_bram.v              # 64 KB byte-laned BSRAM firmware boot RAM
+    ├── fw_lane{0..3}.hex      # firmware BSRAM init (generated by bin2bram.py)
     ├── hdmi_audio_out.sv      # HDMI wrapper (hdl-util/hdmi library)
-    ├── scale720p.sv           # Atari → 720p scaler
+    ├── scale720p.sv           # Atari → 720p scaler (genlocked to 54 MHz)
     ├── usb_to_atari800.sv     # USB HID → Atari keyboard matrix
-    ├── sd_rom_loader.sv       # FAT32 ROM loader
+    ├── uart_kbd_ch9350.sv     # Hardware CH9350/UART keyboard decoder
     ├── simplespimaster.v      # SPI master (SD card)
     ├── simpleuart.v           # UART (UART keyboard RX + debug TX)
     ├── picorv32.v             # PicoRV32 RISC-V softcore
@@ -406,9 +430,13 @@ atari800_tang_nano20k_parallel/
 
 ## Known Limitations / Roadmap
 
+- **SIO disk emulation** — temporarily disabled during the firmware-off-SDRAM rework; revival in progress
+- **Atari speed** — currently runs slightly fast; timing tuning pending
+- **clk_core timing margin** — `clk_core` (54 MHz) is modestly above the tool's reported Fmax;
+  boots reliably in practice, proper critical-path fix tracked
 - **Joystick paddles** — analogue pot inputs not implemented
 - **Cartridge images** — `.car` / `.rom` cartridge loading not yet implemented
-- **PAL/NTSC switch** — currently PAL; runtime switch planned
+- **Machine is NTSC** (`PAL=0`); runtime PAL/NTSC switch planned
 
 ---
 
