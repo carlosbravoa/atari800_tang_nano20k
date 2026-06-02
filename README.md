@@ -16,7 +16,7 @@ adapted for the Gowin FPGA toolchain.
 - **HDMI audio** — 48 kHz stereo PCM in HDMI 1.3 data islands (no extra hardware)
 - **GPIO audio** — sigma-delta PDM on GPIO pins (add RC filter for analogue)
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
-- **SD card ROM loader** — reads `OS.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
+- **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - **On-Screen Display (OSD)** — file browser, disk image selection, options menu (navigable via DB9 Joystick + S2 button!)
 - **OSD Keyboard-less Navigation** — toggle OSD via onboard S2 button; navigate and select files using physical DB9 Joystick 1
 - **UART / Serial Keyboard (Primary)** — supports raw USB HID reports sent over serial frames via an external CH9350 board or Raspberry Pi Pico (no resistors required, uses Pin 53)
@@ -40,6 +40,7 @@ adapted for the Gowin FPGA toolchain.
 | USB HID keyboard | ✅ Working |
 | DB9 joystick | ✅ Working |
 | SIO disk emulation (.atr) | ⏳ Temporarily disabled — revival in progress |
+| Cartridge images (.car / .rom) | 🔜 Planned |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
 > access, keyboard) executes from on-chip **BSRAM**, not SDRAM. This removes its instruction
@@ -79,10 +80,11 @@ Format a MicroSD card as **FAT32**. Place these files in the root directory:
 
 ```
 /
-├── OS.ROM      ← Atari XL/XE OS ROM, exactly 16384 bytes
-└── BASIC.ROM   ← Atari BASIC ROM, exactly 8192 bytes
+├── ATARIXL.ROM   ← Atari XL/XE OS ROM, exactly 16384 bytes
+└── BASIC.ROM     ← Atari BASIC ROM, exactly 8192 bytes
 ```
 
+> File names are matched case-insensitively (`ATARIXL.ROM`/`atarixl.rom`, `BASIC.ROM`/`basic.rom`).
 > You must supply your own ROM images — they are not included in this repository.
 
 The PicoRV32 firmware (running from BSRAM) loads both ROMs into SDRAM on every boot, then
@@ -92,7 +94,7 @@ releases the Atari core from reset so it auto-boots to BASIC.
 
 ## Quick Start
 
-1. Insert SD card with `OS.ROM` and `BASIC.ROM` (FAT32)
+1. Insert SD card with `ATARIXL.ROM` and `BASIC.ROM` (FAT32)
 2. Flash the FPGA bitstream (see [Build](#build) or use a pre-built `.fs`) — the firmware is
    baked into the bitstream, so there is **no separate firmware flash step**
 3. Connect HDMI
@@ -146,8 +148,9 @@ openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
 ## Keyboard-less OSD Navigation
 
 By default, the OSD menu can be operated completely using your **DB9 Joystick 1** and the onboard **S2 button** on the Tang Nano 20K:
-- **Toggle OSD Menu:** Press the onboard **S2** button (the rightmost button on the Tang Nano).
+- **Toggle OSD Menu:** Press the onboard **S2** button (the rightmost button on the Tang Nano), or **F12** on the keyboard — either opens *and* closes the menu.
 - **Move Cursor Up/Down:** Move **Joystick 1 Up/Down**.
+- **Change Page:** In long file lists, **Left/Right** moves between pages; pressing **Down** past the last entry or **Up** past the first also flips to the next/previous page.
 - **Confirm / Load File:** Press the **Joystick 1 Fire** button.
 - **Go Back:** Select `..` or `<< Return to main menu` inside the file browser.
 
@@ -324,22 +327,22 @@ differ — reason in **pins** (the RTL port is `leds_n[4:1]` → pins 17,18,19,2
 **LED2,LED3,LED4,LED5**).
 
 > **This baseline carries DIAGNOSTIC signals on the LEDs**, not the normal status set, while the
-> firmware-off-SDRAM / timing work is in progress:
+> SIO disk revival is in progress (`tang_top.sv`):
 >
 > | Pin | Physical LED | Signal | Meaning |
 > |-----|------|--------|---------|
-> | 17 | LED2 | `dbg_stall_undec` | PicoRV32 hung on an undecoded address (should stay OFF) |
-> | 18 | LED3 | `dbg_stall_peri` | PicoRV32 hung on a peripheral wait (should stay OFF) |
-> | 19 | LED4 | `dbg_stall_ram` | PicoRV32 hung on a RAM access (should stay OFF) |
+> | 17 | LED2 | `sio_command` | ON (active low) while the Atari asserts the SIO command line |
+> | 18 | LED3 | `sio_rx_data_in` | flashes when the emulated drive transmits to the Atari |
+> | 19 | LED4 | `sio_txd` | flashes when the Atari transmits to the drive |
 > | 20 | LED5 | heartbeat (~6 Hz blink) | FPGA running |
 >
-> Normal good state: only the ~6 Hz heartbeat (pin 20) blinks; the three stall LEDs stay dark. If
-> the machine fails to boot with only the heartbeat blinking and no stall LED, the Atari core
-> isn't running (a timing/placement issue), not a firmware hang.
+> Normal good state: the ~6 Hz heartbeat (pin 20) blinks; the SIO LEDs flicker during disk
+> access. If the machine fails to boot with only the heartbeat blinking, the Atari core isn't
+> running (a timing/placement issue), not a firmware hang.
 
 If the Atari does not boot to BASIC, check:
 - SD card is FAT32 formatted, fully inserted
-- `OS.ROM`/`ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) are in the root directory
+- `ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) are in the root directory
 
 ---
 
@@ -358,14 +361,14 @@ Mounted: None
 4) Soft Reset
 5) Hard Reset
 6) Options
-7) Return to Game (F12)
+7) Return to Atari (F12)
 ```
 
 - **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
 - **Soft / Hard Reset** — warm or cold restart
 - **Options** — emulator options (OSD hotkey, keyboard type)
-- **Return to Game** — close the OSD (also via S2 / F12)
+- **Return to Atari** — close the OSD (also via S2 / F12), with or without a disk mounted
 
 ---
 
