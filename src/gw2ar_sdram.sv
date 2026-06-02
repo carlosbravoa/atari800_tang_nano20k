@@ -88,6 +88,7 @@ reg [3:0]     ref_cnt = 4'd8;    // init-refresh repetition counter
 reg [1:0]     cur_bank;
 reg [10:0]    cur_row;
 reg [7:0]     cur_col;
+reg           cur_addr23;
 reg [3:0]     cur_dqm;
 reg           cur_write;
 
@@ -107,10 +108,13 @@ logic [1:0]   hit_idx;
 always_comb begin
     cache_hit = 1'b0;
     hit_idx = 2'd0;
-    for (int i = 0; i < 4; i = i + 1) begin
-        if (cache_valid[i] && (addr[22:2] == cache_tag[i])) begin
-            cache_hit = 1'b1;
-            hit_idx = i[1:0];
+    // Only check cache for RAM/ROM reads (addr[23] == 0). Cartridge space (addr[23] == 1) bypasses cache.
+    if (addr[23] == 1'b0) begin
+        for (int i = 0; i < 4; i = i + 1) begin
+            if (cache_valid[i] && (addr[22:2] == cache_tag[i])) begin
+                cache_hit = 1'b1;
+                hit_idx = i[1:0];
+            end
         end
     end
 end
@@ -137,6 +141,7 @@ always_ff @(posedge clk or negedge reset_n) begin
         O_sdram_dqm     <= 4'b1111;
         refresh_r       <= 1'b0;
         refresh_pending <= 1'b0;
+        cur_addr23      <= 1'b0;
         cache_valid[0]  <= 1'b0;
         cache_valid[1]  <= 1'b0;
         cache_valid[2]  <= 1'b0;
@@ -230,9 +235,10 @@ always_ff @(posedge clk or negedge reset_n) begin
                         end
                     end else begin
                         // Latch address fields
-                        cur_bank  <= addr[22:21];
-                        cur_row   <= addr[20:10];
-                        cur_col   <= addr[9:2];
+                        cur_addr23    <= addr[23];
+                        cur_bank      <= addr[22:21];
+                        cur_row       <= addr[20:10];
+                        cur_col       <= addr[9:2];
                         cur_dqm   <= ~wmask;
                         cur_write <= write_en;
                         if (write_en) begin
@@ -284,15 +290,17 @@ always_ff @(posedge clk or negedge reset_n) begin
                 cnt              <= 14'd2;   // tRP for auto-precharge row close
                 state            <= S_IDLE;
                 
-                // Update read cache: replace LRU line (lru_list[3])
-                cache_data[lru_list[3]]  <= IO_sdram_dq;
-                cache_tag[lru_list[3]]   <= {cur_bank, cur_row, cur_col};
-                cache_valid[lru_list[3]] <= 1'b1;
-                // Move replaced line to MRU (lru_list[0]) and shift down
-                lru_list[0] <= lru_list[3];
-                lru_list[1] <= lru_list[0];
-                lru_list[2] <= lru_list[1];
-                lru_list[3] <= lru_list[2];
+                // Update read cache: replace LRU line (lru_list[3]) if it was not a cartridge read
+                if (!cur_addr23) begin
+                    cache_data[lru_list[3]]  <= IO_sdram_dq;
+                    cache_tag[lru_list[3]]   <= {cur_bank, cur_row, cur_col};
+                    cache_valid[lru_list[3]] <= 1'b1;
+                    // Move replaced line to MRU (lru_list[0]) and shift down
+                    lru_list[0] <= lru_list[3];
+                    lru_list[1] <= lru_list[0];
+                    lru_list[2] <= lru_list[1];
+                    lru_list[3] <= lru_list[2];
+                end
             end
 
             // ── Write complete ────────────────────────────────────────────────
