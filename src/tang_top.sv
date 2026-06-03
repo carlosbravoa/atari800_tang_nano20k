@@ -1118,12 +1118,27 @@ wire joy_poll_dbg;
 wire cpu_progress_dbg;
 wire dbg_stall_undec, dbg_stall_peri, dbg_stall_ram;
 
+// Pulse-stretch SIO line activity to ~78 ms so the eye can see it.
+// A serial bit is ~55 us (invisible); stretch any LOW (start/0 bit) to a long blink.
+// sio_rx_data_in = our DRIVE's transmit line (sys_clk domain, handler output)
+// sio_txd_sys    = Atari's transmit line, synchronized to sys_clk
+localparam [21:0] SIO_STRETCH = 22'h3FFFFF; // 2^22-1 @ 27 MHz ≈ 155 ms
+reg [21:0] sio_tx_stretch = 22'd0; // our drive -> Atari activity
+reg [21:0] sio_rx_stretch = 22'd0; // Atari -> drive activity
+always_ff @(posedge sys_clk) begin
+    if (!sio_rx_data_in)    sio_tx_stretch <= SIO_STRETCH;
+    else if (sio_tx_stretch) sio_tx_stretch <= sio_tx_stretch - 1'b1;
+
+    if (!sio_txd_sys)       sio_rx_stretch <= SIO_STRETCH;
+    else if (sio_rx_stretch) sio_rx_stretch <= sio_rx_stretch - 1'b1;
+end
+
 // SIO DIAGNOSTIC LED map (pins via leds_n[4:1] = pins17,18,19,20 = LED2,3,4,5):
-//   LED2 pin17 (leds_n[1]) = sio_command    : ON when SIO Command is active (low)
-//   LED3 pin18 (leds_n[2]) = sio_rx_data_in : Flashes when drive transmits to Atari
-//   LED4 pin19 (leds_n[3]) = sio_txd        : Flashes when Atari transmits to drive
-//   LED5 pin20 (leds_n[4]) = ~blink_cnt[22] : ~6 Hz heartbeat
-assign leds_n = {~blink_cnt[22], sio_txd, sio_rx_data_in, sio_command};
+//   LED2 pin17 (leds_n[1]) = sio_command         : ON when SIO Command line is active (low)
+//   LED3 pin18 (leds_n[2]) = |sio_tx_stretch     : BLINKS when OUR DRIVE transmits to the Atari
+//   LED4 pin19 (leds_n[3]) = |sio_rx_stretch     : BLINKS when the Atari transmits to the drive
+//   LED5 pin20 (leds_n[4]) = ~blink_cnt[22]      : ~6 Hz FPGA-alive heartbeat
+assign leds_n = {~blink_cnt[22], ~(|sio_rx_stretch), ~(|sio_tx_stretch), sio_command};
 
 
 endmodule
