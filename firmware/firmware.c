@@ -688,6 +688,19 @@ void sio_wait_tx_empty(void) {
     delay_us(600);
 }
 
+// Atari SIO checksum: 8-bit sum with END-AROUND CARRY (NOT plain mod-256).
+// Every overflow out of bit 7 is added back into bit 0. A plain (sum & 0xFF)
+// is wrong whenever the running sum carries, which makes the Atari reject our
+// STATUS/READ data frames (their sums almost always carry) -> "no disk".
+static uint8_t sio_checksum(const uint8_t *buf, int len) {
+    uint8_t sum = 0;
+    for (int i = 0; i < len; i++) {
+        uint16_t t = (uint16_t)sum + buf[i];
+        sum = (uint8_t)((t & 0xFF) + (t >> 8)); // fold the carry back in
+    }
+    return sum;
+}
+
 int sio_rx_data_frame(uint8_t *buf, int len) {
     int idx = 0;
     uint8_t checksum = 0;
@@ -710,7 +723,8 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
             
             if (idx < len) {
                 buf[idx] = byte;
-                checksum += byte;
+                uint16_t t = (uint16_t)checksum + byte;
+                checksum = (uint8_t)((t & 0xFF) + (t >> 8)); // end-around carry
             } else {
                 if (checksum == byte) {
                     return 0; // Success
@@ -736,8 +750,8 @@ void sio_process_command(void) {
     uint8_t aux2 = sio_cmd_buf[3];
     uint8_t checksum = sio_cmd_buf[4];
     
-    // Verify checksum of command frame
-    uint8_t calc_sum = (device + cmd + aux1 + aux2) & 0xFF;
+    // Verify checksum of command frame (end-around carry, same as the Atari)
+    uint8_t calc_sum = sio_checksum(sio_cmd_buf, 4);
     if (calc_sum != checksum) {
         uart_printf("SIO Command Checksum Error: got %02x, calculated %02x\n", checksum, calc_sum);
         dbg_sio_err_count++;
@@ -774,12 +788,9 @@ void sio_process_command(void) {
             status_block[2] = 0xE0; // Timeout
             status_block[3] = 0x00;
             
-            // Calculate status block checksum
-            uint8_t sum = 0;
-            for (int i = 0; i < 4; i++) {
-                sum += status_block[i];
-            }
-            
+            // Calculate status block checksum (Atari end-around carry)
+            uint8_t sum = sio_checksum(status_block, 4);
+
             // 3. Delay 1ms (ACK-to-Complete delay)
             delay_us(1000);
 
@@ -815,12 +826,9 @@ void sio_process_command(void) {
             // 2. Perform the slow read from the SD card (takes several milliseconds)
             int r = atr_read_sector(sector, sector_buf, &sector_len);
             if (r == 0) {
-                // Calculate checksum of sector data
-                uint8_t sum = 0;
-                for (int i = 0; i < sector_len; i++) {
-                    sum += sector_buf[i];
-                }
-                
+                // Calculate checksum of sector data (Atari end-around carry)
+                uint8_t sum = sio_checksum(sector_buf, sector_len);
+
                 // 3. Delay 1ms (ACK-to-Complete delay)
                 delay_us(1000);
 
@@ -958,7 +966,7 @@ void sio_poll(void) {
             f->aux1 = sio_cmd_buf[2];
             f->aux2 = sio_cmd_buf[3];
             f->checksum = sio_cmd_buf[4];
-            uint8_t calc_sum = (f->device + f->cmd + f->aux1 + f->aux2) & 0xFF;
+            uint8_t calc_sum = sio_checksum(sio_cmd_buf, 4);
             if (calc_sum != f->checksum) {
                 f->processed = 2; // Checksum error
             } else if (f->device != 0x31) {
