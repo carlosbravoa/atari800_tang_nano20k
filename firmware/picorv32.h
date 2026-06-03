@@ -44,6 +44,7 @@ int atoi(const char *str);
 #define reg_sio_rx         (*(volatile uint32_t*)0x02000088)
 #define reg_sio_rx_stat    (*(volatile uint32_t*)0x0200008c)
 #define reg_sio_divisor    (*(volatile uint32_t*)0x02000090)
+#define reg_sio_diag       (*(volatile uint32_t*)0x02000098)
 #define reg_virt_kbd_0     (*(volatile uint32_t*)0x020000a0)
 #define reg_virt_kbd_1     (*(volatile uint32_t*)0x020000a4)
 

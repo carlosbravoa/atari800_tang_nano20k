@@ -48,6 +48,35 @@ static uint8_t sio_cmd_buf[5];
 static int     sio_cmd_idx = 0;
 static uint32_t sio_cmd_timeout = 0;   // millis timestamp of first byte in current frame
 
+// SIO Diagnostics variables
+uint8_t dbg_last_sio_cmd = 0;
+uint16_t dbg_last_sio_sector = 0;
+int dbg_last_sio_status = 0;
+uint32_t dbg_sio_read_count = 0;
+uint32_t dbg_sio_write_count = 0;
+uint32_t dbg_sio_status_count = 0;
+uint32_t dbg_sio_err_count = 0;
+uint32_t dbg_sio_rx_byte_count = 0;
+uint32_t dbg_sio_timeout_count = 0;
+uint8_t dbg_rx_buf[12] = {0};
+uint8_t dbg_rx_cmd_line_buf[12] = {0};
+uint8_t dbg_rx_buf_idx = 0;
+
+typedef struct {
+    uint8_t device;
+    uint8_t cmd;
+    uint8_t aux1;
+    uint8_t aux2;
+    uint8_t checksum;
+    uint8_t processed;
+} dbg_cmd_frame_t;
+
+dbg_cmd_frame_t dbg_cmd_history[4];
+uint8_t dbg_cmd_history_idx = 0;
+
+uint32_t dbg_sio_cmd_low_ticks = 0;
+uint32_t dbg_sio_txd_low_ticks = 0;
+
 void status(char *msg) {
     cursor(0, 27);
     for (int i = 0; i < 32; i++)
@@ -585,15 +614,41 @@ bool sio_rx_empty(void) {
 }
 
 void sio_init(void) {
-    reg_sio_divisor = 0x5D; // divisor for default 19200 bps (93 decimal)
+    reg_sio_divisor = 0x5E; // divisor for default 19200 bps (94 decimal)
     
-    // Flush RX FIFO
-    while (!sio_rx_empty()) {
+    // Flush RX FIFO (up to 1024 bytes maximum to prevent hangs if status is stuck)
+    for (int i = 0; i < 1024 && !sio_rx_empty(); i++) {
         (void)reg_sio_rx;
     }
     
     sio_cmd_idx = 0;
     sio_cmd_timeout = 0;
+
+    dbg_last_sio_cmd = 0;
+    dbg_last_sio_sector = 0;
+    dbg_last_sio_status = 0;
+    dbg_sio_read_count = 0;
+    dbg_sio_write_count = 0;
+    dbg_sio_status_count = 0;
+    dbg_sio_err_count = 0;
+    dbg_sio_rx_byte_count = 0;
+    dbg_sio_timeout_count = 0;
+    for (int i = 0; i < 12; i++) {
+        dbg_rx_buf[i] = 0;
+        dbg_rx_cmd_line_buf[i] = 0;
+    }
+    dbg_rx_buf_idx = 0;
+    for (int i = 0; i < 4; i++) {
+        dbg_cmd_history[i].device = 0;
+        dbg_cmd_history[i].cmd = 0;
+        dbg_cmd_history[i].aux1 = 0;
+        dbg_cmd_history[i].aux2 = 0;
+        dbg_cmd_history[i].checksum = 0;
+        dbg_cmd_history[i].processed = 0;
+    }
+    dbg_cmd_history_idx = 0;
+    dbg_sio_cmd_low_ticks = 0;
+    dbg_sio_txd_low_ticks = 0;
 }
 
 void delay_us(uint32_t us) {
@@ -621,6 +676,14 @@ void sio_tx_byte(uint8_t b) {
         // Wait until TX FIFO is not full
     }
     reg_sio_tx = b;
+}
+
+void sio_wait_tx_empty(void) {
+    while (!(reg_sio_tx_stat & 0x100)) {
+        // Wait until TX FIFO is empty
+    }
+    // Wait for the last byte to finish serializing on wire (520us @ 19200)
+    delay_us(600);
 }
 
 int sio_rx_data_frame(uint8_t *buf, int len) {
@@ -661,6 +724,10 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
 }
 
 void sio_process_command(void) {
+    // NOTE: auto-baud tuning removed (T2) — it read reg_sio_divisor, which is a
+    // *different* (measured-receive) register than the TX divisor it writes, and
+    // could silently corrupt the TX baud. TX divisor stays fixed (set in sio_init).
+
     uint8_t device = sio_cmd_buf[0];
     uint8_t cmd = sio_cmd_buf[1];
     uint8_t aux1 = sio_cmd_buf[2];
@@ -671,6 +738,7 @@ void sio_process_command(void) {
     uint8_t calc_sum = (device + cmd + aux1 + aux2) & 0xFF;
     if (calc_sum != checksum) {
         uart_printf("SIO Command Checksum Error: got %02x, calculated %02x\n", checksum, calc_sum);
+        dbg_sio_err_count++;
         return;
     }
     
@@ -680,19 +748,24 @@ void sio_process_command(void) {
     }
     
     uint16_t sector = aux1 | (aux2 << 8);
+    dbg_last_sio_cmd = cmd;
+    dbg_last_sio_sector = sector;
+    dbg_last_sio_status = 0;
     
     switch (cmd) {
         case 0x53: { // Status command
             uart_printf("SIO STATUS\n");
+            dbg_sio_status_count++;
             // 1. Send ACK (with command-to-ACK SIO delay)
             delay_us(1000);
             sio_tx_byte(0x41); // 'A'
+            sio_wait_tx_empty();
             
             // 2. Prepare status block (4 bytes)
             uint8_t status_block[4];
-            status_block[0] = 0x08; // Active/mounted (bit 3)
+            status_block[0] = 0x10; // Drive active (bit 4)
             if (atr_sector_size == 256) {
-                status_block[0] |= 0x04; // Double density (bit 2)
+                status_block[0] |= 0x20; // Double density (bit 5)
             }
             
             status_block[1] = 0xFF; // Hardware status
@@ -707,60 +780,69 @@ void sio_process_command(void) {
             
             // 3. Delay 1ms (ACK-to-Complete delay)
             delay_us(1000);
-            
-            // 4. Send Complete
+
+            // 4. Send Complete (must precede the data frame for reads/status)
             sio_tx_byte(0x43); // 'C'
-            
+            sio_wait_tx_empty();
+
             // 5. Delay 1ms (Complete-to-Data delay)
             delay_us(1000);
-            
+
             // 6. Send status bytes
             for (int i = 0; i < 4; i++) {
                 sio_tx_byte(status_block[i]);
             }
-            
+
             // 7. Send checksum
             sio_tx_byte(sum);
+            sio_wait_tx_empty();
             break;
         }
         
         case 0x52: { // Read sector command
             uart_printf("SIO READ SECTOR %d\n", sector);
+            dbg_sio_read_count++;
             static uint8_t sector_buf[256];
             int sector_len = 128;
             
+            // 1. Send ACK first to satisfy the tight 16ms command-to-ACK window
+            delay_us(1000);
+            sio_tx_byte(0x41); // 'A' (ACK)
+            sio_wait_tx_empty();
+            
+            // 2. Perform the slow read from the SD card (takes several milliseconds)
             int r = atr_read_sector(sector, sector_buf, &sector_len);
             if (r == 0) {
-                // Send ACK (with command-to-ACK SIO delay)
-                delay_us(1000);
-                sio_tx_byte(0x41); // 'A'
-                
                 // Calculate checksum of sector data
                 uint8_t sum = 0;
                 for (int i = 0; i < sector_len; i++) {
                     sum += sector_buf[i];
                 }
                 
-                // Delay 1ms (ACK-to-Complete delay)
+                // 3. Delay 1ms (ACK-to-Complete delay)
                 delay_us(1000);
-                
-                // Send Complete
-                sio_tx_byte(0x43); // 'C'
-                
-                // Delay 1ms (Complete-to-Data delay)
+
+                // 4. Send Complete (must precede the data frame for reads)
+                sio_tx_byte(0x43); // 'C' (Complete)
+                sio_wait_tx_empty();
+
+                // 5. Delay 1ms (Complete-to-Data delay)
                 delay_us(1000);
-                
-                // Send sector data
+
+                // 6. Send sector data
                 for (int i = 0; i < sector_len; i++) {
                     sio_tx_byte(sector_buf[i]);
                 }
-                
-                // Send checksum
+
+                // 7. Send checksum
                 sio_tx_byte(sum);
+                sio_wait_tx_empty();
             } else {
-                uart_printf("Read sector %d failed, sending NAK\n", sector);
+                uart_printf("Read sector %d failed, sending Error\n", sector);
+                dbg_last_sio_status = r;
+                dbg_sio_err_count++;
                 delay_us(1000);
-                sio_tx_byte(0x4E); // 'N' (NAK)
+                sio_tx_byte(0x45); // 'E' (Error)
             }
             break;
         }
@@ -768,12 +850,14 @@ void sio_process_command(void) {
         case 0x57:   // Write sector command (with verify)
         case 0x50: { // Write sector command (without verify)
             uart_printf("SIO WRITE SECTOR %d\n", sector);
+            dbg_sio_write_count++;
             static uint8_t sector_buf[256];
             int sector_len = (atr_sector_size == 128 || sector <= 3) ? 128 : 256;
             
             // Send ACK (with command-to-ACK SIO delay)
             delay_us(1000);
             sio_tx_byte(0x41); // 'A'
+            sio_wait_tx_empty();
             
             // Read data frame from computer
             int r = sio_rx_data_frame(sector_buf, sector_len);
@@ -783,16 +867,22 @@ void sio_process_command(void) {
                     // Send ACK for data frame (with data-to-ACK SIO delay)
                     delay_us(1000);
                     sio_tx_byte(0x41); // 'A'
+                    sio_wait_tx_empty();
+                    
                     delay_us(1000);
                     // Send Complete
                     sio_tx_byte(0x43); // 'C'
                 } else {
                     uart_printf("Write sector %d failed, sending NAK\n", sector);
+                    dbg_last_sio_status = wr;
+                    dbg_sio_err_count++;
                     delay_us(1000);
                     sio_tx_byte(0x4E); // 'N' (NAK)
                 }
             } else {
                 uart_printf("Receiving data frame for sector %d failed (error %d), sending NAK\n", sector, r);
+                dbg_last_sio_status = r;
+                dbg_sio_err_count++;
                 delay_us(1000);
                 sio_tx_byte(0x4E); // 'N' (NAK)
             }
@@ -801,6 +891,7 @@ void sio_process_command(void) {
         
         default:
             uart_printf("SIO Unknown Command: %02x\n", cmd);
+            dbg_sio_err_count++;
             delay_us(1000);
             sio_tx_byte(0x4E); // 'N' (NAK)
             break;
@@ -815,25 +906,41 @@ void sio_process_command(void) {
 void sio_poll(void) {
     if (!atr_mounted) return;
 
+    uint32_t diag = reg_sio_diag;
+    if (((diag >> 13) & 1) == 0) {
+        dbg_sio_cmd_low_ticks++;
+    }
+    if (((diag >> 12) & 1) == 0) {
+        dbg_sio_txd_low_ticks++;
+    }
+
     // Timeout: if a partial frame sits for >200 ms, reset accumulator
     if (sio_cmd_idx > 0 && (time_millis() - sio_cmd_timeout) > 200) {
         uart_printf("SIO: frame timeout, resetting (had %d bytes)\n", sio_cmd_idx);
+        dbg_sio_timeout_count++;
         sio_cmd_idx = 0;
     }
 
-    while (!sio_rx_empty()) {
+    for (int i = 0; i < 256 && !sio_rx_empty(); i++) {
         uint16_t rx_val  = reg_sio_rx;
+        dbg_sio_rx_byte_count++;
         uint8_t  byte      = rx_val & 0xFF;
-        uint8_t  cmd_count = (rx_val >> 8) & 0x7F;
+        uint8_t  cmd_active = (rx_val >> 8) & 1;
+        dbg_rx_buf[dbg_rx_buf_idx] = byte;
+        dbg_rx_cmd_line_buf[dbg_rx_buf_idx] = cmd_active;
+        dbg_rx_buf_idx = (dbg_rx_buf_idx + 1);
+        if (dbg_rx_buf_idx >= 12) dbg_rx_buf_idx = 0;
 
-        if (cmd_count == 0) {
+        if (!cmd_active) {
             // Data-phase byte — not expected here; ignore
             continue;
         }
 
-        // cmd_count == 1 means start of a new 5-byte command frame
-        if (cmd_count == 1) {
+        // A command frame starts if we were idle (sio_cmd_idx == 0) or if a timeout occurred (>50ms gap)
+        if (sio_cmd_idx == 0 || (time_millis() - sio_cmd_timeout) > 50) {
             sio_cmd_idx     = 0;
+            sio_cmd_timeout = time_millis();
+        } else {
             sio_cmd_timeout = time_millis();
         }
 
@@ -843,6 +950,22 @@ void sio_poll(void) {
         }
 
         if (sio_cmd_idx == 5) {
+            dbg_cmd_frame_t *f = &dbg_cmd_history[dbg_cmd_history_idx];
+            f->device = sio_cmd_buf[0];
+            f->cmd = sio_cmd_buf[1];
+            f->aux1 = sio_cmd_buf[2];
+            f->aux2 = sio_cmd_buf[3];
+            f->checksum = sio_cmd_buf[4];
+            uint8_t calc_sum = (f->device + f->cmd + f->aux1 + f->aux2) & 0xFF;
+            if (calc_sum != f->checksum) {
+                f->processed = 2; // Checksum error
+            } else if (f->device != 0x31) {
+                f->processed = 0; // Ignored (not D1)
+            } else {
+                f->processed = 1; // Processed
+            }
+            dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
+
             sio_process_command();
             sio_cmd_idx = 0;
         }
@@ -1077,6 +1200,10 @@ int main() {
             cursor(2, 8);
             printf("Mounted: %s", mounted_atr_name);
 
+            cursor(2, 9);
+            uint8_t measured = reg_sio_divisor & 0xFF;
+            printf("SIO Divisor: %d (0x%b)", measured, measured);
+
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");
             cursor(2, 11);
@@ -1093,10 +1220,36 @@ int main() {
             print("7) Return to Atari (F12)\n");
 
             cursor(2, 18);
-            print("Press Enter to select");
-
+            if (atr_mounted) {
+                printf("SIO C:%b S:%d St:%d", dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status);
+            } else {
+                printf("SIO: NOT MOUNTED (M:%d)", atr_mounted ? 1 : 0);
+            }
+            cursor(2, 19);
+            printf("SIO R:%d W:%d S:%d B:%d", (int)dbg_sio_read_count, (int)dbg_sio_write_count, (int)dbg_sio_status_count, (int)dbg_sio_rx_byte_count);
             cursor(2, 20);
-            print("Version: ");
+            printf("SIO Errs:%d TO:%d CL:%d TL:%d", (int)dbg_sio_err_count, (int)dbg_sio_timeout_count, (int)dbg_sio_cmd_low_ticks, (int)dbg_sio_txd_low_ticks);
+
+            cursor(2, 21);
+            int rx_idx = dbg_rx_buf_idx;
+            printf("R:%b(%d) %b(%d) %b(%d) %b(%d) %b(%d)",
+                dbg_rx_buf[(rx_idx + 7) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 7) % 12],
+                dbg_rx_buf[(rx_idx + 8) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 8) % 12],
+                dbg_rx_buf[(rx_idx + 9) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 9) % 12],
+                dbg_rx_buf[(rx_idx + 10) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 10) % 12],
+                dbg_rx_buf[(rx_idx + 11) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 11) % 12]);
+            for (int i = 0; i < 4; i++) {
+                int idx = (dbg_cmd_history_idx + i) % 4;
+                dbg_cmd_frame_t *f = &dbg_cmd_history[idx];
+                cursor(2, 22 + i);
+                printf("C%d:%b %b %b %b %b (%d)",
+                    i + 1,
+                    f->device, f->cmd, f->aux1, f->aux2, f->checksum,
+                    (int)f->processed);
+            }
+ 
+            cursor(2, 26);
+            print("Enter:Select   V:");
             print(__DATE__);
 
             delay(300);
@@ -1148,6 +1301,7 @@ int main() {
                 overlay(0);
             } else if (choice == 4) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
+                sio_init();                  // Clear SIO FIFOs and reset divisor (real-life power cycle effect)
                 *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
                 reg_romload_ctrl = 1;
                 delay(20);
