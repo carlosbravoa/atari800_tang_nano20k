@@ -158,7 +158,7 @@ begin
 			sio_command_reg <= '1';
 			sio_command_count_reg <= (others=>'0');
 			sio_command_framing_error_reg <= '0';
-			divisor_reg <= x"5E"; -- default divisor 94 (~19200 baud) so TX baud is sane from reset
+			divisor_reg <= x"5D"; -- default divisor 93 (matches Atari measured rate) so TX baud is sane from reset
 			pending_divisor_reg <= (others=>'0');
 			transmit_divisor_count_reg <= (others=>'0');
 			receive_divisor_count_reg <= (others=>'0');
@@ -448,8 +448,8 @@ receive_fifo : entity work.fifo_receive
 		rx_tick <= '0';
 
 		if (unsigned(divisor_reg) <= 1) then
-			-- Default to 19200 baud divisor (94) if divisor_reg is invalid
-			divisor := to_unsigned(94, 8);
+			-- Default to 19200 baud divisor (93) if divisor_reg is invalid
+			divisor := to_unsigned(93, 8);
 		else
 			divisor := unsigned(divisor_reg);
 		end if;

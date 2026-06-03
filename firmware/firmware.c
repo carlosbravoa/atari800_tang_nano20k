@@ -615,7 +615,8 @@ bool sio_rx_empty(void) {
 }
 
 void sio_init(void) {
-    reg_sio_divisor = 0x5E; // divisor for default 19200 bps (94 decimal)
+    reg_sio_divisor = 0x5D; // divisor 93 — matches the Atari's measured bit period
+                            // (the WIP regressed this to 94 / 0x5E; measured rate is 93)
     
     // Flush RX FIFO (up to 1024 bytes maximum to prevent hangs if status is stuck)
     for (int i = 0; i < 1024 && !sio_rx_empty(); i++) {
