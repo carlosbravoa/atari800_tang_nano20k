@@ -76,6 +76,7 @@ uint8_t dbg_cmd_history_idx = 0;
 
 uint32_t dbg_sio_cmd_low_ticks = 0;
 uint32_t dbg_sio_txd_low_ticks = 0;
+uint32_t dbg_sio_tx_count = 0;   // bytes pushed to the TX FIFO (reg_sio_tx)
 
 void status(char *msg) {
     cursor(0, 27);
@@ -676,6 +677,7 @@ void sio_tx_byte(uint8_t b) {
         // Wait until TX FIFO is not full
     }
     reg_sio_tx = b;
+    dbg_sio_tx_count++;
 }
 
 void sio_wait_tx_empty(void) {
@@ -1201,8 +1203,14 @@ int main() {
             printf("Mounted: %s", mounted_atr_name);
 
             cursor(2, 9);
-            uint8_t measured = reg_sio_divisor & 0xFF;
-            printf("SIO Divisor: %d (0x%b)", measured, measured);
+            // reg_sio_divisor READ now returns the ACTIVE TX divisor (divisor_reg).
+            // Expect 94 if our divisor write landed; 0 means the write never took.
+            uint8_t txdiv = reg_sio_divisor & 0xFF;
+            uint32_t txstat = reg_sio_tx_stat;
+            // txstat bit8=empty, bit9=full, [7:0]=count
+            printf("TXdiv:%d e%d f%d cnt%d push:%d", txdiv,
+                   (txstat >> 8) & 1, (txstat >> 9) & 1, txstat & 0xFF,
+                   (int)dbg_sio_tx_count);
 
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");

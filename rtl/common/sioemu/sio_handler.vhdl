@@ -254,7 +254,10 @@ begin
 				data_out_next <= "000000" & fifo_rx_full&fifo_rx_empty&fifo_rx_count;
 			end if;
 			if (addr_decoded(4) = '1') then
-				data_out_next <= "00000000" & receive_divisor_reg;
+				-- DIAG: return the ACTIVE TX divisor (divisor_reg) so firmware can
+				-- confirm its divisor write actually landed. (Was receive_divisor_reg,
+				-- the independently-measured value, which masked a failed write.)
+				data_out_next <= "00000000" & divisor_reg;
 			end if;
 			if (addr_decoded(5) = '1') then
 				data_out_next <= "00000000000000" & sio_command_framing_error_reg&s2p_framing_error_reg;
