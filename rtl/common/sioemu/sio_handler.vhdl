@@ -158,7 +158,7 @@ begin
 			sio_command_reg <= '1';
 			sio_command_count_reg <= (others=>'0');
 			sio_command_framing_error_reg <= '0';
-			divisor_reg <= (others=>'0');
+			divisor_reg <= x"5E"; -- default divisor 94 (~19200 baud) so TX baud is sane from reset
 			pending_divisor_reg <= (others=>'0');
 			transmit_divisor_count_reg <= (others=>'0');
 			receive_divisor_count_reg <= (others=>'0');
@@ -217,13 +217,17 @@ begin
 		end if;
 	end process;
 
-	-- Only change divisor once we are done transmitting
-	process(divisor_reg,pending_divisor_reg,p2s_idle)
+	-- Apply the divisor directly on a register write to addr 4.
+	-- (Was gated on p2s_idle via pending_divisor — a MiSTer same-clock-domain
+	--  feature that never fired in this sys_clk port: divisor_reg stayed 0, so the
+	--  p2s clocked a bit every POKEY tick and transmitted at garbage baud. The
+	--  reset default of 94 also keeps TX sane even if the write is never seen.)
+	process(divisor_reg, cpu_data_in, wr_en, addr_decoded)
 	begin
-		divisor_next<=divisor_reg;
+		divisor_next <= divisor_reg;
 
-		if (not(pending_divisor_reg = divisor_reg) and p2s_idle='1') then
-			divisor_next <= pending_divisor_reg;
+		if (wr_en = '1' and addr_decoded(4) = '1') then
+			divisor_next <= cpu_data_in(7 downto 0);
 		end if;
 	end process;
 
