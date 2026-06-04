@@ -77,6 +77,21 @@ uint8_t dbg_cmd_history_idx = 0;
 uint32_t dbg_sio_cmd_low_ticks = 0;
 uint32_t dbg_sio_txd_low_ticks = 0;
 uint32_t dbg_sio_tx_count = 0;   // bytes pushed to the TX FIFO (reg_sio_tx)
+// TX-line diagnostics, latched while the core is running (sampled in main loop):
+uint8_t  dbg_tx_pe_prev   = 0;   // last pokey tick-counter value seen
+uint8_t  dbg_tx_pe_moved  = 0;   // POKEY_ENABLE counter ever advanced (TX clock alive)
+uint8_t  dbg_tx_line_hi   = 0;   // transmit line (p2s) ever observed HIGH (idle)
+uint8_t  dbg_tx_fifo_empty= 0;   // TX FIFO ever observed empty
+uint8_t  dbg_tx_state_or  = 0;   // OR of all p2s_state values seen
+
+void sio_txdiag_sample(void) {
+    uint32_t d = reg_sio_txdiag;
+    uint8_t pe = (d >> 8) & 0xFF;
+    if (pe != dbg_tx_pe_prev) { dbg_tx_pe_moved = 1; dbg_tx_pe_prev = pe; }
+    if ((d >> 1) & 1) dbg_tx_line_hi = 1;     // p2s transmit line high (idle)
+    if ((d >> 2) & 1) dbg_tx_fifo_empty = 1;  // fifo_tx_empty
+    dbg_tx_state_or |= (d >> 4) & 0xF;        // p2s_state
+}
 
 void status(char *msg) {
     cursor(0, 27);
@@ -1244,6 +1259,11 @@ int main() {
             cursor(2, 16);
             print("7) Return to Atari (F12)\n");
 
+            cursor(2, 17);
+            printf("TX PE:%d LineHi:%d Femp:%d St:%b",
+                   (int)dbg_tx_pe_moved, (int)dbg_tx_line_hi,
+                   (int)dbg_tx_fifo_empty, dbg_tx_state_or);
+
             cursor(2, 18);
             if (atr_mounted) {
                 printf("SIO C:%b S:%d St:%d", dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status);
@@ -1345,8 +1365,11 @@ int main() {
             // Background polling loop — call sio_poll as fast as possible.
             // Also poll for menu toggle key (S2 or F12) without heavy delays.
             sio_poll();
+            sio_txdiag_sample();
             sio_poll();
+            sio_txdiag_sample();
             sio_poll();
+            sio_txdiag_sample();
             uart_keyboard_poll();
 
             // Check for menu toggle (S2 button bit9, or F12 bit3)

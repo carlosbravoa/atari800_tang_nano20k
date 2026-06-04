@@ -145,8 +145,15 @@ ARCHITECTURE vhdl OF sio_handler IS
 	signal command_active : std_logic;
 	signal command_active_now : std_logic;
 	signal rx_read_done : std_logic;
-	
+
+	-- TX diagnostic: free-running counter incremented by POKEY_ENABLE, so firmware
+	-- can tell whether the transmit clock-enable is alive (counter moves) or dead.
+	signal pokey_tick_count_reg : std_logic_vector(7 downto 0);
+	signal pokey_tick_count_next : std_logic_vector(7 downto 0);
+
 begin
+	pokey_tick_count_next <= std_logic_vector(unsigned(pokey_tick_count_reg)+1) when pokey_enable='1'
+	                         else pokey_tick_count_reg;
 	command_active <= not(sio_command_reg);
 	command_active_now <= not(sio_command);
 
@@ -173,7 +180,9 @@ begin
 			sio_clk_out_reg <='0';
 			rx_counter_reg <= (others=>'0');
 			rx_read_done <= '0';
+			pokey_tick_count_reg <= (others=>'0');
 		elsif (clk'event and clk='1') then
+			pokey_tick_count_reg <= pokey_tick_count_next;
 			sio_data_out_reg <= sio_data_out_next;
 			sio_command_reg <= sio_command_next;
 			sio_command_count_reg <= sio_command_count_next;
@@ -238,7 +247,7 @@ begin
 	sio_command_rising <= '0';
 	
 	-- Read from registers
-	process(en,addr_decoded, data_out_reg, fifo_rx_data, fifo_tx_full, fifo_tx_empty, fifo_tx_count, fifo_rx_full, fifo_rx_empty, fifo_rx_count, s2p_framing_error_reg, sio_command_framing_error_reg, receive_divisor_reg, pokey_enable, rx_tick, sio_command_reg, sio_data_out_reg, rx_counter_reg, s2p_state_reg, rx_read_done)
+	process(en,addr_decoded, data_out_reg, fifo_rx_data, fifo_tx_full, fifo_tx_empty, fifo_tx_count, fifo_rx_full, fifo_rx_empty, fifo_rx_count, s2p_framing_error_reg, sio_command_framing_error_reg, receive_divisor_reg, pokey_enable, rx_tick, sio_command_reg, sio_data_out_reg, rx_counter_reg, s2p_state_reg, rx_read_done, pokey_tick_count_reg, p2s_transmit_reg)
 	begin
 		data_out_next <= data_out_reg;
 		fifo_rx_advance <= '0';
@@ -269,6 +278,11 @@ begin
 			end if;
 			if (addr_decoded(6) = '1') then
 				data_out_next <= pokey_enable & rx_tick & sio_command_reg & sio_data_out_reg & std_logic_vector(rx_counter_reg) & s2p_state_reg;
+			end if;
+			if (addr_decoded(7) = '1') then
+				-- TX diagnostic: [15:8]=pokey tick counter, [7:4]=p2s_state,
+				-- [3]=fifo_tx_full, [2]=fifo_tx_empty, [1]=p2s_transmit (TX line), [0]=spare
+				data_out_next <= pokey_tick_count_reg & p2s_state_reg & fifo_tx_full & fifo_tx_empty & p2s_transmit_reg & '0';
 			end if;
 		end if;
 		
