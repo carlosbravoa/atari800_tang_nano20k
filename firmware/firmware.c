@@ -1200,8 +1200,19 @@ int main() {
     reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000);
     sio_init();
 
-    // Auto-load system ROMs on boot
+    // Auto-load system ROMs on boot. On a warm reset (S1) the SD card is left
+    // mid-state and FatFs reads can fail transiently (e.g. FR_INT_ERR on the 2nd
+    // file). Retry with a full unmount/re-mount (resets FatFs state + forces a
+    // fresh SD re-init on the next access) before giving up.
     int rom_ok = load_system_roms();
+    for (int attempt = 0; rom_ok != 0 && attempt < 5; attempt++) {
+        uart_printf("ROM load failed (0x%x), remount+retry %d\n", rom_ok, attempt + 1);
+        delay(50);
+        f_mount(0, "", 0);                       // unmount (deinit volume)
+        delay(20);
+        if (f_mount(&fs, "", 0) != FR_OK) { delay(80); continue; }
+        rom_ok = load_system_roms();
+    }
     if (rom_ok != 0) {
         clear();
         cursor(2, 2);
