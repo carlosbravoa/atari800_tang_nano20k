@@ -665,6 +665,33 @@ wire        enable_179_early;
 
 assign dbg_sd_ready = roms_loaded;
 
+// ── Frame-rate / lines-per-frame diagnostic ─────────────────────────────────
+// Count the Atari core's own video sync (clk_core domain): vs rising edge = one
+// frame, hs rising edges = scanlines. Lets the firmware compute the REAL frame
+// rate and lines/frame to localize the "runs ~1/3 fast" issue (vertical line
+// count vs horizontal line length). Reliable: pure counters, no SDRAM, latched
+// values change slowly so a plain 2-FF sync to sys_clk is safe.
+reg        video_vs_d = 1'b0, video_hs_d = 1'b0;
+reg [15:0] vs_frame_count = 16'd0;   // free-running: +1 per frame
+reg [15:0] line_count     = 16'd0;   // scanlines in the current frame
+reg [15:0] lines_per_frame = 16'd0;  // latched at end of each frame
+always_ff @(posedge clk_core) begin
+    video_vs_d <= video_vs;
+    video_hs_d <= video_hs;
+    if (~video_hs_d & video_hs) line_count <= line_count + 16'd1;   // hsync rising
+    if (~video_vs_d & video_vs) begin                               // vsync rising
+        vs_frame_count  <= vs_frame_count + 16'd1;
+        lines_per_frame <= line_count;
+        line_count      <= 16'd0;
+    end
+end
+reg [15:0] vs_cnt_s1, vs_cnt_sys, lpf_s1, lpf_sys;
+always_ff @(posedge sys_clk) begin
+    vs_cnt_s1 <= vs_frame_count;  vs_cnt_sys <= vs_cnt_s1;
+    lpf_s1    <= lines_per_frame; lpf_sys    <= lpf_s1;
+end
+wire [31:0] video_diag = {lpf_sys, vs_cnt_sys};  // [31:16]=lines/frame, [15:0]=frame counter
+
 // PicoRV32 IO subsystem module
 // iosys_picorv32 stays on sys_clk (27 MHz): firmware compiled for that frequency.
 // Its SPI/SD timing is correct only at 27 MHz; CDC to the 54 MHz arbiter is
@@ -685,6 +712,9 @@ iosys_picorv32 #(
     .overlay_color(overlay_color),
     .joy1(rv_joy1),
     .joy2(rv_joy2),
+
+    // Frame-rate / lines-per-frame diagnostic
+    .video_diag(video_diag),
 
     // ROM loading interface
     .rom_loading(rom_loading),

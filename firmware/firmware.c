@@ -93,29 +93,27 @@ void sio_txdiag_sample(void) {
     dbg_tx_state_or |= (d >> 4) & 0xF;        // p2s_state
 }
 
-// --- Timing diagnostics for the "machine too fast / window too narrow" theory ---
-uint32_t dbg_frame_rate = 0;          // Atari VBLANKs/sec (RTCLOK delta over ~1s); ~60=NTSC
+// --- Frame-rate / lines-per-frame measurement (reads hardware reg_video_diag,
+//     NOT SDRAM -> reliable, no arbiter starvation, no hang) ---
+uint32_t dbg_frame_rate = 0;          // measured Atari frames/sec (~60 = correct NTSC)
+uint32_t dbg_lines_per_frame = 0;     // scanlines per frame (~262 = correct NTSC)
 uint32_t dbg_resp_time_us = 0;        // duration of the last sio_process_command (us)
 static uint32_t fr_last_cycle = 0;
-static uint32_t fr_last_rtclok = 0;
-
-// Read the OS frame counter RTCLOK ($12 MSB, $13, $14 LSB) from Atari RAM.
-static uint32_t read_rtclok(void) {
-    volatile uint8_t *a = (volatile uint8_t *)0x00200000; // 0x00200000 == Atari $0000
-    return ((uint32_t)a[0x12] << 16) | ((uint32_t)a[0x13] << 8) | (uint32_t)a[0x14];
-}
+static uint16_t fr_last_vs = 0;
 
 void frame_rate_sample(void) {
     uint32_t now = reg_cycle;
     if ((uint32_t)(now - fr_last_cycle) >= 27000000u) { // ~1 second at 27 MHz
-        uint32_t rt = read_rtclok();
+        uint32_t vd = reg_video_diag;
+        uint16_t vs = (uint16_t)(vd & 0xFFFF);          // free-running frame counter
+        dbg_lines_per_frame = (vd >> 16) & 0xFFFF;      // latched lines/frame
         if (fr_last_cycle != 0) {
             uint32_t dc  = now - fr_last_cycle;
-            uint32_t drt = rt - fr_last_rtclok;
-            dbg_frame_rate = (uint32_t)(((uint64_t)drt * 27000000u) / dc);
+            uint16_t dvs = vs - fr_last_vs;             // frames elapsed
+            dbg_frame_rate = (uint32_t)(((uint64_t)dvs * 27000000u) / dc);
         }
-        fr_last_cycle  = now;
-        fr_last_rtclok = rt;
+        fr_last_cycle = now;
+        fr_last_vs    = vs;
     }
 }
 
@@ -1280,8 +1278,9 @@ int main() {
             printf("Mounted: %s", mounted_atr_name);
 
             cursor(2, 9);
-            // Rsp = how long our SIO response takes (us); TXdiv = active TX divisor.
-            printf("Rsp:%dus TXdiv:%d", (int)dbg_resp_time_us, reg_sio_divisor & 0xFF);
+            // FR = measured Atari frame rate (~60 NTSC); LPF = lines/frame (~262 NTSC).
+            printf("FR:%d/s LPF:%d Rsp:%dus", (int)dbg_frame_rate,
+                   (int)dbg_lines_per_frame, (int)dbg_resp_time_us);
 
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");
@@ -1406,9 +1405,7 @@ int main() {
             sio_poll();
             sio_poll();
             sio_poll();
-            // NOTE: frame_rate_sample() removed — it read Atari RAM over SDRAM,
-            // which can be starved by the strict Atari-priority arbiter during
-            // boot and stall the firmware (PicoRV32 mem_ready never asserts).
+            frame_rate_sample();   // reads reg_video_diag (a register, NOT SDRAM) — safe
             uart_keyboard_poll();
 
             // Check for menu toggle (S2 button bit9, or F12 bit3)

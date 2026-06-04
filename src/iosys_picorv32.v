@@ -44,6 +44,7 @@ module iosys_picorv32 #(
     output [15:0] overlay_color,    // BGR5, [15] is opacity
     input [11:0] joy1,              // joystick 1: (R L X A RT LT DN UP START SELECT Y B)
     input [11:0] joy2,              // joystick 2
+    input [31:0] video_diag,        // [31:16]=lines/frame, [15:0]=frame counter (for frame-rate diag)
 
     // ROM loading interface
     output reg rom_loading,         // 0-to-1 loading starts, 1-to-0 loading is finished
@@ -192,6 +193,7 @@ wire        time_reg_sel = mem_valid && (mem_addr == 32'h0200_0050);        // m
 wire        cycle_reg_sel = mem_valid && (mem_addr == 32'h0200_0054);       // cycles counter (overflows every 200 seconds)
 
 wire        id_reg_sel = mem_valid && (mem_addr == 32'h0200_0060);
+wire        video_diag_sel = mem_valid && (mem_addr == 32'h0200_0064);   // [31:16]=lines/frame [15:0]=frame counter
 
 wire        spiflash_reg_byte_sel = mem_valid && (mem_addr == 32'h0200_0070);
 wire        spiflash_reg_word_sel = mem_valid && (mem_addr == 32'h0200_0074);
@@ -215,7 +217,7 @@ always @(posedge clk) begin
 end
 
 assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuart_reg_div_sel ||
-            romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel || time_reg_sel || cycle_reg_sel || id_reg_sel ||
+            romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel || time_reg_sel || cycle_reg_sel || id_reg_sel || video_diag_sel ||
             (simpleuart_reg_dat_sel && !simpleuart_reg_dat_wait) ||
             ((simplespimaster_reg_byte_sel || simplespimaster_reg_word_sel) && !simplespimaster_reg_wait) ||
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
@@ -266,6 +268,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         time_reg_sel ? time_reg :
         cycle_reg_sel ? cycle_reg :
         id_reg_sel ? {16'b0, CORE_ID} :
+        video_diag_sel ? video_diag :
         simplespimaster_reg_cs_sel ? {31'b0, sd_cs_reg} :
         simplespimaster_reg_clkdiv_sel ? {24'b0, sd_clkdiv_reg} :
         (simplespimaster_reg_byte_sel | simplespimaster_reg_word_sel) ? simplespimaster_reg_do : 
