@@ -93,6 +93,32 @@ void sio_txdiag_sample(void) {
     dbg_tx_state_or |= (d >> 4) & 0xF;        // p2s_state
 }
 
+// --- Timing diagnostics for the "machine too fast / window too narrow" theory ---
+uint32_t dbg_frame_rate = 0;          // Atari VBLANKs/sec (RTCLOK delta over ~1s); ~60=NTSC
+uint32_t dbg_resp_time_us = 0;        // duration of the last sio_process_command (us)
+static uint32_t fr_last_cycle = 0;
+static uint32_t fr_last_rtclok = 0;
+
+// Read the OS frame counter RTCLOK ($12 MSB, $13, $14 LSB) from Atari RAM.
+static uint32_t read_rtclok(void) {
+    volatile uint8_t *a = (volatile uint8_t *)0x00200000; // 0x00200000 == Atari $0000
+    return ((uint32_t)a[0x12] << 16) | ((uint32_t)a[0x13] << 8) | (uint32_t)a[0x14];
+}
+
+void frame_rate_sample(void) {
+    uint32_t now = reg_cycle;
+    if ((uint32_t)(now - fr_last_cycle) >= 27000000u) { // ~1 second at 27 MHz
+        uint32_t rt = read_rtclok();
+        if (fr_last_cycle != 0) {
+            uint32_t dc  = now - fr_last_cycle;
+            uint32_t drt = rt - fr_last_rtclok;
+            dbg_frame_rate = (uint32_t)(((uint64_t)drt * 27000000u) / dc);
+        }
+        fr_last_cycle  = now;
+        fr_last_rtclok = rt;
+    }
+}
+
 void status(char *msg) {
     cursor(0, 27);
     for (int i = 0; i < 32; i++)
@@ -992,7 +1018,9 @@ void sio_poll(void) {
             }
             dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
 
+            uint32_t rsp_t0 = reg_cycle;
             sio_process_command();
+            dbg_resp_time_us = (uint32_t)(reg_cycle - rsp_t0) / 27;
             sio_cmd_idx = 0;
 
             // Anti-lag resync: the response above blocks for several ms, during
@@ -1235,14 +1263,10 @@ int main() {
             printf("Mounted: %s", mounted_atr_name);
 
             cursor(2, 9);
-            // reg_sio_divisor READ now returns the ACTIVE TX divisor (divisor_reg).
-            // Expect 94 if our divisor write landed; 0 means the write never took.
-            uint8_t txdiv = reg_sio_divisor & 0xFF;
-            uint32_t txstat = reg_sio_tx_stat;
-            // txstat bit8=empty, bit9=full, [7:0]=count
-            printf("TXdiv:%d e%d f%d cnt%d push:%d", txdiv,
-                   (txstat >> 8) & 1, (txstat >> 9) & 1, txstat & 0xFF,
-                   (int)dbg_sio_tx_count);
+            // Timing theory: FR = Atari frame rate (VBLANKs/sec; ~60 NTSC, ~80 = 1/3 fast),
+            // Rsp = how long our blocking SIO response takes (us).
+            printf("FR:%d/s Rsp:%dus TXdiv:%d", (int)dbg_frame_rate,
+                   (int)dbg_resp_time_us, reg_sio_divisor & 0xFF);
 
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");
@@ -1370,6 +1394,7 @@ int main() {
             sio_txdiag_sample();
             sio_poll();
             sio_txdiag_sample();
+            frame_rate_sample();
             uart_keyboard_poll();
 
             // Check for menu toggle (S2 button bit9, or F12 bit3)
