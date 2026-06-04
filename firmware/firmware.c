@@ -979,6 +979,14 @@ void sio_poll(void) {
 
             sio_process_command();
             sio_cmd_idx = 0;
+
+            // Anti-lag resync: the response above blocks for several ms, during
+            // which the Atari may fire off command retries that pile up in the RX
+            // FIFO. Those are stale — answering them puts us permanently a step
+            // behind the Atari (its ACK window has already closed). Discard them
+            // and let the NEXT sio_poll catch the Atari's current, fresh command.
+            while (!sio_rx_empty()) { (void)reg_sio_rx; }
+            break;
         }
     }
 }
