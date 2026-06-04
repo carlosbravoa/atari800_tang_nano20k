@@ -1444,8 +1444,12 @@ static uint8_t ch_idx = 0;
 static uint32_t last_kbd_time = 0;
 
 void uart_keyboard_poll(void) {
-    // Process all pending bytes in the UART receiver
-    for (;;) {
+    // Process pending bytes in the UART receiver, but BOUNDED: a continuous RX
+    // stream (e.g. noise on a repurposed/floating UART pin) must not spin here
+    // forever, or the main loop never reaches the S2/F12 menu-key check and the
+    // menu becomes unreachable. 64 bytes/call drains real CH9350 packets fine;
+    // the state machine (ch_state) persists across calls.
+    for (int _n = 0; _n < 64; _n++) {
         uint32_t val = reg_uart_data;
         if (val == 0xFFFFFFFF) {
             break;
