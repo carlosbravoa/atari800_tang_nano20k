@@ -721,8 +721,11 @@ void sio_tx_byte(uint8_t b) {
 }
 
 void sio_wait_tx_empty(void) {
+    // Bounded: if the p2s ever stops draining (e.g. POKEY_ENABLE stalls), this must
+    // NOT hang the firmware forever, or the main loop can't service the menu key.
+    uint32_t start = reg_cycle;
     while (!(reg_sio_tx_stat & 0x100)) {
-        // Wait until TX FIFO is empty
+        if ((uint32_t)(reg_cycle - start) > 27u * 20000u) break; // 20 ms safety cap
     }
     // Wait for the last byte to finish serializing on wire (520us @ 19200)
     delay_us(600);
@@ -1411,21 +1414,23 @@ int main() {
                 overlay(0);
             }
         } else {
-            // Background polling loop — call sio_poll as fast as possible.
-            // Also poll for menu toggle key (S2 or F12) without heavy delays.
-            sio_poll();
-            sio_poll();
-            sio_poll();
-            frame_rate_sample();   // reads reg_video_diag (a register, NOT SDRAM) — safe
-            uart_keyboard_poll();
-
-            // Check for menu toggle (S2 button bit9, or F12 bit3)
+            // Check the menu toggle key FIRST, before sio_poll — otherwise a mounted
+            // disk's SIO flood keeps the loop busy in sio_poll and the OSD becomes
+            // unreachable. (S2 button bit9, or F12 bit3.)
             int joy1, joy2;
             joy_get(&joy1, &joy2);
             if ((joy1 & 8) || (joy1 & 0x200) || (joy2 & 0x200)) { // START / F12 or S2 button
                 booted = false;
                 delay(300);
+                continue;   // enter the menu now; skip SIO this iteration
             }
+
+            // Background polling loop — service SIO (bounded per call).
+            sio_poll();
+            sio_poll();
+            sio_poll();
+            frame_rate_sample();   // reads reg_video_diag (a register, NOT SDRAM) — safe
+            uart_keyboard_poll();
         }
     }
 }
