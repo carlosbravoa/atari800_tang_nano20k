@@ -941,7 +941,11 @@ atari800core_simple_sdram #(
     // only to overlay left a window where wake_latch ran the CPU while the Atari was
     // still live → both hammered SDRAM → emulation broke on menu entry.
     .HALT                       (cpu_run_allowed),
-    .THROTTLE_COUNT_6502        (6'd31),
+    // 0 = true 1x 6502 speed (CPU runs only on enable_179, locked to ANTIC/POKEY).
+    // The speed-shift logic ADDS a CPU enable per set throttle bit, so 6'd31 was
+    // 6 enables/machine-cycle => ~6x too fast (boot/loop 6x, SIO windows 6x narrow).
+    // The core's "standard speed is cycle_length-1" comment is misleading here.
+    .THROTTLE_COUNT_6502        (6'd0),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
     .EMU_FLASH_REQUEST          (),
