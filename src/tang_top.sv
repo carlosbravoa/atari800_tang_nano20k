@@ -292,7 +292,15 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
             wake_latch <= 1'b0;          // overlay up → it now holds the CPU running
     end
 end
-wire cpu_run_allowed = overlay_sync_r[2] || wake_latch;
+// cpu_run_allowed = overlay only. The wake_latch entry-handshake is removed:
+// it existed for when firmware ran from SDRAM (gated off until "woken"), but
+// firmware now runs from BSRAM and always polls S2/F12 — so it raises the overlay
+// itself, no hardware kick needed. The old latch could stick high (S2 -> halt,
+// overlay never came up -> Atari frozen unrecoverably). The menu loop touches no
+// SDRAM, so the firmware never stalls with the overlay down.
+wire cpu_run_allowed = overlay_sync_r[2];
+wire _unused_wake = wake_latch; // keep signal defined; logic below is now dead
+
 
 wire rv_req = rv_valid_core && !rv_hold && cpu_run_allowed;  // gated new request
 
@@ -665,6 +673,33 @@ wire        enable_179_early;
 
 assign dbg_sd_ready = roms_loaded;
 
+// ── Frame-rate / lines-per-frame diagnostic ─────────────────────────────────
+// Count the Atari core's own video sync (clk_core domain): vs rising edge = one
+// frame, hs rising edges = scanlines. Lets the firmware compute the REAL frame
+// rate and lines/frame to localize the "runs ~1/3 fast" issue (vertical line
+// count vs horizontal line length). Reliable: pure counters, no SDRAM, latched
+// values change slowly so a plain 2-FF sync to sys_clk is safe.
+reg        video_vs_d = 1'b0, video_hs_d = 1'b0;
+reg [15:0] vs_frame_count = 16'd0;   // free-running: +1 per frame
+reg [15:0] line_count     = 16'd0;   // scanlines in the current frame
+reg [15:0] lines_per_frame = 16'd0;  // latched at end of each frame
+always_ff @(posedge clk_core) begin
+    video_vs_d <= video_vs;
+    video_hs_d <= video_hs;
+    if (~video_hs_d & video_hs) line_count <= line_count + 16'd1;   // hsync rising
+    if (~video_vs_d & video_vs) begin                               // vsync rising
+        vs_frame_count  <= vs_frame_count + 16'd1;
+        lines_per_frame <= line_count;
+        line_count      <= 16'd0;
+    end
+end
+reg [15:0] vs_cnt_s1, vs_cnt_sys, lpf_s1, lpf_sys;
+always_ff @(posedge sys_clk) begin
+    vs_cnt_s1 <= vs_frame_count;  vs_cnt_sys <= vs_cnt_s1;
+    lpf_s1    <= lines_per_frame; lpf_sys    <= lpf_s1;
+end
+wire [31:0] video_diag = {lpf_sys, vs_cnt_sys};  // [31:16]=lines/frame, [15:0]=frame counter
+
 // PicoRV32 IO subsystem module
 // iosys_picorv32 stays on sys_clk (27 MHz): firmware compiled for that frequency.
 // Its SPI/SD timing is correct only at 27 MHz; CDC to the 54 MHz arbiter is
@@ -685,6 +720,9 @@ iosys_picorv32 #(
     .overlay_color(overlay_color),
     .joy1(rv_joy1),
     .joy2(rv_joy2),
+
+    // Frame-rate / lines-per-frame diagnostic
+    .video_diag(video_diag),
 
     // ROM loading interface
     .rom_loading(rom_loading),
@@ -911,7 +949,11 @@ atari800core_simple_sdram #(
     // only to overlay left a window where wake_latch ran the CPU while the Atari was
     // still live → both hammered SDRAM → emulation broke on menu entry.
     .HALT                       (cpu_run_allowed),
-    .THROTTLE_COUNT_6502        (6'd31),
+    // 0 = true 1x 6502 speed (CPU runs only on enable_179, locked to ANTIC/POKEY).
+    // The speed-shift logic ADDS a CPU enable per set throttle bit, so 6'd31 was
+    // 6 enables/machine-cycle => ~6x too fast (boot/loop 6x, SIO windows 6x narrow).
+    // The core's "standard speed is cycle_length-1" comment is misleading here.
+    .THROTTLE_COUNT_6502        (6'd0),
     .emulated_cartridge_select  (8'd0),
     .emulated_cartridge2_select (8'd0),
     .EMU_FLASH_REQUEST          (),
@@ -1118,12 +1160,27 @@ wire joy_poll_dbg;
 wire cpu_progress_dbg;
 wire dbg_stall_undec, dbg_stall_peri, dbg_stall_ram;
 
+// Pulse-stretch SIO line activity to ~78 ms so the eye can see it.
+// A serial bit is ~55 us (invisible); stretch any LOW (start/0 bit) to a long blink.
+// sio_rx_data_in = our DRIVE's transmit line (sys_clk domain, handler output)
+// sio_txd_sys    = Atari's transmit line, synchronized to sys_clk
+localparam [21:0] SIO_STRETCH = 22'h3FFFFF; // 2^22-1 @ 27 MHz ≈ 155 ms
+reg [21:0] sio_tx_stretch = 22'd0; // our drive -> Atari activity
+reg [21:0] sio_rx_stretch = 22'd0; // Atari -> drive activity
+always_ff @(posedge sys_clk) begin
+    if (!sio_rx_data_in)    sio_tx_stretch <= SIO_STRETCH;
+    else if (sio_tx_stretch) sio_tx_stretch <= sio_tx_stretch - 1'b1;
+
+    if (!sio_txd_sys)       sio_rx_stretch <= SIO_STRETCH;
+    else if (sio_rx_stretch) sio_rx_stretch <= sio_rx_stretch - 1'b1;
+end
+
 // SIO DIAGNOSTIC LED map (pins via leds_n[4:1] = pins17,18,19,20 = LED2,3,4,5):
-//   LED2 pin17 (leds_n[1]) = sio_command    : ON when SIO Command is active (low)
-//   LED3 pin18 (leds_n[2]) = sio_rx_data_in : Flashes when drive transmits to Atari
-//   LED4 pin19 (leds_n[3]) = sio_txd        : Flashes when Atari transmits to drive
-//   LED5 pin20 (leds_n[4]) = ~blink_cnt[22] : ~6 Hz heartbeat
-assign leds_n = {~blink_cnt[22], sio_txd, sio_rx_data_in, sio_command};
+//   LED2 pin17 (leds_n[1]) = sio_command         : ON when SIO Command line is active (low)
+//   LED3 pin18 (leds_n[2]) = |sio_tx_stretch     : BLINKS when OUR DRIVE transmits to the Atari
+//   LED4 pin19 (leds_n[3]) = |sio_rx_stretch     : BLINKS when the Atari transmits to the drive
+//   LED5 pin20 (leds_n[4]) = ~blink_cnt[22]      : ~6 Hz FPGA-alive heartbeat
+assign leds_n = {~blink_cnt[22], ~(|sio_rx_stretch), ~(|sio_tx_stretch), sio_command};
 
 
 endmodule

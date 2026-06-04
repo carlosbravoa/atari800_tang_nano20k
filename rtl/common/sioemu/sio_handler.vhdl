@@ -137,8 +137,26 @@ ARCHITECTURE vhdl OF sio_handler IS
 	signal s2p_start : std_logic;
 
 	signal framing_error_clear : std_logic;
-	
+
+	signal rx_tick : std_logic;
+	signal rx_counter_reg : unsigned(7 downto 0);
+	signal rx_counter_next : unsigned(7 downto 0);
+
+	signal command_active : std_logic;
+	signal command_active_now : std_logic;
+	signal rx_read_done : std_logic;
+
+	-- TX diagnostic: free-running counter incremented by POKEY_ENABLE, so firmware
+	-- can tell whether the transmit clock-enable is alive (counter moves) or dead.
+	signal pokey_tick_count_reg : std_logic_vector(7 downto 0);
+	signal pokey_tick_count_next : std_logic_vector(7 downto 0);
+
 begin
+	pokey_tick_count_next <= std_logic_vector(unsigned(pokey_tick_count_reg)+1) when pokey_enable='1'
+	                         else pokey_tick_count_reg;
+	command_active <= not(sio_command_reg);
+	command_active_now <= not(sio_command);
+
 	-- register
 	process(clk,reset_n)
 	begin
@@ -147,7 +165,7 @@ begin
 			sio_command_reg <= '1';
 			sio_command_count_reg <= (others=>'0');
 			sio_command_framing_error_reg <= '0';
-			divisor_reg <= (others=>'0');
+			divisor_reg <= x"5D"; -- default divisor 93 (matches Atari measured rate) so TX baud is sane from reset
 			pending_divisor_reg <= (others=>'0');
 			transmit_divisor_count_reg <= (others=>'0');
 			receive_divisor_count_reg <= (others=>'0');
@@ -160,7 +178,11 @@ begin
 			p2s_transmit_reg <= '1';
 			data_out_reg <= (others=>'0');
 			sio_clk_out_reg <='0';
+			rx_counter_reg <= (others=>'0');
+			rx_read_done <= '0';
+			pokey_tick_count_reg <= (others=>'0');
 		elsif (clk'event and clk='1') then
+			pokey_tick_count_reg <= pokey_tick_count_next;
 			sio_data_out_reg <= sio_data_out_next;
 			sio_command_reg <= sio_command_next;
 			sio_command_count_reg <= sio_command_count_next;
@@ -178,6 +200,8 @@ begin
 			p2s_transmit_reg <= p2s_transmit_next;
 			data_out_reg <= data_out_next;
 			sio_clk_out_reg <= sio_clk_out;
+			rx_counter_reg <= rx_counter_next;
+			rx_read_done <= en and addr_decoded(2);
 		end if;
 	end process;
 
@@ -202,48 +226,28 @@ begin
 		end if;
 	end process;
 
-	-- Only change divisor once we are done transmitting
-	process(divisor_reg,pending_divisor_reg,p2s_idle)
+	-- Apply the divisor directly on a register write to addr 4.
+	-- (Was gated on p2s_idle via pending_divisor — a MiSTer same-clock-domain
+	--  feature that never fired in this sys_clk port: divisor_reg stayed 0, so the
+	--  p2s clocked a bit every POKEY tick and transmitted at garbage baud. The
+	--  reset default of 94 also keeps TX sane even if the write is never seen.)
+	process(divisor_reg, cpu_data_in, wr_en, addr_decoded)
 	begin
-		divisor_next<=divisor_reg;
+		divisor_next <= divisor_reg;
 
-		if (not(pending_divisor_reg = divisor_reg) and p2s_idle='1') then
-			divisor_next <= pending_divisor_reg;
+		if (wr_en = '1' and addr_decoded(4) = '1') then
+			divisor_next <= cpu_data_in(7 downto 0);
 		end if;
 	end process;
 
 	-- Count command packets rather than storing command position in fifo
-	process(s2p_start,fifo_tx_empty,sio_command_reg,sio_command,sio_command_count_reg,sio_command_framing_error_reg,framing_error_clear)
-	begin
-		sio_command_next <= sio_command;
-		sio_command_count_next <= sio_command_count_reg;
-		sio_command_framing_error_next <= sio_command_framing_error_reg;
-		sio_command_rising <= '0';
-
-		if (fifo_tx_empty = '1') then
-			if (sio_command_reg='1') then -- not a command
-				sio_command_count_next <= (others=>'0');
-			end if;
-
-			if (s2p_start='1' and sio_command_reg='0') then
-				sio_command_count_next <= std_logic_vector(unsigned(sio_command_count_reg)+1);
-			end if;
-
-			if (sio_command_reg='0' and sio_command='1') then -- rising edge
-				sio_command_rising <= '1';
-				if (sio_command_count_reg /= "0000101") then 
-					sio_command_framing_error_next <= '1'; 
-				end if;
-			end if;
-
-			if (framing_error_clear='1') then
-				sio_command_framing_error_next <= '0';
-			end if;
-		end if;
-	end process;
+	sio_command_next <= sio_command;
+	sio_command_count_next <= (others=>'0');
+	sio_command_framing_error_next <= '0';
+	sio_command_rising <= '0';
 	
 	-- Read from registers
-	process(en,addr_decoded, data_out_reg, fifo_rx_data, fifo_tx_full, fifo_tx_empty, fifo_tx_count, fifo_rx_full, fifo_rx_empty, fifo_rx_count, s2p_framing_error_reg, sio_command_framing_error_reg, receive_divisor_reg)
+	process(en,addr_decoded, data_out_reg, fifo_rx_data, fifo_tx_full, fifo_tx_empty, fifo_tx_count, fifo_rx_full, fifo_rx_empty, fifo_rx_count, s2p_framing_error_reg, sio_command_framing_error_reg, receive_divisor_reg, pokey_enable, rx_tick, sio_command_reg, sio_data_out_reg, rx_counter_reg, s2p_state_reg, rx_read_done, pokey_tick_count_reg, p2s_transmit_reg)
 	begin
 		data_out_next <= data_out_reg;
 		fifo_rx_advance <= '0';
@@ -254,7 +258,7 @@ begin
 				data_out_next <= "000000" & fifo_tx_full&fifo_tx_empty&fifo_tx_count;
 			end if;
 			if (addr_decoded(2) = '1') then
-				if fifo_rx_empty = '0' then
+				if fifo_rx_empty = '0' and rx_read_done = '0' then
 					data_out_next <= '0' & fifo_rx_data; -- assumed to be already valid
 					fifo_rx_advance <= '1'; -- data read, next byte please
 				end if;
@@ -263,11 +267,22 @@ begin
 				data_out_next <= "000000" & fifo_rx_full&fifo_rx_empty&fifo_rx_count;
 			end if;
 			if (addr_decoded(4) = '1') then
-				data_out_next <= "00000000" & receive_divisor_reg;
+				-- DIAG: return the ACTIVE TX divisor (divisor_reg) so firmware can
+				-- confirm its divisor write actually landed. (Was receive_divisor_reg,
+				-- the independently-measured value, which masked a failed write.)
+				data_out_next <= "00000000" & divisor_reg;
 			end if;
 			if (addr_decoded(5) = '1') then
 				data_out_next <= "00000000000000" & sio_command_framing_error_reg&s2p_framing_error_reg;
 				framing_error_clear <= '1';
+			end if;
+			if (addr_decoded(6) = '1') then
+				data_out_next <= pokey_enable & rx_tick & sio_command_reg & sio_data_out_reg & std_logic_vector(rx_counter_reg) & s2p_state_reg;
+			end if;
+			if (addr_decoded(7) = '1') then
+				-- TX diagnostic: [15:8]=pokey tick counter, [7:4]=p2s_state,
+				-- [3]=fifo_tx_full, [2]=fifo_tx_empty, [1]=p2s_transmit (TX line), [0]=spare
+				data_out_next <= pokey_tick_count_reg & p2s_state_reg & fifo_tx_full & fifo_tx_empty & p2s_transmit_reg & '0';
 			end if;
 		end if;
 		
@@ -424,13 +439,13 @@ transmit_fifo : work.fifo_transmit
 
 	sio_data_out_next <= sio_data_out;
 
-	receive_write <= s2p_write or sio_command_rising;
+	receive_write <= s2p_write;
 
 receive_fifo : entity work.fifo_receive
 	PORT MAP
 	(
 		clock		=> clk,
-		data		=> sio_command_count_reg&sio_data_out_reg&s2p_shift_reg(6 downto 0),
+		data		=> "000000"&command_active&sio_data_out_reg&s2p_shift_reg(6 downto 0),
 		rdreq		=> fifo_rx_advance,
 		wrreq		=> receive_write,
 		empty		=> fifo_rx_empty,
@@ -439,12 +454,51 @@ receive_fifo : entity work.fifo_receive
 		usedw		=> fifo_rx_count
 	);
 
+	-- Asynchronous baud rate clock generator for receiver
+	process(rx_counter_reg, pokey_enable, divisor_reg, s2p_state_reg, sio_data_out_reg)
+		variable divisor : unsigned(7 downto 0);
+	begin
+		rx_counter_next <= rx_counter_reg;
+		rx_tick <= '0';
+
+		if (unsigned(divisor_reg) <= 1) then
+			-- Default to 19200 baud divisor (93) if divisor_reg is invalid
+			divisor := to_unsigned(93, 8);
+		else
+			divisor := unsigned(divisor_reg);
+		end if;
+
+		if (s2p_state_reg = S2P_STATE_WAIT) then
+			if (sio_data_out_reg = '1') then
+				rx_counter_next <= (others => '0');
+			elsif (pokey_enable = '1') then
+				-- Wait for half of divisor to sample start bit in the middle
+				if (rx_counter_reg = shift_right(divisor, 1)) then
+					rx_tick <= '1';
+					rx_counter_next <= (others => '0');
+				else
+					rx_counter_next <= rx_counter_reg + 1;
+				end if;
+			end if;
+		else
+			if (pokey_enable = '1') then
+				-- Wait for full divisor to sample subsequent bits (including stop bit) in the middle
+				if (rx_counter_reg = divisor - 1) then
+					rx_tick <= '1';
+					rx_counter_next <= (others => '0');
+				else
+					rx_counter_next <= rx_counter_reg + 1;
+				end if;
+			end if;
+		end if;
+	end process;
+
 	-- serial to parallel converter
 	-- 0 = start bit (space)
 	-- 8 data bits
 	-- 1 = stop bit (mask)
 	-- Note:sio_data_out_reg = computer out, zpu in...
-	process(s2p_state_reg,s2p_shift_reg,receive_enable,sio_data_out_reg,framing_error_clear, s2p_framing_error_reg)
+	process(s2p_state_reg, s2p_shift_reg, rx_tick, sio_data_out_reg, framing_error_clear, s2p_framing_error_reg)
 	begin
 		s2p_state_next <= s2p_state_reg;
 		s2p_shift_next <= s2p_shift_reg;
@@ -452,29 +506,25 @@ receive_fifo : entity work.fifo_receive
 
 		s2p_start <= '0';
 		s2p_write <= '0';
-		receive_detect <= '0';
 
 		if (framing_error_clear='1') then
 			s2p_framing_error_next <= '0';
 		end if;
 		
-		if (receive_enable='1') then
+		if (rx_tick='1') then
 			s2p_shift_next <= sio_data_out_reg&s2p_shift_reg(6 downto 1);
 
 			case s2p_state_reg is
 				when S2P_STATE_WAIT =>
-					if (sio_data_out_reg='0') then -- start bit -- TODO - sync clock??
+					if (sio_data_out_reg='0') then -- start bit
 						s2p_state_next <= S2P_STATE_SHIFT_0;
 						s2p_start <= '1';
 					end if;
 				when S2P_STATE_SHIFT_0 =>
-					receive_detect <= '1';
 					s2p_state_next <= S2P_STATE_SHIFT_1;
 				when S2P_STATE_SHIFT_1 =>
-					receive_detect <= '1';
 					s2p_state_next <= S2P_STATE_SHIFT_2;
 				when S2P_STATE_SHIFT_2 =>
-					receive_detect <= '1';
 					s2p_state_next <= S2P_STATE_SHIFT_3;
 				when S2P_STATE_SHIFT_3 =>
 					s2p_state_next <= S2P_STATE_SHIFT_4;
@@ -496,6 +546,10 @@ receive_fifo : entity work.fifo_receive
 		end if;
 
 	end process;
+
+	receive_detect <= '1' when (s2p_state_reg = S2P_STATE_SHIFT_0 or
+	                            s2p_state_reg = S2P_STATE_SHIFT_1 or
+	                            s2p_state_reg = S2P_STATE_SHIFT_2) else '0';
 	
 	-- output
 	sio_data_in <= p2s_transmit_reg;
