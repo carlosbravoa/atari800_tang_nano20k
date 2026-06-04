@@ -292,7 +292,15 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
             wake_latch <= 1'b0;          // overlay up → it now holds the CPU running
     end
 end
-wire cpu_run_allowed = overlay_sync_r[2] || wake_latch;
+// cpu_run_allowed = overlay only. The wake_latch entry-handshake is removed:
+// it existed for when firmware ran from SDRAM (gated off until "woken"), but
+// firmware now runs from BSRAM and always polls S2/F12 — so it raises the overlay
+// itself, no hardware kick needed. The old latch could stick high (S2 -> halt,
+// overlay never came up -> Atari frozen unrecoverably). The menu loop touches no
+// SDRAM, so the firmware never stalls with the overlay down.
+wire cpu_run_allowed = overlay_sync_r[2];
+wire _unused_wake = wake_latch; // keep signal defined; logic below is now dead
+
 
 wire rv_req = rv_valid_core && !rv_hold && cpu_run_allowed;  // gated new request
 
