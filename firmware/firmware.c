@@ -730,6 +730,17 @@ void sio_wait_tx_empty(void) {
     delay_us(600);
 }
 
+// Wait until the Atari deasserts the SIO command line (reg_sio_diag bit13 = 1),
+// i.e. the command frame is over and the computer is turning around to receive.
+// Lets us send the ACK as early as possible without sending it too early (while
+// the Atari is still transmitting / not yet listening). Bounded so we never hang.
+void sio_wait_cmd_high(void) {
+    uint32_t start = reg_cycle;
+    while (((reg_sio_diag >> 13) & 1) == 0) {
+        if ((uint32_t)(reg_cycle - start) > 27u * 4000u) break; // 4 ms safety cap
+    }
+}
+
 // Atari SIO checksum: 8-bit sum with END-AROUND CARRY (NOT plain mod-256).
 // Every overflow out of bit 7 is added back into bit 0. A plain (sum & 0xFF)
 // is wrong whenever the running sum carries, which makes the Atari reject our
@@ -809,13 +820,19 @@ void sio_process_command(void) {
     dbg_last_sio_cmd = cmd;
     dbg_last_sio_sector = sector;
     dbg_last_sio_status = 0;
-    
+
+    // Send the ACK as early as the protocol allows: wait only until the Atari
+    // releases the command line (it's then turning around to receive), instead
+    // of a fixed multi-ms delay. On this fast machine the ACK window is narrow,
+    // so minimizing response latency is what lets the ACK land inside it.
+    sio_wait_cmd_high();
+
     switch (cmd) {
         case 0x53: { // Status command
             uart_printf("SIO STATUS\n");
             dbg_sio_status_count++;
             // 1. Send ACK (with command-to-ACK SIO delay)
-            delay_us(1000);
+            delay_us(250);
             sio_tx_byte(0x41); // 'A'
             sio_wait_tx_empty();
             
@@ -834,14 +851,14 @@ void sio_process_command(void) {
             uint8_t sum = sio_checksum(status_block, 4);
 
             // 3. Delay 1ms (ACK-to-Complete delay)
-            delay_us(1000);
+            delay_us(250);
 
             // 4. Send Complete (must precede the data frame for reads/status)
             sio_tx_byte(0x43); // 'C'
             sio_wait_tx_empty();
 
             // 5. Delay 1ms (Complete-to-Data delay)
-            delay_us(1000);
+            delay_us(250);
 
             // 6. Send status bytes
             for (int i = 0; i < 4; i++) {
@@ -861,7 +878,7 @@ void sio_process_command(void) {
             int sector_len = 128;
             
             // 1. Send ACK first to satisfy the tight 16ms command-to-ACK window
-            delay_us(1000);
+            delay_us(250);
             sio_tx_byte(0x41); // 'A' (ACK)
             sio_wait_tx_empty();
             
@@ -872,14 +889,14 @@ void sio_process_command(void) {
                 uint8_t sum = sio_checksum(sector_buf, sector_len);
 
                 // 3. Delay 1ms (ACK-to-Complete delay)
-                delay_us(1000);
+                delay_us(250);
 
                 // 4. Send Complete (must precede the data frame for reads)
                 sio_tx_byte(0x43); // 'C' (Complete)
                 sio_wait_tx_empty();
 
                 // 5. Delay 1ms (Complete-to-Data delay)
-                delay_us(1000);
+                delay_us(250);
 
                 // 6. Send sector data
                 for (int i = 0; i < sector_len; i++) {
@@ -893,7 +910,7 @@ void sio_process_command(void) {
                 uart_printf("Read sector %d failed, sending Error\n", sector);
                 dbg_last_sio_status = r;
                 dbg_sio_err_count++;
-                delay_us(1000);
+                delay_us(250);
                 sio_tx_byte(0x45); // 'E' (Error)
             }
             break;
@@ -907,7 +924,7 @@ void sio_process_command(void) {
             int sector_len = (atr_sector_size == 128 || sector <= 3) ? 128 : 256;
             
             // Send ACK (with command-to-ACK SIO delay)
-            delay_us(1000);
+            delay_us(250);
             sio_tx_byte(0x41); // 'A'
             sio_wait_tx_empty();
             
@@ -917,25 +934,25 @@ void sio_process_command(void) {
                 int wr = atr_write_sector(sector, sector_buf, sector_len);
                 if (wr == 0) {
                     // Send ACK for data frame (with data-to-ACK SIO delay)
-                    delay_us(1000);
+                    delay_us(250);
                     sio_tx_byte(0x41); // 'A'
                     sio_wait_tx_empty();
                     
-                    delay_us(1000);
+                    delay_us(250);
                     // Send Complete
                     sio_tx_byte(0x43); // 'C'
                 } else {
                     uart_printf("Write sector %d failed, sending NAK\n", sector);
                     dbg_last_sio_status = wr;
                     dbg_sio_err_count++;
-                    delay_us(1000);
+                    delay_us(250);
                     sio_tx_byte(0x4E); // 'N' (NAK)
                 }
             } else {
                 uart_printf("Receiving data frame for sector %d failed (error %d), sending NAK\n", sector, r);
                 dbg_last_sio_status = r;
                 dbg_sio_err_count++;
-                delay_us(1000);
+                delay_us(250);
                 sio_tx_byte(0x4E); // 'N' (NAK)
             }
             break;
@@ -944,7 +961,7 @@ void sio_process_command(void) {
         default:
             uart_printf("SIO Unknown Command: %02x\n", cmd);
             dbg_sio_err_count++;
-            delay_us(1000);
+            delay_us(250);
             sio_tx_byte(0x4E); // 'N' (NAK)
             break;
     }
