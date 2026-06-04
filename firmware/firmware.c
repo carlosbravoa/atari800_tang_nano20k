@@ -1280,10 +1280,8 @@ int main() {
             printf("Mounted: %s", mounted_atr_name);
 
             cursor(2, 9);
-            // Timing theory: FR = Atari frame rate (VBLANKs/sec; ~60 NTSC, ~80 = 1/3 fast),
-            // Rsp = how long our blocking SIO response takes (us).
-            printf("FR:%d/s Rsp:%dus TXdiv:%d", (int)dbg_frame_rate,
-                   (int)dbg_resp_time_us, reg_sio_divisor & 0xFF);
+            // Rsp = how long our SIO response takes (us); TXdiv = active TX divisor.
+            printf("Rsp:%dus TXdiv:%d", (int)dbg_resp_time_us, reg_sio_divisor & 0xFF);
 
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");
@@ -1406,12 +1404,11 @@ int main() {
             // Background polling loop — call sio_poll as fast as possible.
             // Also poll for menu toggle key (S2 or F12) without heavy delays.
             sio_poll();
-            sio_txdiag_sample();
             sio_poll();
-            sio_txdiag_sample();
             sio_poll();
-            sio_txdiag_sample();
-            frame_rate_sample();
+            // NOTE: frame_rate_sample() removed — it read Atari RAM over SDRAM,
+            // which can be starved by the strict Atari-priority arbiter during
+            // boot and stall the firmware (PicoRV32 mem_ready never asserts).
             uart_keyboard_poll();
 
             // Check for menu toggle (S2 button bit9, or F12 bit3)
