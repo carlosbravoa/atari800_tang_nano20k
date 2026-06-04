@@ -1,5 +1,7 @@
 # Atari 800 — Tang Nano 20K Port
 
+> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working. We have bad timings and SIO non working, but it is fun to see and play with BASIC for now.
+
 FPGA emulation of the Atari 800/800XL/65XE/130XE on the
 [Sipeed Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html)
 (GW2AR-LV18QN88PC8/I7).
