@@ -45,7 +45,7 @@ module iosys_picorv32 #(
     input [11:0] joy1,              // joystick 1: (R L X A RT LT DN UP START SELECT Y B)
     input [11:0] joy2,              // joystick 2
     input [31:0] video_diag,        // [31:16]=lines/frame, [15:0]=frame counter (for frame-rate diag)
-    input [127:0] sio_cap_buf,      // captured SIO data-line samples (4x 32-bit words)
+    input [159:0] sio_cap_buf,      // SIO capture: words0-3 = 128 samples, word4 = meta (trig count)
 
     // ROM loading interface
     output reg rom_loading,         // 0-to-1 loading starts, 1-to-0 loading is finished
@@ -195,12 +195,12 @@ wire        cycle_reg_sel = mem_valid && (mem_addr == 32'h0200_0054);       // c
 
 wire        id_reg_sel = mem_valid && (mem_addr == 32'h0200_0060);
 wire        video_diag_sel = mem_valid && (mem_addr == 32'h0200_0064);   // [31:16]=lines/frame [15:0]=frame counter
-wire        sio_cap_idx_sel  = mem_valid && (mem_addr == 32'h0200_0068);  // write: select capture word 0..3
+wire        sio_cap_idx_sel  = mem_valid && (mem_addr == 32'h0200_0068);  // write: select capture word 0..4
 wire        sio_cap_data_sel = mem_valid && (mem_addr == 32'h0200_006c);  // read: selected capture word
 
-reg [1:0]   sio_cap_rdidx = 2'd0;
+reg [2:0]   sio_cap_rdidx = 3'd0;   // 0-3 = sample words, 4 = meta
 always @(posedge clk) begin
-    if (sio_cap_idx_sel && |mem_wstrb) sio_cap_rdidx <= mem_wdata[1:0];
+    if (sio_cap_idx_sel && |mem_wstrb) sio_cap_rdidx <= mem_wdata[2:0];
 end
 wire [31:0] sio_cap_word = sio_cap_buf[sio_cap_rdidx*32 +: 32];
 

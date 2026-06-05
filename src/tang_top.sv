@@ -700,10 +700,12 @@ always_ff @(posedge sys_clk) begin
 end
 wire [31:0] video_diag = {lpf_sys, vs_cnt_sys};  // [31:16]=lines/frame, [15:0]=frame counter
 
-// SIO capture buffer: 128 oversampled bits of the Atari->drive data line
-// (sio_txd_sys) during one command frame, for firmware to dump to the OSD.
+// SIO response-line meter results (packed as 4x 32-bit words; see the meter below).
+// word0=min_low word1=min_high word2=ack_lat word3=edges, all in sys_clk cycles.
+// sio_cap_meta[7:0] = count of response windows measured (0 => none seen).
 // Driven below (after the SIO sync signals are defined).
-reg [127:0] sio_cap_buf = 128'd0;
+reg [127:0] sio_cap_buf  = 128'd0;
+reg [31:0]  sio_cap_meta = 32'd0;
 
 // PicoRV32 IO subsystem module
 // iosys_picorv32 stays on sys_clk (27 MHz): firmware compiled for that frequency.
@@ -728,7 +730,7 @@ iosys_picorv32 #(
 
     // Frame-rate / lines-per-frame diagnostic
     .video_diag(video_diag),
-    .sio_cap_buf(sio_cap_buf),
+    .sio_cap_buf({sio_cap_meta, sio_cap_buf}),  // word4 = meta (trig count), words0-3 = samples
 
     // ROM loading interface
     .rom_loading(rom_loading),
@@ -828,37 +830,90 @@ wire sio_command_sys = SIO_COMMAND_sync[1];
 wire sio_txd_sys     = SIO_TXD_sync[1];
 wire sio_clk_out_sys = SIO_CLOCK_sync[1];
 
-// ── SIO data-line capture (diagnostic) ───────────────────────────────────────
-// On the command line going LOW (frame start) sample sio_txd_sys (Atari->drive
-// data) into sio_cap_buf at ~512 sys_clk/sample (~19us, ~3 samples per 55us bit),
-// 128 samples. Captures the first ~4 command bytes. While the OSD is up the Atari
-// is halted so no new frames arrive -> the buffer holds the last frame for the
-// firmware to dump. MSB-first: bit 127 = first sample.
-localparam [15:0] SIO_CAP_DIV = 16'd512;
-reg        sio_cmd_sys_d = 1'b1;
-reg        sio_cap_active = 1'b0;
-reg [7:0]  sio_cap_idx = 8'd0;
-reg [15:0] sio_cap_divcnt = 16'd0;
+// ── SIO RESPONSE-line meter (diagnostic) ─────────────────────────────────────
+// Taps the handler->Atari line (sio_rx_data_in, already in sys_clk) directly,
+// independent of the handler's own (broken) txdiag register. On COMMAND rising
+// (the Atari has finished its command and is now waiting for the ACK) it opens a
+// ~16 ms window and measures the response, in sys_clk (27 MHz) cycles:
+//   word0 = min_low   : shortest LOW run on the response line (~1 ACK bit ~1488)
+//   word1 = min_high  : shortest HIGH run after the first low (~1 bit)
+//   word2 = ack_lat   : cycles from COMMAND-high to the FIRST start bit of the
+//                       response. 0xFFFFFF (16777215) => the handler NEVER drove
+//                       the line low => no ACK was transmitted at all.
+//   word3 = bytes     : first 4 decoded response bytes {byte0,byte1,byte2,byte3}
+//                       (byte0 = first byte sent; a clean STATUS reply = 41 43 ..)
+//   word4 = sio_cap_meta[7:0] : count of response windows measured
+localparam [23:0] RESP_WINDOW = 24'd432000;  // ~16 ms at 27 MHz
+localparam [11:0] BIT1_5 = 12'd2256;         // 1.5 bit periods (centre of data bit 0)
+localparam [11:0] BIT1_0 = 12'd1504;         // 1 bit period (measured)
+reg        rxd_d     = 1'b1;
+reg        rcmd_d    = 1'b1;
+reg        rmeas     = 1'b0;
+reg        rseen_low = 1'b0;
+reg [15:0] rrun      = 16'd0;
+reg [15:0] rmin_low  = 16'hFFFF;
+reg [15:0] rmin_high = 16'hFFFF;
+reg [23:0] rwin      = 24'd0;
+reg [23:0] rack_lat  = 24'hFFFFFF;
+// async byte decoder (samples the response line at the measured bit period)
+reg        bd_active  = 1'b0;
+reg [11:0] bd_timer   = 12'd0;
+reg [3:0]  bd_bitcnt  = 4'd0;
+reg [7:0]  bd_shift   = 8'd0;
+reg [2:0]  bd_bytecnt = 3'd0;
+reg [31:0] bd_bytes   = 32'd0;   // {byte0,byte1,byte2,byte3}, byte0 first
 always_ff @(posedge sys_clk or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
-        sio_cmd_sys_d <= 1'b1; sio_cap_active <= 1'b0;
-        sio_cap_idx <= 8'd0; sio_cap_divcnt <= 16'd0;
+        rxd_d <= 1'b1; rcmd_d <= 1'b1; rmeas <= 1'b0; rseen_low <= 1'b0; rrun <= 16'd0;
+        rmin_low <= 16'hFFFF; rmin_high <= 16'hFFFF; rwin <= 24'd0; rack_lat <= 24'hFFFFFF;
+        bd_active <= 1'b0; bd_timer <= 12'd0; bd_bitcnt <= 4'd0; bd_bytecnt <= 3'd0; bd_bytes <= 32'd0;
+        sio_cap_buf <= 128'd0; sio_cap_meta <= 32'd0;
     end else begin
-        sio_cmd_sys_d <= sio_command_sys;
-        if (!sio_cap_active) begin
-            if (sio_cmd_sys_d & ~sio_command_sys) begin // command falling edge
-                sio_cap_active <= 1'b1;
-                sio_cap_idx    <= 8'd0;
-                sio_cap_divcnt <= 16'd0;
-            end
-        end else begin
-            if (sio_cap_divcnt == SIO_CAP_DIV - 1) begin
-                sio_cap_divcnt <= 16'd0;
-                sio_cap_buf    <= {sio_cap_buf[126:0], sio_txd_sys}; // shift sample in (LSB=newest)
-                sio_cap_idx    <= sio_cap_idx + 8'd1;
-                if (sio_cap_idx == 8'd127) sio_cap_active <= 1'b0;   // 128 samples done
+        rxd_d  <= sio_rx_data_in;
+        rcmd_d <= sio_command_sys;
+        if (!rcmd_d && sio_command_sys) begin
+            // COMMAND rising: open the response window and reset the decoder
+            rmeas <= 1'b1; rseen_low <= 1'b0; rrun <= 16'd0; rwin <= 24'd0;
+            rmin_low <= 16'hFFFF; rmin_high <= 16'hFFFF; rack_lat <= 24'hFFFFFF;
+            bd_active <= 1'b0; bd_bitcnt <= 4'd0; bd_bytecnt <= 3'd0; bd_bytes <= 32'd0; bd_timer <= 12'd0;
+        end else if (rmeas) begin
+            rwin <= rwin + 24'd1;
+            // ---- pulse statistics ----
+            if (rxd_d ^ sio_rx_data_in) begin
+                if (rxd_d == 1'b0) begin
+                    if (rrun < rmin_low) rmin_low <= rrun;
+                end else if (rseen_low) begin
+                    if (rrun < rmin_high) rmin_high <= rrun;
+                end
+                if (rxd_d && !sio_rx_data_in && !rseen_low) rack_lat <= rwin;
+                if (rxd_d && !sio_rx_data_in) rseen_low <= 1'b1;
+                rrun <= 16'd1;
             end else begin
-                sio_cap_divcnt <= sio_cap_divcnt + 16'd1;
+                rrun <= rrun + 16'd1;
+            end
+            // ---- async byte decoder: capture first 4 response bytes ----
+            if (!bd_active) begin
+                if (bd_bytecnt < 3'd4 && rxd_d && !sio_rx_data_in) begin // start bit
+                    bd_active <= 1'b1; bd_timer <= 12'd0; bd_bitcnt <= 4'd0;
+                end
+            end else begin
+                bd_timer <= bd_timer + 12'd1;
+                if (bd_timer == ((bd_bitcnt == 4'd0) ? BIT1_5 : BIT1_0)) begin
+                    bd_shift <= {sio_rx_data_in, bd_shift[7:1]};   // LSB first
+                    bd_timer <= 12'd0;
+                    if (bd_bitcnt == 4'd7) begin
+                        bd_bytes   <= {bd_bytes[23:0], sio_rx_data_in, bd_shift[7:1]};
+                        bd_bytecnt <= bd_bytecnt + 3'd1;
+                        bd_active  <= 1'b0;
+                    end else begin
+                        bd_bitcnt <= bd_bitcnt + 4'd1;
+                    end
+                end
+            end
+            if (rwin == RESP_WINDOW - 1) begin
+                rmeas        <= 1'b0;
+                sio_cap_buf  <= { bd_bytes, 8'd0, rack_lat, 16'd0, rmin_high, 16'd0, rmin_low };
+                sio_cap_meta <= sio_cap_meta + 32'd1;
             end
         end
     end

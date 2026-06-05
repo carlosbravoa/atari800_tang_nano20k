@@ -73,6 +73,7 @@ ARCHITECTURE vhdl OF sio_handler IS
 	signal fifo_tx_advance : std_logic;
 	signal fifo_tx_data : std_logic_vector(7 downto 0);	
 	signal fifo_tx_count : std_logic_vector(7 downto 0);
+	signal tx_pending : std_logic := '0';
 	
 	signal fifo_rx_data : std_logic_vector(14 downto 0);
 	signal fifo_rx_full : std_logic;
@@ -280,9 +281,10 @@ begin
 				data_out_next <= pokey_enable & rx_tick & sio_command_reg & sio_data_out_reg & std_logic_vector(rx_counter_reg) & s2p_state_reg;
 			end if;
 			if (addr_decoded(7) = '1') then
-				-- TX diagnostic: [15:8]=pokey tick counter, [7:4]=p2s_state,
-				-- [3]=fifo_tx_full, [2]=fifo_tx_empty, [1]=p2s_transmit (TX line), [0]=spare
-				data_out_next <= pokey_tick_count_reg & p2s_state_reg & fifo_tx_full & fifo_tx_empty & p2s_transmit_reg & '0';
+				-- TX diagnostic: [15:8]=fifo_tx_count, [7:0]=fifo_tx_data (front byte)
+				-- Lets the firmware write a known byte to the TX FIFO and read back
+				-- exactly what is stored, isolating FIFO-write vs p2s-serialize.
+				data_out_next <= fifo_tx_count & fifo_tx_data;
 			end if;
 		end if;
 		
@@ -352,18 +354,25 @@ begin
 --	);
 
 
-transmit_fifo : work.fifo_transmit
-	PORT MAP
-	(
-		clock		=> clk,
-		data		=> cpu_data_in(7 downto 0),
-		rdreq		=> fifo_tx_advance,
-		wrreq		=> fifo_tx_write,
-		empty		=> fifo_tx_empty,
-		full		=> fifo_tx_full,
-		q		=> fifo_tx_data,
-		usedw		=> fifo_tx_count
-	);
+-- 1-byte transmit holding register (replaces the 256-deep FIFO, which mis-synthesised
+-- on Gowin and emitted 0xFF). Firmware writes byte-by-byte with sio_wait_tx_empty().
+process(clk)
+begin
+	if rising_edge(clk) then
+		if reset_n='0' then
+			tx_pending <= '0';
+			fifo_tx_data <= (others=>'0');
+		elsif fifo_tx_write='1' then
+			fifo_tx_data <= cpu_data_in(7 downto 0);
+			tx_pending <= '1';
+		elsif fifo_tx_advance='1' then
+			tx_pending <= '0';
+		end if;
+	end if;
+end process;
+fifo_tx_empty <= not tx_pending;
+fifo_tx_full  <= tx_pending;
+fifo_tx_count <= "0000000" & tx_pending;
 
 	-- parallel to serial converter
 	process(p2s_state_reg, p2s_transmit_reg,p2s_shift_reg,fifo_tx_data,fifo_tx_empty,transmit_enable)
