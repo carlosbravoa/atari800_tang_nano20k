@@ -1,6 +1,6 @@
 # Atari 800 — Tang Nano 20K Port
 
-> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working. We have bad timings and SIO non working, but it is fun to see and play with BASIC for now.
+> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working — and **SIO disk emulation now works**, so you can mount `.atr` images and boot DOS/games. Timings are still a bit fast, but it's a blast to play with.
 
 FPGA emulation of the Atari 800/800XL/65XE/130XE on the
 [Sipeed Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html)
@@ -41,7 +41,7 @@ adapted for the Gowin FPGA toolchain.
 | UART / serial keyboard (CH9350 / Pi Pico) | ✅ Working (hardware decoder) |
 | USB HID keyboard | ✅ Working |
 | DB9 joystick | ✅ Working |
-| SIO disk emulation (.atr) | ⏳ Temporarily disabled — revival in progress |
+| SIO disk emulation (.atr) | ✅ Working — mount `.atr` images, boot DOS/games |
 | Cartridge images (.car / .rom) | 🔜 Planned |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
@@ -372,6 +372,16 @@ Mounted: None
 - **Options** — emulator options (OSD hotkey, keyboard type)
 - **Return to Atari** — close the OSD (also via S2 / F12), with or without a disk mounted
 
+### Booting a disk image
+
+1. Copy your `.atr` disk images anywhere on the SD card (root or subfolders).
+2. Power on (Atari boots to BASIC), then press **S2** / **F12** to open the OSD.
+3. Choose **1) Select ATR Disk Image**, browse to your `.atr`, press **Fire**/**Enter** to mount it.
+4. Choose **5) Hard Reset** (cold boot) — the Atari now boots from the mounted disk (e.g. into DOS).
+
+The mounted image shows on the `Mounted:` line. Most DOS disks and bootable games work; the
+emulated drive responds as **D1:**.
+
 ---
 
 ## Pin Reference
@@ -435,7 +445,7 @@ atari800_tang_nano20k_parallel/
 
 ## Known Limitations / Roadmap
 
-- **SIO disk emulation** — temporarily disabled during the firmware-off-SDRAM rework; revival in progress
+- **SIO disk emulation** — ✅ working; cartridge (`.car`/`.rom`) loading still planned
 - **Atari speed** — currently runs slightly fast; timing tuning pending
 - **clk_core timing margin** — `clk_core` (54 MHz) is modestly above the tool's reported Fmax;
   boots reliably in practice, proper critical-path fix tracked
