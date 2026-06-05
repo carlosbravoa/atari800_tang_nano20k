@@ -45,6 +45,7 @@ module iosys_picorv32 #(
     input [11:0] joy1,              // joystick 1: (R L X A RT LT DN UP START SELECT Y B)
     input [11:0] joy2,              // joystick 2
     input [31:0] video_diag,        // [31:16]=lines/frame, [15:0]=frame counter (for frame-rate diag)
+    input [159:0] sio_cap_buf,      // SIO capture: words0-3 = 128 samples, word4 = meta (trig count)
 
     // ROM loading interface
     output reg rom_loading,         // 0-to-1 loading starts, 1-to-0 loading is finished
@@ -194,6 +195,14 @@ wire        cycle_reg_sel = mem_valid && (mem_addr == 32'h0200_0054);       // c
 
 wire        id_reg_sel = mem_valid && (mem_addr == 32'h0200_0060);
 wire        video_diag_sel = mem_valid && (mem_addr == 32'h0200_0064);   // [31:16]=lines/frame [15:0]=frame counter
+wire        sio_cap_idx_sel  = mem_valid && (mem_addr == 32'h0200_0068);  // write: select capture word 0..4
+wire        sio_cap_data_sel = mem_valid && (mem_addr == 32'h0200_006c);  // read: selected capture word
+
+reg [2:0]   sio_cap_rdidx = 3'd0;   // 0-3 = sample words, 4 = meta
+always @(posedge clk) begin
+    if (sio_cap_idx_sel && |mem_wstrb) sio_cap_rdidx <= mem_wdata[2:0];
+end
+wire [31:0] sio_cap_word = sio_cap_buf[sio_cap_rdidx*32 +: 32];
 
 wire        spiflash_reg_byte_sel = mem_valid && (mem_addr == 32'h0200_0070);
 wire        spiflash_reg_word_sel = mem_valid && (mem_addr == 32'h0200_0074);
@@ -222,7 +231,8 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             ((simplespimaster_reg_byte_sel || simplespimaster_reg_word_sel) && !simplespimaster_reg_wait) ||
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
-            spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel;
+            spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
+            sio_cap_idx_sel || sio_cap_data_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -269,6 +279,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         cycle_reg_sel ? cycle_reg :
         id_reg_sel ? {16'b0, CORE_ID} :
         video_diag_sel ? video_diag :
+        sio_cap_data_sel ? sio_cap_word :
         simplespimaster_reg_cs_sel ? {31'b0, sd_cs_reg} :
         simplespimaster_reg_clkdiv_sel ? {24'b0, sd_clkdiv_reg} :
         (simplespimaster_reg_byte_sel | simplespimaster_reg_word_sel) ? simplespimaster_reg_do : 

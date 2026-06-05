@@ -117,6 +117,33 @@ void frame_rate_sample(void) {
     }
 }
 
+// Install a self-contained 6502 stub into Atari RAM page 6 ($0600) that fills in
+// the Device Control Block for a D1: STATUS command and calls SIOV. Lets the SIO
+// response test be just  X=USR(1536)  in BASIC instead of ~15 POKE lines.
+// Atari RAM is memory-mapped to the firmware at 0x00200000 (same base the menu
+// uses for COLDST $0244), so $0600 -> 0x00200600. Page 6 is free RAM that the OS
+// and BASIC do not clear after boot, so the stub persists once written.
+void install_sio_test_stub(void) {
+    static const uint8_t stub[] = {
+        0x68,                        // PLA            ; discard USR arg-count byte
+        0xA9,0x31, 0x8D,0x00,0x03,   // LDA #$31 : STA $0300  DDEVIC = D1:
+        0xA9,0x01, 0x8D,0x01,0x03,   // LDA #$01 : STA $0301  DUNIT  = 1
+        0xA9,0x53, 0x8D,0x02,0x03,   // LDA #$53 : STA $0302  DCOMND = Status
+        0xA9,0x40, 0x8D,0x03,0x03,   // LDA #$40 : STA $0303  DSTATS = read
+        0xA9,0x00, 0x8D,0x04,0x03,   // LDA #$00 : STA $0304  DBUFLO = 0
+        0xA9,0x07, 0x8D,0x05,0x03,   // LDA #$07 : STA $0305  DBUFHI = 7  -> $0700
+        0xA9,0x0F, 0x8D,0x06,0x03,   // LDA #$0F : STA $0306  DTIMLO = 15
+        0xA9,0x04, 0x8D,0x08,0x03,   // LDA #$04 : STA $0308  DBYTLO = 4
+        0xA9,0x00, 0x8D,0x09,0x03,   // LDA #$00 : STA $0309  DBYTHI = 0
+        0xA9,0x00, 0x8D,0x0A,0x03,   // LDA #$00 : STA $030A  DAUX1  = 0
+        0x8D,0x0B,0x03,              //            STA $030B  DAUX2  = 0 (A still 0)
+        0x20,0x59,0xE4,              // JSR $E459  SIOV
+        0x60                         // RTS
+    };
+    volatile uint8_t *ram = (volatile uint8_t *)(0x00200000u + 0x0600u);
+    for (unsigned i = 0; i < sizeof(stub); i++) ram[i] = stub[i];
+}
+
 void status(char *msg) {
     cursor(0, 27);
     for (int i = 0; i < 32; i++)
@@ -1285,6 +1312,7 @@ int main() {
         if (!booted) {
             overlay(1);
             clear();
+            install_sio_test_stub();   // refresh the X=USR(1536) SIO test stub at $0600
             cursor(2, 6);
             print("=== Tang Atari 800 ===");
 
@@ -1327,22 +1355,49 @@ int main() {
             cursor(2, 20);
             printf("SIO Errs:%d TO:%d CL:%d TL:%d", (int)dbg_sio_err_count, (int)dbg_sio_timeout_count, (int)dbg_sio_cmd_low_ticks, (int)dbg_sio_txd_low_ticks);
 
-            cursor(2, 21);
-            int rx_idx = dbg_rx_buf_idx;
-            printf("R:%b(%d) %b(%d) %b(%d) %b(%d) %b(%d)",
-                dbg_rx_buf[(rx_idx + 7) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 7) % 12],
-                dbg_rx_buf[(rx_idx + 8) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 8) % 12],
-                dbg_rx_buf[(rx_idx + 9) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 9) % 12],
-                dbg_rx_buf[(rx_idx + 10) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 10) % 12],
-                dbg_rx_buf[(rx_idx + 11) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 11) % 12]);
-            for (int i = 0; i < 4; i++) {
-                int idx = (dbg_cmd_history_idx + i) % 4;
-                dbg_cmd_frame_t *f = &dbg_cmd_history[idx];
-                cursor(2, 22 + i);
-                printf("C%d:%b %b %b %b %b (%d)",
-                    i + 1,
-                    f->device, f->cmd, f->aux1, f->aux2, f->checksum,
-                    (int)f->processed);
+            // SIO RESPONSE-line meter (handler->Atari, sys_clk cycles @27MHz).
+            // ACKlat = cycles from COMMAND-high to the first response start bit;
+            // 16777215 means the handler NEVER drove the line low (no ACK sent).
+            // edges = response start bits (~bytes back). bit lo/hi ~1488 = 1 bit.
+            {
+                uint32_t mw[4];
+                for (int k = 0; k < 4; k++) {
+                    reg_sio_cap_idx = k;
+                    mw[k] = reg_sio_cap_data;
+                }
+                reg_sio_cap_idx = 4;
+                uint32_t cap_meta = reg_sio_cap_data;   // [7:0] = window count
+                cursor(2, 21);
+                printf("RespN:%d ACKlat:%d", (int)(cap_meta & 0xFF), (int)(mw[2] & 0xFFFFFF));
+                cursor(2, 22);
+                printf("bit lo:%d hi:%d", (int)(mw[0] & 0xFFFF), (int)(mw[1] & 0xFFFF));
+                // word3 = first 4 response bytes (byte0 first). 41 43 .. = clean ACK,
+                // FF FF FF FF = handler is transmitting garbage.
+                cursor(2, 23);
+                print("Resp:");
+                print_hex_digits((mw[3] >> 24) & 0xFF, 2); putchar(' ');
+                print_hex_digits((mw[3] >> 16) & 0xFF, 2); putchar(' ');
+                print_hex_digits((mw[3] >>  8) & 0xFF, 2); putchar(' ');
+                print_hex_digits((mw[3]      ) & 0xFF, 2);
+                // Write-path probe: write a non-default value to the divisor reg and
+                // read it back. rd:55 => firmware writes reach the handler (bug is in
+                // the FIFO/p2s); rd:5d or other => the register-WRITE path is broken.
+                cursor(2, 24);
+                reg_sio_divisor = 0x55;
+                uint32_t divrb = reg_sio_divisor & 0xFF;
+                reg_sio_divisor = 0x5D;          // restore default divisor 93
+                print("DIV rd:");
+                print_hex_digits(divrb, 2);
+                // TX FIFO probe: write 0x41, immediately read back the FIFO front
+                // byte + count via reg_sio_txdiag ([15:8]=count [7:0]=front byte).
+                // d:41 => the byte is correctly stored (bug is the p2s serialize);
+                // d:ff / c:00 => the FIFO write/storage is the corruption point.
+                reg_sio_tx = 0x41;
+                uint32_t txd = reg_sio_txdiag;
+                print("  FIFO d:");
+                print_hex_digits(txd & 0xFF, 2);
+                print(" c:");
+                print_hex_digits((txd >> 8) & 0xFF, 2);
             }
  
             cursor(2, 26);
