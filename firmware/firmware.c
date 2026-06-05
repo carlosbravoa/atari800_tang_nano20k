@@ -1335,14 +1335,23 @@ int main() {
                 dbg_rx_buf[(rx_idx + 9) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 9) % 12],
                 dbg_rx_buf[(rx_idx + 10) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 10) % 12],
                 dbg_rx_buf[(rx_idx + 11) % 12], (int)dbg_rx_cmd_line_buf[(rx_idx + 11) % 12]);
-            for (int i = 0; i < 4; i++) {
-                int idx = (dbg_cmd_history_idx + i) % 4;
-                dbg_cmd_frame_t *f = &dbg_cmd_history[idx];
-                cursor(2, 22 + i);
-                printf("C%d:%b %b %b %b %b (%d)",
-                    i + 1,
-                    f->device, f->cmd, f->aux1, f->aux2, f->checksum,
-                    (int)f->processed);
+            // SIO data-line capture: 128 oversampled bits of sio_txd (Atari->drive)
+            // from the last command frame, ~2.7 samples/bit. Shown earliest-first
+            // (row 22 = samples 1..32). Lets us see the raw waveform the handler
+            // is decoding from. Replaces the C1-C4 decoded history (decoded last
+            // command is still on row 18).
+            {
+                uint32_t cap[4];
+                for (int k = 0; k < 4; k++) {
+                    reg_sio_cap_idx = k;
+                    cap[k] = reg_sio_cap_data;
+                }
+                for (int line = 0; line < 4; line++) {
+                    uint32_t w = cap[3 - line];   // word3 = earliest samples
+                    cursor(0, 22 + line);          // full 32-col width
+                    for (int b = 31; b >= 0; b--)
+                        putchar('0' + ((w >> b) & 1));
+                }
             }
  
             cursor(2, 26);

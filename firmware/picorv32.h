@@ -47,6 +47,8 @@ int atoi(const char *str);
 #define reg_sio_diag       (*(volatile uint32_t*)0x02000098)
 #define reg_sio_txdiag     (*(volatile uint32_t*)0x0200009c)
 #define reg_video_diag     (*(volatile uint32_t*)0x02000064)  // [31:16]=lines/frame [15:0]=frame counter
+#define reg_sio_cap_idx    (*(volatile uint32_t*)0x02000068)  // write: select SIO capture word 0..3
+#define reg_sio_cap_data   (*(volatile uint32_t*)0x0200006c)  // read: selected SIO capture word
 #define reg_virt_kbd_0     (*(volatile uint32_t*)0x020000a0)
 #define reg_virt_kbd_1     (*(volatile uint32_t*)0x020000a4)
 

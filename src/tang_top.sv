@@ -700,6 +700,11 @@ always_ff @(posedge sys_clk) begin
 end
 wire [31:0] video_diag = {lpf_sys, vs_cnt_sys};  // [31:16]=lines/frame, [15:0]=frame counter
 
+// SIO capture buffer: 128 oversampled bits of the Atari->drive data line
+// (sio_txd_sys) during one command frame, for firmware to dump to the OSD.
+// Driven below (after the SIO sync signals are defined).
+reg [127:0] sio_cap_buf = 128'd0;
+
 // PicoRV32 IO subsystem module
 // iosys_picorv32 stays on sys_clk (27 MHz): firmware compiled for that frequency.
 // Its SPI/SD timing is correct only at 27 MHz; CDC to the 54 MHz arbiter is
@@ -723,6 +728,7 @@ iosys_picorv32 #(
 
     // Frame-rate / lines-per-frame diagnostic
     .video_diag(video_diag),
+    .sio_cap_buf(sio_cap_buf),
 
     // ROM loading interface
     .rom_loading(rom_loading),
@@ -821,6 +827,42 @@ end
 wire sio_command_sys = SIO_COMMAND_sync[1];
 wire sio_txd_sys     = SIO_TXD_sync[1];
 wire sio_clk_out_sys = SIO_CLOCK_sync[1];
+
+// ── SIO data-line capture (diagnostic) ───────────────────────────────────────
+// On the command line going LOW (frame start) sample sio_txd_sys (Atari->drive
+// data) into sio_cap_buf at ~512 sys_clk/sample (~19us, ~3 samples per 55us bit),
+// 128 samples. Captures the first ~4 command bytes. While the OSD is up the Atari
+// is halted so no new frames arrive -> the buffer holds the last frame for the
+// firmware to dump. MSB-first: bit 127 = first sample.
+localparam [15:0] SIO_CAP_DIV = 16'd512;
+reg        sio_cmd_sys_d = 1'b1;
+reg        sio_cap_active = 1'b0;
+reg [7:0]  sio_cap_idx = 8'd0;
+reg [15:0] sio_cap_divcnt = 16'd0;
+always_ff @(posedge sys_clk or negedge hw_reset_n) begin
+    if (!hw_reset_n) begin
+        sio_cmd_sys_d <= 1'b1; sio_cap_active <= 1'b0;
+        sio_cap_idx <= 8'd0; sio_cap_divcnt <= 16'd0;
+    end else begin
+        sio_cmd_sys_d <= sio_command_sys;
+        if (!sio_cap_active) begin
+            if (sio_cmd_sys_d & ~sio_command_sys) begin // command falling edge
+                sio_cap_active <= 1'b1;
+                sio_cap_idx    <= 8'd0;
+                sio_cap_divcnt <= 16'd0;
+            end
+        end else begin
+            if (sio_cap_divcnt == SIO_CAP_DIV - 1) begin
+                sio_cap_divcnt <= 16'd0;
+                sio_cap_buf    <= {sio_cap_buf[126:0], sio_txd_sys}; // shift sample in (LSB=newest)
+                sio_cap_idx    <= sio_cap_idx + 8'd1;
+                if (sio_cap_idx == 8'd127) sio_cap_active <= 1'b0;   // 128 samples done
+            end else begin
+                sio_cap_divcnt <= sio_cap_divcnt + 16'd1;
+            end
+        end
+    end
+end
 
 // VHDL SIO Disk Handler
 sio_handler sio_inst (
