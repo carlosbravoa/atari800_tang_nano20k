@@ -2,6 +2,11 @@
 
 > Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working — and **SIO disk emulation now works**, so you can mount `.atr` images and boot DOS/games. Timings are still a touch slow (~6%), but it's a blast to play with.
 
+
+<img width="400" height="400" alt="Eureka! Atari running Montezuma from an ATR Disk" src="https://github.com/user-attachments/assets/20121280-905e-4c15-8795-352eec9abf01" />
+
+_Eureka! Atari running Montezuma from an ATR Disk_
+
 FPGA emulation of the Atari 800/800XL/65XE/130XE on the
 [Sipeed Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html)
 (GW2AR-LV18QN88PC8/I7).
