@@ -19,12 +19,11 @@ adapted for the Gowin FPGA toolchain.
 - **GPIO audio** — sigma-delta PDM on GPIO pins (add RC filter for analogue)
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
-- **On-Screen Display (OSD)** — file browser, disk image selection, options menu (navigable via DB9 Joystick + S2 button!)
-- **OSD Keyboard-less Navigation** — toggle OSD via onboard S2 button; navigate and select files using physical DB9 Joystick 1
-- **UART / Serial Keyboard (Primary)** — supports raw USB HID reports sent over serial frames via an external CH9350 board or Raspberry Pi Pico (no resistors required, uses Pin 53)
-- **USB HID Keyboard (Secondary)** — direct low-speed USB keyboard connection to the FPGA GPIO pins (requires 15 kΩ pull-down resistors, see below)
-- **Atari DB9 joystick ports × 2** — active-low GPIO, no resistors needed
+- **On-Screen Display (OSD)** — file browser, disk image selection, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**)
+- **UART / serial keyboard (recommended)** — raw USB HID reports sent over serial frames from an external CH9350 board or Raspberry Pi Pico (no resistors, uses Pin 53)
+- **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (there are no DB9 connectors on the board — see [wiring](#atari-db9-joystick))
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
+- **Direct USB HID keyboard (experimental)** — low-speed USB straight to GPIO pins (needs 15 kΩ pull-downs); **unreliable — use the UART/CH9350 keyboard instead**
 
 ---
 
@@ -37,11 +36,12 @@ adapted for the Gowin FPGA toolchain.
 | HDMI audio (48 kHz PCM) | ✅ Working |
 | GPIO sigma-delta audio | ✅ Working |
 | SD card ROM loader | ✅ Working |
-| OSD menu (S2 button + DB9 joystick + keyboard) | ✅ Working — rock-solid |
-| UART / serial keyboard (CH9350 / Pi Pico) | ✅ Working (hardware decoder) |
-| USB HID keyboard | ✅ Working |
-| DB9 joystick | ✅ Working |
+| OSD menu (keyboard and/or DB9 joystick, S2/F12 toggle) | ✅ Working — rock-solid |
+| UART / serial keyboard (CH9350 / Pi Pico) — **recommended** | ✅ Working (hardware decoder) |
+| Direct USB HID keyboard (to GPIO pins) | ⚠️ Experimental / unreliable — prefer UART |
+| DB9 joystick (wired to GPIO pins) | ✅ Working |
 | SIO disk emulation (.atr) | ✅ Working — mount `.atr` images, boot DOS/games |
+| Video centering (frame + picture) | ✅ Working |
 | Cartridge images (.car / .rom) | 🔜 Planned |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
@@ -71,8 +71,9 @@ adapted for the Gowin FPGA toolchain.
 | Sipeed Tang Nano 20K | GW2AR-LV18 FPGA |
 | MicroSD / TF card | FAT32, ≤ 32 GB |
 | HDMI cable + monitor | Any HDMI 1.3+ monitor |
-| DB9 joystick | Standard Atari/Commodore DB9 (required for OSD navigation if no keyboard) |
-| USB-A female + 2 × 15 kΩ (optional) | For USB HID keyboard |
+| Keyboard (recommended) | CH9350 USB-host board or a Raspberry Pi Pico → 1 wire to **Pin 53** (see [Keyboard](#keyboard-input)) |
+| DB9 joystick | Standard Atari/Commodore DB9, **wired to GPIO pins** (no DB9 connector on the board — see [wiring](#atari-db9-joystick)). Enough on its own to drive the OSD. |
+| Dupont jumper wires | To wire the joystick / keyboard to the GPIO header |
 
 ---
 
@@ -96,13 +97,26 @@ releases the Atari core from reset so it auto-boots to BASIC.
 
 ## Quick Start
 
-1. Insert SD card with `ATARIXL.ROM` and `BASIC.ROM` (FAT32)
-2. Flash the FPGA bitstream (see [Build](#build) or use a pre-built `.fs`) — the firmware is
-   baked into the bitstream, so there is **no separate firmware flash step**
-3. Connect HDMI
-4. Connect a DB9 Joystick to port 1 and/or a keyboard (see below)
-5. Power on — the Atari **auto-boots to BASIC**. Press the onboard **S2** button (or **F12**) to
-   open the OSD menu; navigate with Joystick 1 or the keyboard.
+Get to a BASIC prompt in a few minutes:
+
+1. **SD card** — format FAT32, copy `ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) to the root
+   (supply your own — see [SD Card Setup](#sd-card-setup)). Add any `.atr` disk images you like.
+2. **Flash** the bitstream:
+   ```bash
+   openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
+   ```
+   The firmware is baked in — **no separate firmware flash**.
+3. **Connect HDMI** to a monitor, and the SD card.
+4. **Power on** — the Atari **auto-boots to BASIC** (no menu shown).
+5. **Open the OSD** with the onboard **S2** button (or **F12** on a keyboard).
+   - Navigate with a **DB9 joystick on port 1** (up/down + fire) *or* a keyboard — either works on its own.
+   - For typing/games, attach a **UART/CH9350 keyboard** (one wire to Pin 53 — see [Keyboard](#keyboard-input)).
+
+**To boot a disk:** open the OSD → **1) Select ATR Disk Image** → pick your `.atr` → **5) Hard Reset**.
+
+> **Input wiring note:** the board has no DB9 or USB connectors — the joystick and keyboard
+> attach to **GPIO header pins** (see the wiring sections below). A DB9 joystick alone is enough
+> to drive the whole OSD if you don't have a keyboard yet.
 
 ---
 
@@ -160,18 +174,26 @@ This allows booting games and mounting disks completely without any keyboard att
 
 ---
 
-## Keyboard Input Alternatives
+## Keyboard Input
 
-To get a full keyboard mapping for typing or playing keyboard-controlled games, you have three options:
+For typing or keyboard-controlled games. **The recommended path is the CH9350 / Pi Pico UART
+board (option 1)** — one wire, no resistors, decoded in hardware. (Note: a DB9 joystick alone
+already drives the whole OSD, so a keyboard is optional for browsing/mounting disks.)
 
-### 1. USB Keyboard with 15 kΩ pull-down resistors (Recommended)
-This uses the FPGA's built-in USB Host controller. Connect a USB-A female connector to the Tang Nano GPIO pins and add 15 kΩ pull-down resistors to GND on both the D− and D+ lines (see [USB HID Keyboard](#usb-hid-keyboard-requires-resistors)).
+### 1. CH9350 / Raspberry Pi Pico UART board (recommended)
+A cheap external micro-module acts as the USB host for your keyboard and streams standard
+**CH9350 UART serial frames** (115200 baud, 8N1) of raw USB HID reports into the FPGA — decoded
+by a dedicated hardware module. **One data wire to Pin 53**, no resistors. Setup details below.
 
 ### 2. PS/2 Keyboard using internal FPGA pull-ups (Zero Resistors)
-A PS/2 keyboard can be wired to GPIO pins 49 (CLK) and 53 (DAT) or similar. By configuring the FPGA's internal pull-up resistors (`PULL_MODE=UP` in `tang_nano_20k.cst`), no external components or resistors are needed. 
+A PS/2 keyboard can be wired to GPIO pins 49 (CLK) and 53 (DAT) or similar. By configuring the FPGA's internal pull-up resistors (`PULL_MODE=UP` in `tang_nano_20k.cst`), no external components or resistors are needed.
 
-### 3. External USB Host Module (CH9350 / Raspberry Pi Pico)
-Instead of running a USB Host stack on the FPGA, you can use a cheap external micro-module that acts as a USB Host for your keyboard and outputs standard **CH9350 UART serial frames** (115200 baud, 8N1) containing raw USB HID reports.
+### 3. Direct USB HID keyboard to GPIO pins (experimental — not recommended)
+The FPGA's built-in USB host can take a USB keyboard wired straight to the GPIO pins with 15 kΩ
+pull-downs (see [USB HID Keyboard](#usb-hid-keyboard-requires-resistors)). **This path is currently
+unreliable — prefer the CH9350/UART board above.**
+
+### CH9350 / Pi Pico wiring & setup
 
 #### Wiring
 Both modules connect to the Tang Nano 20K GPIO header using only **one data wire**:
