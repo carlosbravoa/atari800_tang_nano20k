@@ -1312,17 +1312,11 @@ int main() {
         if (!booted) {
             overlay(1);
             clear();
-            install_sio_test_stub();   // refresh the X=USR(1536) SIO test stub at $0600
             cursor(2, 6);
             print("=== Tang Atari 800 ===");
 
             cursor(2, 8);
             printf("Mounted: %s", mounted_atr_name);
-
-            cursor(2, 9);
-            // FR = measured Atari frame rate (~60 NTSC); LPF = lines/frame (~262 NTSC).
-            printf("FR:%d/s LPF:%d Rsp:%dus", (int)dbg_frame_rate,
-                   (int)dbg_lines_per_frame, (int)dbg_resp_time_us);
 
             cursor(2, 10);
             print("1) Select ATR Disk Image\n");
@@ -1339,67 +1333,6 @@ int main() {
             cursor(2, 16);
             print("7) Return to Atari (F12)\n");
 
-            cursor(2, 17);
-            printf("TX PE:%d LineHi:%d Femp:%d St:%b",
-                   (int)dbg_tx_pe_moved, (int)dbg_tx_line_hi,
-                   (int)dbg_tx_fifo_empty, dbg_tx_state_or);
-
-            cursor(2, 18);
-            if (atr_mounted) {
-                printf("SIO C:%b S:%d St:%d", dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status);
-            } else {
-                printf("SIO: NOT MOUNTED (M:%d)", atr_mounted ? 1 : 0);
-            }
-            cursor(2, 19);
-            printf("SIO R:%d W:%d S:%d B:%d", (int)dbg_sio_read_count, (int)dbg_sio_write_count, (int)dbg_sio_status_count, (int)dbg_sio_rx_byte_count);
-            cursor(2, 20);
-            printf("SIO Errs:%d TO:%d CL:%d TL:%d", (int)dbg_sio_err_count, (int)dbg_sio_timeout_count, (int)dbg_sio_cmd_low_ticks, (int)dbg_sio_txd_low_ticks);
-
-            // SIO RESPONSE-line meter (handler->Atari, sys_clk cycles @27MHz).
-            // ACKlat = cycles from COMMAND-high to the first response start bit;
-            // 16777215 means the handler NEVER drove the line low (no ACK sent).
-            // edges = response start bits (~bytes back). bit lo/hi ~1488 = 1 bit.
-            {
-                uint32_t mw[4];
-                for (int k = 0; k < 4; k++) {
-                    reg_sio_cap_idx = k;
-                    mw[k] = reg_sio_cap_data;
-                }
-                reg_sio_cap_idx = 4;
-                uint32_t cap_meta = reg_sio_cap_data;   // [7:0] = window count
-                cursor(2, 21);
-                printf("RespN:%d ACKlat:%d", (int)(cap_meta & 0xFF), (int)(mw[2] & 0xFFFFFF));
-                cursor(2, 22);
-                printf("bit lo:%d hi:%d", (int)(mw[0] & 0xFFFF), (int)(mw[1] & 0xFFFF));
-                // word3 = first 4 response bytes (byte0 first). 41 43 .. = clean ACK,
-                // FF FF FF FF = handler is transmitting garbage.
-                cursor(2, 23);
-                print("Resp:");
-                print_hex_digits((mw[3] >> 24) & 0xFF, 2); putchar(' ');
-                print_hex_digits((mw[3] >> 16) & 0xFF, 2); putchar(' ');
-                print_hex_digits((mw[3] >>  8) & 0xFF, 2); putchar(' ');
-                print_hex_digits((mw[3]      ) & 0xFF, 2);
-                // Write-path probe: write a non-default value to the divisor reg and
-                // read it back. rd:55 => firmware writes reach the handler (bug is in
-                // the FIFO/p2s); rd:5d or other => the register-WRITE path is broken.
-                cursor(2, 24);
-                reg_sio_divisor = 0x55;
-                uint32_t divrb = reg_sio_divisor & 0xFF;
-                reg_sio_divisor = 0x5D;          // restore default divisor 93
-                print("DIV rd:");
-                print_hex_digits(divrb, 2);
-                // TX FIFO probe: write 0x41, immediately read back the FIFO front
-                // byte + count via reg_sio_txdiag ([15:8]=count [7:0]=front byte).
-                // d:41 => the byte is correctly stored (bug is the p2s serialize);
-                // d:ff / c:00 => the FIFO write/storage is the corruption point.
-                reg_sio_tx = 0x41;
-                uint32_t txd = reg_sio_txdiag;
-                print("  FIFO d:");
-                print_hex_digits(txd & 0xFF, 2);
-                print(" c:");
-                print_hex_digits((txd >> 8) & 0xFF, 2);
-            }
- 
             cursor(2, 26);
             print("Enter:Select   V:");
             print(__DATE__);
