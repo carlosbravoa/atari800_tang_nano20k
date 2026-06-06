@@ -1,6 +1,6 @@
 # Atari 800 — Tang Nano 20K Port
 
-> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working — and **SIO disk emulation now works**, so you can mount `.atr` images and boot DOS/games. Timings are still a bit fast, but it's a blast to play with.
+> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working — and **SIO disk emulation now works**, so you can mount `.atr` images and boot DOS/games. Timings are still a touch slow (~6%), but it's a blast to play with.
 
 FPGA emulation of the Atari 800/800XL/65XE/130XE on the
 [Sipeed Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html)
@@ -57,7 +57,7 @@ adapted for the Gowin FPGA toolchain.
 > SDRAM access completes within the Atari bus window (the original 27 MHz / `cycle_length=16`
 > exceeded it, causing video garble). The HDMI scaler genlocks to this 54 MHz line cadence.
 
-> **Known caveats (this baseline):** ① The Atari currently runs slightly fast (timing tuning
+> **Known caveats (this baseline):** ① The Atari currently runs slightly slow (~6%; timing tuning
 > pending). ② `clk_core` is modestly above the tool's reported Fmax; it boots reliably in
 > practice but the timing margin work is tracked. ③ The status LEDs presently carry diagnostic
 > signals (see [Status LEDs](#status-leds)), not the normal status set.
@@ -446,7 +446,7 @@ atari800_tang_nano20k_parallel/
 ## Known Limitations / Roadmap
 
 - **SIO disk emulation** — ✅ working; cartridge (`.car`/`.rom`) loading still planned
-- **Atari speed** — currently runs slightly fast; timing tuning pending
+- **Atari speed** — currently runs slightly slow (~6%, `clk_core` 54 MHz vs ~57.3 MHz target); timing tuning pending
 - **clk_core timing margin** — `clk_core` (54 MHz) is modestly above the tool's reported Fmax;
   boots reliably in practice, proper critical-path fix tracked
 - **Joystick paddles** — analogue pot inputs not implemented
