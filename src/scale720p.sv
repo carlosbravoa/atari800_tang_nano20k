@@ -50,6 +50,11 @@ localparam H_SYNC   = 11'd40;
 localparam H_BP     = 11'd242;
 localparam H_TOTAL  = 11'd1672;
 
+// Source-column read offset: slides the 352-col read window right over the (wider)
+// captured Atari line to centre the active picture within the pillarbox (skips
+// excess left overscan, reveals the cut-off right border). +N = picture moves left.
+localparam [8:0] H_SRC_OFFSET = 9'd12;
+
 localparam V_ACTIVE = 10'd720;
 localparam V_FP     = 10'd5;
 localparam V_SYNC   = 10'd5;
@@ -240,34 +245,34 @@ scale720p_tdp_ram #(
 
     .clk_b (clk_pixel),
     .we_b  (1'b0),
-    .addr_b({rd_buf_idx, rd_col}),
+    .addr_b({rd_buf_idx, rd_col + H_SRC_OFFSET}),
     .din_b (8'd0),
     .dout_b(rd_data)
 );
 
 // ── Pipeline Latency Alignment (2 Cycles) ──────────────────────────────────────
-wire de_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= 10'd51) && (vy < 10'd771);
+// de_out spans the full standard 720p active (1280 wide, hx 0..1279) so the monitor
+// sees a normal frame and fills/centres the panel. The 1056-px Atari content is
+// pillarboxed centred at hx 112..1167 (cont_s0, same window the rd_col read uses),
+// with black borders for the outer 112 px each side.
+wire de_s0   = (hx < 11'd1280) && (vy >= 10'd51) && (vy < 10'd771);
+wire cont_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= 10'd51) && (vy < 10'd771);
 wire hs_s0 = (hx >= H_ACTIVE + H_FP) && (hx < H_ACTIVE + H_FP + H_SYNC);
 wire vs_s0 = (vy < 10'd5);
 
-reg de_p1, hs_p1, vs_p1;
-reg de_p2, hs_p2, vs_p2;
+reg de_p1, hs_p1, vs_p1, cont_p1;
+reg de_p2, hs_p2, vs_p2, cont_p2;
 
 always_ff @(posedge clk_pixel) begin
-    de_p1 <= de_s0;
-    hs_p1 <= hs_s0;
-    vs_p1 <= vs_s0;
-
-    de_p2 <= de_p1;
-    hs_p2 <= hs_p1;
-    vs_p2 <= vs_p1;
+    de_p1 <= de_s0;   hs_p1 <= hs_s0;   vs_p1 <= vs_s0;   cont_p1 <= cont_s0;
+    de_p2 <= de_p1;   hs_p2 <= hs_p1;   vs_p2 <= vs_p1;   cont_p2 <= cont_p1;
 end
 
 always_comb begin
     hs_out = hs_p2;
     vs_out = vs_p2;
     de_out = de_p2;
-    if (de_p2) begin
+    if (de_p2 && cont_p2) begin
         r_out = {rd_data[7:5], rd_data[7:5], rd_data[7:6]};
         g_out = {rd_data[4:2], rd_data[4:2], rd_data[4:3]};
         b_out = {rd_data[1:0], rd_data[1:0], rd_data[1:0], rd_data[1:0]};
