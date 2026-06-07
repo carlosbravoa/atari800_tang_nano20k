@@ -216,14 +216,6 @@ A cheap external micro-module acts as the USB host for your keyboard and streams
 **CH9350 UART serial frames** (115200 baud, 8N1) of raw USB HID reports into the FPGA — decoded
 by a dedicated hardware module. **One data wire to Pin 53**, no resistors. Setup details below.
 
-### 2. PS/2 Keyboard using internal FPGA pull-ups (Zero Resistors)
-A PS/2 keyboard can be wired to GPIO pins 49 (CLK) and 53 (DAT) or similar. By configuring the FPGA's internal pull-up resistors (`PULL_MODE=UP` in `tang_nano_20k.cst`), no external components or resistors are needed.
-
-### 3. Direct USB HID keyboard to GPIO pins (experimental — not recommended)
-The FPGA's built-in USB host can take a USB keyboard wired straight to the GPIO pins with 15 kΩ
-pull-downs (see [USB HID Keyboard](#usb-hid-keyboard-requires-resistors)). **This path is currently
-unreliable — prefer the CH9350/UART board above.**
-
 ### CH9350 / Pi Pico wiring & setup
 
 #### Wiring
