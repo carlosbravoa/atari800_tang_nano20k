@@ -119,6 +119,7 @@ end
 wire hw_reset_n  = timer_done && !btn_n[0] && pll_core_locked;
 wire usb_host_enable;
 wire usb_reset_n = hw_reset_n && usb_host_enable;
+wire joystick_mode;   // OSD-toggled: arrow keys → Joystick 1, Left-Alt = fire, arrows suppressed from kbd
 
 // hdmi_rst_n: gate HDMI logic on PLL lock so OSER10 RESET is held until clk_pix is stable.
 wire hdmi_rst_n = hw_reset_n && pll_locked;
@@ -625,6 +626,23 @@ wire key_enter = (combined_key1 == 8'h28) || (combined_key2 == 8'h28) || (combin
 wire key_esc   = (combined_key1 == 8'h29) || (combined_key2 == 8'h29) || (combined_key3 == 8'h29) || (combined_key4 == 8'h29); // Escape
 wire key_f12   = (combined_key1 == 8'h45) || (combined_key2 == 8'h45) || (combined_key3 == 8'h45) || (combined_key4 == 8'h45); // F12
 
+// ── Arrow-keys-as-Joystick mode (OSD-toggled via joystick_mode) ──────────────
+// Left-Alt = fire. When on, the arrow keys + Left-Alt drive Joystick 1 (OR'd
+// with the physical DB9 stick) and are suppressed from the Atari keyboard matrix
+// so they don't also type. JOY1_n is active-low: bit0=up,1=down,2=left,3=right,4=fire.
+wire key_lalt = combined_key_mod[2];   // HID Left-Alt modifier
+wire [4:0] joy1_kbd_n = joystick_mode ? ~{key_lalt, key_right, key_left, key_down, key_up}
+                                      : 5'b11111;
+wire [4:0] joy1_to_core = joy1_n & joy1_kbd_n;   // key OR physical stick pulls a bit low
+
+// Keyboard-matrix keys with the joystick keys (arrows 0x4F-0x52, Left-Alt) removed
+// while joystick_mode is on, so they only move the stick and don't type.
+wire [7:0] mtx_key1 = (joystick_mode && combined_key1 >= 8'h4F && combined_key1 <= 8'h52) ? 8'h00 : combined_key1;
+wire [7:0] mtx_key2 = (joystick_mode && combined_key2 >= 8'h4F && combined_key2 <= 8'h52) ? 8'h00 : combined_key2;
+wire [7:0] mtx_key3 = (joystick_mode && combined_key3 >= 8'h4F && combined_key3 <= 8'h52) ? 8'h00 : combined_key3;
+wire [7:0] mtx_key4 = (joystick_mode && combined_key4 >= 8'h4F && combined_key4 <= 8'h52) ? 8'h00 : combined_key4;
+wire [7:0] mtx_mod  = joystick_mode ? (combined_key_mod & ~8'h04) : combined_key_mod; // drop Left-Alt
+
 // Combine USB keyboard keys and physical DB9 Joystick 1 (active low, so ~joy1_n)
 wire joy_up    = key_up    || ~joy1_n[0];
 wire joy_down  = key_down  || ~joy1_n[1];
@@ -766,6 +784,7 @@ iosys_picorv32 #(
     .virt_kbd_key3_out(virt_kbd_key3),
     .virt_kbd_key4_out(virt_kbd_key4),
     .usb_host_enable_out(usb_host_enable),
+    .joystick_mode_out(joystick_mode),
     .joy_poll_dbg(joy_poll_dbg),
     .cpu_progress_dbg(cpu_progress_dbg),
     .dbg_stall_undec_out(dbg_stall_undec),
@@ -973,7 +992,7 @@ atari800core_simple_sdram #(
     .AUDIO_R                    (audio_r_pcm),
 
     // Joysticks
-    .JOY1_n                     (joy1_n),
+    .JOY1_n                     (joy1_to_core),
     .JOY2_n                     (joy2_n),
     .JOY3_n                     (5'b11111),
     .JOY4_n                     (5'b11111),
@@ -1095,11 +1114,11 @@ usb_hid_host usb_hid (
 usb_to_atari800 keyboard (
     .clk              (sys_clk),
     .reset_n          (core_reset_n),
-    .key_modifiers    (combined_key_mod),
-    .key1             (combined_key1),
-    .key2             (combined_key2),
-    .key3             (combined_key3),
-    .key4             (combined_key4),
+    .key_modifiers    (mtx_mod),
+    .key1             (mtx_key1),
+    .key2             (mtx_key2),
+    .key3             (mtx_key3),
+    .key4             (mtx_key4),
     .keyboard_scan    (keyboard_scan),
     .keyboard_response(keyboard_response),
     .consol_start     (consol_start),

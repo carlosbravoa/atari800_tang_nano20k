@@ -98,6 +98,7 @@ module iosys_picorv32 #(
     output wire [7:0]  virt_kbd_key3_out,
     output wire [7:0]  virt_kbd_key4_out,
     output wire        usb_host_enable_out,
+    output wire        joystick_mode_out,    // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 
     // DIAGNOSTIC: heartbeat that toggles every time firmware reads reg_joystick
     // (i.e. every joy_get() call in the background loop). If this toggles, the
@@ -287,7 +288,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         spiflash_reg_ctrl_sel ? {30'h0000_0000, flash_loaded, flash_loading} :
         sio_reg_sel ? {16'h0000, sio_reg_rdata} :
         virt_kbd_reg0_sel ? {virt_kbd_key3, virt_kbd_key2, virt_kbd_key1, virt_kbd_mod} :
-        virt_kbd_reg1_sel ? {23'b0, usb_host_enable, virt_kbd_key4} :
+        virt_kbd_reg1_sel ? {22'b0, joystick_mode, usb_host_enable, virt_kbd_key4} :
         32'h 0000_0000;
 
 picorv32 #(
@@ -463,6 +464,7 @@ reg [7:0] virt_kbd_key2 = 8'h00;
 reg [7:0] virt_kbd_key3 = 8'h00;
 reg [7:0] virt_kbd_key4 = 8'h00;
 reg       usb_host_enable = 1'b1;
+reg       joystick_mode = 1'b0;
 
 always @(posedge clk) begin
     if (~resetn) begin
@@ -472,6 +474,7 @@ always @(posedge clk) begin
         virt_kbd_key3 <= 8'h00;
         virt_kbd_key4 <= 8'h00;
         usb_host_enable <= 1'b1;
+        joystick_mode <= 1'b0;
     end else begin
         if (virt_kbd_reg0_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_mod  <= mem_wdata[7:0];
@@ -482,6 +485,7 @@ always @(posedge clk) begin
         if (virt_kbd_reg1_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_key4 <= mem_wdata[7:0];
             if (mem_wstrb[1]) usb_host_enable <= mem_wdata[8];
+            if (mem_wstrb[1]) joystick_mode   <= mem_wdata[9];
         end
     end
 end
@@ -505,6 +509,7 @@ assign virt_kbd_key2_out = virt_kbd_key2;
 assign virt_kbd_key3_out = virt_kbd_key3;
 assign virt_kbd_key4_out = virt_kbd_key4;
 assign usb_host_enable_out = usb_host_enable;
+assign joystick_mode_out   = joystick_mode;
 
 assign dbg_stall_undec_out = dbg_stall_undec;
 assign dbg_stall_peri_out  = dbg_stall_peri;

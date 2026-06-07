@@ -21,7 +21,15 @@ int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
 #define OPTION_KBD_USB   1
 #define OPTION_KBD_UART  2
 int option_keyboard_type = OPTION_KBD_UART; // Default to UART keyboard
+int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
+
+// Push the input-related options into the hardware config register (0xA4):
+// bit 8 = USB-host-keyboard enable, bit 9 = arrow-keys-as-joystick mode.
+static inline void apply_input_options(void) {
+    reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000)
+                   | (option_arrow_joystick ? 0x200 : 0x000);
+}
 
 char load_fname[1024];
 char load_buf[1024];
@@ -251,6 +259,9 @@ int load_option()  {
                 option_keyboard_type = OPTION_KBD_UART;
             }
         }
+        if (strcmp(key, "joystick") == 0) {
+            option_arrow_joystick = (atoi(value) != 0);
+        }
     }
 
 load_option_close:
@@ -282,7 +293,13 @@ int save_option() {
         f_puts("1\n", &f);
     else
         f_puts("2\n", &f);
-        
+
+    if (f_puts("joystick=", &f) < 0) {
+        message("f_puts failed",1);
+        goto save_options_close;
+    }
+    f_puts(option_arrow_joystick ? "1\n" : "0\n", &f);
+
 save_options_close:
     f_close(&f);
     f_chmod(OPTION_FILE, AM_HID, AM_HID);
@@ -1088,27 +1105,32 @@ void menu_options() {
 
         cursor(2, 12);
         print("<< Return to main menu");
-        cursor(2, 14);
+        cursor(2, 13);
         print("OSD hot key:");
-        cursor(16, 14);
+        cursor(16, 13);
         if (option_osd_key == OPTION_OSD_KEY_SELECT_START)
             print("SELECT&START");
         else
             print("SELECT&RIGHT");
 
-        cursor(2, 16);
+        cursor(2, 14);
         print("Keyboard:");
-        cursor(16, 16);
+        cursor(16, 14);
         if (option_keyboard_type == OPTION_KBD_USB)
             print("USB");
         else
             print("UART");
 
+        cursor(2, 15);
+        print("Arrow keys:");
+        cursor(16, 15);
+        print(option_arrow_joystick ? "JOYSTICK" : "NORMAL");
+
         delay(300);
 
         for (;;) {
             uart_keyboard_poll();
-            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 4, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     return;
                 } else if (choice == 1) {
@@ -1129,9 +1151,18 @@ void menu_options() {
                     else
                         option_keyboard_type = OPTION_KBD_USB;
                     
-                    // Update the hardware register immediately
-                    reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000);
-                    
+                    apply_input_options();   // update hardware immediately
+
+                    status("Saving options...");
+                    if (save_option()) {
+                        message("Cannot save options to SD", 1);
+                        break;
+                    }
+                    break; // redraw UI
+                } else if (choice == 3) {
+                    option_arrow_joystick = !option_arrow_joystick;
+                    apply_input_options();
+
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
@@ -1227,7 +1258,7 @@ int main() {
 
     load_option();
     // Initialize USB Host enable state based on loaded option (0 = UART, 1 = USB)
-    reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000);
+    apply_input_options();
     sio_init();
 
     // Auto-load system ROMs on boot. On a warm reset (S1) the SD card is left
@@ -1493,7 +1524,8 @@ void uart_keyboard_poll(void) {
                             uint8_t key4 = ch_buf[6];
                             
                             reg_virt_kbd_0 = modifier | (key1 << 8) | (key2 << 16) | (key3 << 24);
-                            reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000) | key4;
+                            reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000)
+                                           | (option_arrow_joystick ? 0x200 : 0x000) | key4;
                             last_kbd_time = time_millis();
                         }
                     }
@@ -1506,7 +1538,7 @@ void uart_keyboard_poll(void) {
     // Safety timeout: if no keyboard packet received for 1 second, clear keys
     if (last_kbd_time != 0 && (time_millis() - last_kbd_time) > 1000) {
         reg_virt_kbd_0 = 0;
-        reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000);
+        apply_input_options();
         last_kbd_time = 0;
     }
 }
