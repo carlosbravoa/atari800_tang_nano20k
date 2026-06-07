@@ -1,330 +1,143 @@
-// GW2AR-18 embedded 32-bit SDRAM controller
-// 64 Mbit (8 MB): 4 banks × 2048 rows × 256 columns × 32 bits
-// Designed for 27–29 MHz operation; all standard SDRAM timing met with margin.
+// gw2ar_sdram — adapter that presents the Atari core/arbiter interface
+// (req / req_complete / read_en / write_en / addr / rdata / wdata / wmask / refresh)
+// on top of the low-latency NESTang controller (`sdram_nestang`, ~5-cycle access).
 //
-// Address mapping (25-bit byte address from Atari core):
-//   [1:0]  = byte lane select (for DQM)
-//   [9:2]  = column [7:0]
-//   [20:10]= row [10:0]
-//   [22:21]= bank [1:0]
-//   [24:23]= ignored (>8 MB)
+// Replaces the previous ~20-cycle closed-page controller + read cache. The ports and
+// behaviour (req held until a 1-cycle req_complete pulse; refresh latched and serviced
+// when idle) match the old module, so tang_top / the arbiter are unchanged.
 //
-// ROM addresses used by address_decoder.vhdl (low_memory=0, XL/XE mode):
-//   BASIC ROM  0x700000-0x701FFF  (bank 3, row 1024, cols 0-511)
-//   OS ROM     0x704000-0x707FFF  (bank 3, row 1040, cols 0-1023)
+// Address geometry is identical (byte[1:0]/col[9:2]/row[20:10]/bank[22:21]); addr[24:23]
+// are ignored (>8 MB), as before. The cache is dropped — at ~5-cycle access every read is
+// a direct SDRAM access well within the Atari bus window.
 
 module gw2ar_sdram (
-    input  wire        clk,        // system clock
+    input  wire        clk,
     input  wire        reset_n,
 
-    // ── Atari core / ROM-loader interface (time-shared) ──────────────────────
+    // Atari core / ROM-loader interface (time-shared via the arbiter)
     input  wire        req,
     output reg         req_complete,
     input  wire        read_en,
     input  wire        write_en,
-    input  wire [24:0] addr,       // byte address
-    output reg  [31:0] rdata,      // read data (to core)
-    input  wire [31:0] wdata,      // write data (from core / loader)
-    input  wire [3:0]  wmask,      // 4-bit write mask (active high)
-    input  wire        refresh,    // refresh request from core
+    input  wire [24:0] addr,
+    output reg  [31:0] rdata,
+    input  wire [31:0] wdata,
+    input  wire [3:0]  wmask,
+    input  wire        refresh,
 
-    // ── GW2AR-18 embedded SDRAM pins ─────────────────────────────────────────
+    // GW2AR-18 embedded SDRAM pins
     output wire        O_sdram_clk,
-    output reg         O_sdram_cke,
-    output reg         O_sdram_cs_n,
-    output reg         O_sdram_ras_n,
-    output reg         O_sdram_cas_n,
-    output reg         O_sdram_wen_n,
-    output reg  [1:0]  O_sdram_ba,
-    output reg  [10:0] O_sdram_addr,
-    output reg  [3:0]  O_sdram_dqm,
+    output wire        O_sdram_cke,
+    output wire        O_sdram_cs_n,
+    output wire        O_sdram_ras_n,
+    output wire        O_sdram_cas_n,
+    output wire        O_sdram_wen_n,
+    output wire [1:0]  O_sdram_ba,
+    output wire [10:0] O_sdram_addr,
+    output wire [3:0]  O_sdram_dqm,
     inout  wire [31:0] IO_sdram_dq,
 
-    output reg         sdram_ready = 1'b0  // high after SDRAM init completes
+    output reg         sdram_ready = 1'b0
 );
 
-// SDRAM clock = system clock (same domain; at 27 MHz timing is very relaxed)
-// Inverted physical clock to create 180-degree phase shift
-assign O_sdram_clk = ~clk;
+// SDRAM clock = inverted system clock (180-degree phase), same as the previous controller.
+wire clk_sdram = ~clk;
 
-// ── DQ tri-state ──────────────────────────────────────────────────────────────
-reg  [31:0] dq_out;
-reg         dq_en;
-assign IO_sdram_dq = dq_en ? dq_out : 32'bz;
+// ── NESTang controller ────────────────────────────────────────────────────────
+wire [31:0] n_dout32;
+wire        n_data_ready;
+wire        n_busy;
 
-// ── SDRAM commands ────────────────────────────────────────────────────────────
-// {CS_N, RAS_N, CAS_N, WE_N}
-localparam CMD_INHIBIT   = 4'b1111;
-localparam CMD_NOP       = 4'b0111;
-localparam CMD_ACTIVE    = 4'b0011;
-localparam CMD_READ      = 4'b0101;
-localparam CMD_WRITE     = 4'b0100;
-localparam CMD_PRECHARGE = 4'b0010;
-localparam CMD_AUTO_REF  = 4'b0001;
-localparam CMD_LOAD_MODE = 4'b0000;
+reg  r_rd = 1'b0, r_wr = 1'b0, r_ref = 1'b0;
 
-// Mode register: CAS=2, Burst=1, Sequential
-localparam [10:0] MODE_REG = 11'b000_0_010_0_000;
+sdram_nestang #(.FREQ(54_000_000)) u_sdram (
+    .SDRAM_DQ   (IO_sdram_dq),
+    .SDRAM_A    (O_sdram_addr),
+    .SDRAM_BA   (O_sdram_ba),
+    .SDRAM_nCS  (O_sdram_cs_n),
+    .SDRAM_nWE  (O_sdram_wen_n),
+    .SDRAM_nRAS (O_sdram_ras_n),
+    .SDRAM_nCAS (O_sdram_cas_n),
+    .SDRAM_CLK  (O_sdram_clk),
+    .SDRAM_CKE  (O_sdram_cke),
+    .SDRAM_DQM  (O_sdram_dqm),
 
-// ── State machine ─────────────────────────────────────────────────────────────
-typedef enum logic [3:0] {
-    S_INIT,      // power-on delay (200 µs at 27 MHz ≈ 5400 cycles)
-    S_IPRE,      // init: PRECHARGE ALL
-    S_IREF,      // init: 8× AUTO REFRESH
-    S_IMRS,      // init: LOAD MODE REGISTER
-    S_IDLE,
-    S_ACT,       // ACTIVATE row
-    S_RD,        // READ command
-    S_RD_W1,     // CAS latency 1
-    S_RD_DONE,   // capture data
-    S_WR,        // WRITE command + complete
-    S_REF,       // AUTO REFRESH from idle
-    S_CACHE_HIT  // Cache hit complete
-} state_t;
+    .clk        (clk),
+    .clk_sdram  (clk_sdram),
+    .resetn     (reset_n),
+    .rd         (r_rd),
+    .wr         (r_wr),
+    .refresh    (r_ref),
+    .addr       (addr[22:0]),
+    .din        (wdata),
+    .wmask      (wmask),
+    .dout32     (n_dout32),
+    .data_ready (n_data_ready),
+    .busy       (n_busy)
+);
 
-state_t       state = S_INIT;
-reg [13:0]    cnt = 14'd5400;        // general wait counter
-reg [3:0]     ref_cnt = 4'd8;    // init-refresh repetition counter
-reg [1:0]     cur_bank;
-reg [10:0]    cur_row;
-reg [7:0]     cur_col;
-reg           cur_addr23;
-reg [3:0]     cur_dqm;
-reg           cur_write;
+// ── Handshake adapter FSM ──────────────────────────────────────────────────────
+localparam [1:0] A_IDLE = 2'd0, A_ACCESS = 2'd1, A_REFRESH = 2'd2;
+reg [1:0] ast = A_IDLE;
+reg       busy_d = 1'b1;           // delayed busy for falling-edge detect
+reg       init_done = 1'b0;
+reg       refresh_pending = 1'b0;
+reg       refresh_d = 1'b0;
 
-// Registered read data capture
-reg [31:0]    dq_capture;
-reg           refresh_r;
-reg           refresh_pending;
+wire busy_fell = busy_d & ~n_busy;
 
-// Read cache variables
-reg [20:0]    cache_tag [0:3];
-reg [31:0]    cache_data [0:3];
-reg           cache_valid [0:3];
-reg [1:0]     lru_list [0:3];
-
-logic         cache_hit;
-logic [1:0]   hit_idx;
-always_comb begin
-    cache_hit = 1'b0;
-    hit_idx = 2'd0;
-    // Only check cache for RAM/ROM reads (addr[23] == 0). Cartridge space (addr[23] == 1) bypasses cache.
-    if (addr[23] == 1'b0) begin
-        for (int i = 0; i < 4; i = i + 1) begin
-            if (cache_valid[i] && (addr[22:2] == cache_tag[i])) begin
-                cache_hit = 1'b1;
-                hit_idx = i[1:0];
-            end
-        end
-    end
-end
-
-task set_cmd;
-    input [3:0] cmd;
-    {O_sdram_cs_n, O_sdram_ras_n, O_sdram_cas_n, O_sdram_wen_n} = cmd;
-endtask
-
-
-
-always_ff @(posedge clk or negedge reset_n) begin
+always @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
-        state           <= S_INIT;
-        cnt             <= 14'd5400;   // 200 µs at 27 MHz
-        ref_cnt         <= 4'd8;
-        O_sdram_cke     <= 1'b1;
-        dq_en           <= 1'b0;
+        ast             <= A_IDLE;
+        r_rd            <= 1'b0;
+        r_wr            <= 1'b0;
+        r_ref           <= 1'b0;
         req_complete    <= 1'b0;
+        rdata           <= 32'd0;
+        busy_d          <= 1'b1;
+        init_done       <= 1'b0;
         sdram_ready     <= 1'b0;
-        set_cmd(CMD_INHIBIT);
-        O_sdram_ba      <= 2'b0;
-        O_sdram_addr    <= 11'b0;
-        O_sdram_dqm     <= 4'b1111;
-        refresh_r       <= 1'b0;
         refresh_pending <= 1'b0;
-        cur_addr23      <= 1'b0;
-        cache_valid[0]  <= 1'b0;
-        cache_valid[1]  <= 1'b0;
-        cache_valid[2]  <= 1'b0;
-        cache_valid[3]  <= 1'b0;
-        lru_list[0]     <= 2'd0;
-        lru_list[1]     <= 2'd1;
-        lru_list[2]     <= 2'd2;
-        lru_list[3]     <= 2'd3;
+        refresh_d       <= 1'b0;
     end else begin
+        r_rd  <= 1'b0;
+        r_wr  <= 1'b0;
+        r_ref <= 1'b0;
         req_complete <= 1'b0;
-        dq_en        <= 1'b0;
-        set_cmd(CMD_NOP);
+        busy_d <= n_busy;
 
-        refresh_r <= refresh;
-        if (refresh && !refresh_r) begin
-            refresh_pending <= 1'b1;
-        end else if (state == S_IDLE && cnt == 0 && refresh_pending) begin
-            refresh_pending <= 1'b0;
+        // latch refresh requests (rising edge), service when idle
+        refresh_d <= refresh;
+        if (refresh && !refresh_d) refresh_pending <= 1'b1;
+
+        // controller init finishes the first time busy drops (after CONFIG)
+        if (!init_done && busy_fell) begin
+            init_done   <= 1'b1;
+            sdram_ready <= 1'b1;
         end
 
-        case (state)
-            // ── Initialisation ────────────────────────────────────────────────
-            S_INIT: begin
-                if (cnt == 0) begin
-                    state <= S_IPRE;
-                end else begin
-                    cnt <= cnt - 1;
-                end
-            end
-
-            S_IPRE: begin
-                // PRECHARGE ALL (A10=1)
-                set_cmd(CMD_PRECHARGE);
-                O_sdram_addr <= 11'b10000000000;  // A10=1 (Precharge All)
-                O_sdram_ba   <= 2'b00;
-                cnt          <= 14'd2;
-                state        <= S_IREF;
-            end
-
-            S_IREF: begin
-                if (cnt != 0) begin
-                    cnt <= cnt - 1;  // finish tRP wait or tRFC wait
-                end else if (ref_cnt != 0) begin
-                    set_cmd(CMD_AUTO_REF);
-                    ref_cnt <= ref_cnt - 1;
-                    cnt     <= 14'd6;
-                end else begin
-                    state <= S_IMRS;
-                end
-            end
-
-            S_IMRS: begin
-                // Load mode register
-                set_cmd(CMD_LOAD_MODE);
-                O_sdram_ba   <= 2'b00;
-                O_sdram_addr <= MODE_REG;
-                cnt          <= 14'd2;
-                state        <= S_IDLE;
-                sdram_ready  <= 1'b1;
-            end
-
-            // ── Idle: wait for request or refresh ────────────────────────────
-            S_IDLE: begin
-                if (cnt != 0) begin
-                    cnt <= cnt - 1;
-                // Refresh has priority over reads/writes (matches MiSTer sdram_statemachine
-                // behaviour) to prevent refresh starvation under heavy ANTIC DMA load.
+        case (ast)
+            A_IDLE: if (init_done && !n_busy) begin
+                if (req && (read_en || write_en)) begin
+                    r_rd <= read_en;
+                    r_wr <= write_en;
+                    ast  <= A_ACCESS;
                 end else if (refresh_pending) begin
-                    set_cmd(CMD_AUTO_REF);
-                    cnt   <= 14'd6;
-                    state <= S_REF;
-                end else if (req) begin
-                    if (!write_en && cache_hit) begin
-                        rdata        <= cache_data[hit_idx];
-                        state        <= S_CACHE_HIT;
-                        // Update LRU list: move hit_idx to MRU (lru_list[0])
-                        if (lru_list[0] == hit_idx) begin
-                            // Already at MRU, do nothing
-                        end else if (lru_list[1] == hit_idx) begin
-                            lru_list[1] <= lru_list[0];
-                            lru_list[0] <= hit_idx;
-                        end else if (lru_list[2] == hit_idx) begin
-                            lru_list[2] <= lru_list[1];
-                            lru_list[1] <= lru_list[0];
-                            lru_list[0] <= hit_idx;
-                        end else begin // lru_list[3] == hit_idx
-                            lru_list[3] <= lru_list[2];
-                            lru_list[2] <= lru_list[1];
-                            lru_list[1] <= lru_list[0];
-                            lru_list[0] <= hit_idx;
-                        end
-                    end else begin
-                        // Latch address fields
-                        cur_addr23    <= addr[23];
-                        cur_bank      <= addr[22:21];
-                        cur_row       <= addr[20:10];
-                        cur_col       <= addr[9:2];
-                        cur_dqm   <= ~wmask;
-                        cur_write <= write_en;
-                        if (write_en) begin
-                            cache_valid[0] <= 1'b0;
-                            cache_valid[1] <= 1'b0;
-                            cache_valid[2] <= 1'b0;
-                            cache_valid[3] <= 1'b0;
-                        end
-                        // ACTIVATE
-                        set_cmd(CMD_ACTIVE);
-                        O_sdram_ba   <= addr[22:21];
-                        O_sdram_addr <= addr[20:10];
-                        state        <= S_ACT;
-                    end
+                    r_ref           <= 1'b1;
+                    refresh_pending <= 1'b0;
+                    ast             <= A_REFRESH;
                 end
             end
 
-            // ── Activate: wait tRCD (1 cycle sufficient @ 27 MHz ≥ 37 ns) ───
-            S_ACT: begin
-                if (cur_write) begin
-                    set_cmd(CMD_WRITE);
-                    O_sdram_ba   <= cur_bank;
-                    O_sdram_addr <= {3'b100, cur_col};  // A10=1 (Auto-precharge enabled)
-                    O_sdram_dqm  <= cur_dqm;
-                    dq_out       <= wdata;
-                    dq_en        <= 1'b1;
-                    state        <= S_WR;
-                end else begin
-                    set_cmd(CMD_READ);
-                    O_sdram_ba   <= cur_bank;
-                    O_sdram_addr <= {3'b100, cur_col};  // A10=1 (Auto-precharge enabled)
-                    O_sdram_dqm  <= 4'b0000;
-                    state        <= S_RD;
+            A_ACCESS: begin
+                if (n_data_ready) rdata <= n_dout32;   // capture read data (1 cyc before busy falls)
+                if (busy_fell) begin
+                    req_complete <= 1'b1;
+                    ast          <= A_IDLE;
                 end
             end
 
-            // ── Read: CAS latency wait (CL=2) ────────────────────────────────
-            S_RD: begin
-                state <= S_RD_W1;  // 1st latency cycle
-            end
-
-            S_RD_W1: begin
-                state <= S_RD_DONE;  // 2nd latency cycle: data valid next edge
-            end
-
-            S_RD_DONE: begin
-                rdata            <= IO_sdram_dq;
-                req_complete     <= 1'b1;
-                cnt              <= 14'd2;   // tRP for auto-precharge row close
-                state            <= S_IDLE;
-                
-                // Update read cache: replace LRU line (lru_list[3]) if it was not a cartridge read
-                if (!cur_addr23) begin
-                    cache_data[lru_list[3]]  <= IO_sdram_dq;
-                    cache_tag[lru_list[3]]   <= {cur_bank, cur_row, cur_col};
-                    cache_valid[lru_list[3]] <= 1'b1;
-                    // Move replaced line to MRU (lru_list[0]) and shift down
-                    lru_list[0] <= lru_list[3];
-                    lru_list[1] <= lru_list[0];
-                    lru_list[2] <= lru_list[1];
-                    lru_list[3] <= lru_list[2];
-                end
-            end
-
-            // ── Write complete ────────────────────────────────────────────────
-            S_WR: begin
-                dq_en        <= 1'b0;
-                O_sdram_dqm  <= 4'b1111;
-                req_complete <= 1'b1;
-                cnt          <= 14'd3;   // tWR + tRP
-                state        <= S_IDLE;
-            end
-
-            // ── Refresh ───────────────────────────────────────────────────────
-            S_REF: begin
-                if (cnt != 0) cnt <= cnt - 1;
-                else          state <= S_IDLE;
-            end
-
-            // ── Cache hit complete ────────────────────────────────────────────
-            S_CACHE_HIT: begin
-                req_complete <= 1'b1;
-                state        <= S_IDLE;
-            end
-
-            default: state <= S_IDLE;
+            A_REFRESH: if (busy_fell) ast <= A_IDLE;
         endcase
     end
 end
