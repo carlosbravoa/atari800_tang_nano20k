@@ -16,6 +16,26 @@ adapted for the Gowin FPGA toolchain.
 
 ---
 
+## ⚡ Minimum to get running
+
+The absolute essentials — everything below this section is detail.
+
+1. A **Sipeed Tang Nano 20K**.
+2. A **FAT32 micro-SD** with `ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) in the root
+   (**you supply these ROMs**). Drop any `.atr` disk images on it too.
+3. **Flash the bitstream** (firmware is baked in — nothing else to flash):
+   ```bash
+   openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
+   ```
+4. Plug in **HDMI** and the **SD card**, then **power on** → it auto-boots to **BASIC**.
+5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick on port 1** alone can drive it
+   (no keyboard needed). To boot a disk: OSD → *Select ATR Disk Image* → pick → *Hard Reset*.
+
+That's a working machine. For a keyboard, the simplest is a **CH9350 USB-host board, one wire to
+Pin 53** (see [Keyboard](#keyboard-input)).
+
+---
+
 ## Features
 
 - **Atari 800 / 800XL / 65XE / 130XE** emulation (6502 CPU, ANTIC, GTIA, POKEY, PIA)
@@ -27,6 +47,7 @@ adapted for the Gowin FPGA toolchain.
 - **On-Screen Display (OSD)** — file browser, disk image selection, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**)
 - **UART / serial keyboard (recommended)** — raw USB HID reports sent over serial frames from an external CH9350 board or Raspberry Pi Pico (no resistors, uses Pin 53)
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (there are no DB9 connectors on the board — see [wiring](#atari-db9-joystick))
+- **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
 - **Direct USB HID keyboard (experimental)** — low-speed USB straight to GPIO pins (needs 15 kΩ pull-downs); **unreliable — use the UART/CH9350 keyboard instead**
 
@@ -45,8 +66,10 @@ adapted for the Gowin FPGA toolchain.
 | UART / serial keyboard (CH9350 / Pi Pico) — **recommended** | ✅ Working (hardware decoder) |
 | Direct USB HID keyboard (to GPIO pins) | ⚠️ Experimental / unreliable — prefer UART |
 | DB9 joystick (wired to GPIO pins) | ✅ Working |
+| Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
 | SIO disk emulation (.atr) | ✅ Working — mount `.atr` images, boot DOS/games |
 | Video centering (frame + picture) | ✅ Working |
+| Core timing margin (`clk_core` 54 MHz) | ⚠️ Marginal — occasional graphical corruption in some games (see caveats) |
 | Cartridge images (.car / .rom) | 🔜 Planned |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
@@ -63,9 +86,12 @@ adapted for the Gowin FPGA toolchain.
 > exceeded it, causing video garble). The HDMI scaler genlocks to this 54 MHz line cadence.
 
 > **Known caveats (this baseline):** ① The Atari currently runs slightly slow (~6%; timing tuning
-> pending). ② `clk_core` is modestly above the tool's reported Fmax; it boots reliably in
-> practice but the timing margin work is tracked. ③ The status LEDs presently carry diagnostic
-> signals (see [Status LEDs](#status-leds)), not the normal status set.
+> pending). ② **`clk_core` (54 MHz) is marginally over the tool's reported Fmax** — the core's
+> critical path (6502 opcode decode) lands ~0.2 ns negative, so some games can show **occasional
+> graphical corruption** (garbled frames / corrupt sprites) when that path just misses timing. It
+> mostly runs fine; a small clock back-off (~52.6 MHz) or a critical-path optimization fixes it
+> reliably — tracked. ③ The status LEDs presently carry diagnostic signals (see
+> [Status LEDs](#status-leds)), not the normal status set.
 
 ---
 
@@ -396,8 +422,16 @@ Mounted: None
 - **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
 - **Soft / Hard Reset** — warm or cold restart
-- **Options** — emulator options (OSD hotkey, keyboard type)
+- **Options** — emulator options: OSD hot key, keyboard type, and **Arrow keys: NORMAL/JOYSTICK** (see below)
 - **Return to Atari** — close the OSD (also via S2 / F12), with or without a disk mounted
+
+### Playing with the keyboard (arrow keys as joystick)
+
+In **OSD → Options**, toggle **`Arrow keys: NORMAL → JOYSTICK`**. While set to JOYSTICK:
+
+- ↑ ↓ ← → drive **Joystick 1** (alongside any physical DB9 stick on port 1), **Left-Alt = fire**.
+- Those keys are suppressed from the Atari keyboard so they only move the stick (no stray typing).
+- Toggle back to **NORMAL** to type again. The setting is saved to `atari.ini` and survives reboots.
 
 ### Booting a disk image
 
