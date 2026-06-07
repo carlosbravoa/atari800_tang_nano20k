@@ -1,6 +1,20 @@
 # Why the Atari runs ~6% slow (and the speed/reliability tradeoff)
 
 **Last updated:** 2026-06-07
+
+> ## ✅ STATUS UPDATE (2026-06-07): the SDRAM cure is IMPLEMENTED
+> The NESTang ~5-cycle controller was adopted (`src/sdram_nestang.v` + adapter `src/gw2ar_sdram.sv`).
+> With it, `cycle_length=16` is legal again, so `clk_core` dropped **54 → 27 MHz** (`enable_179`
+> unchanged at 1.6875 MHz → same Atari speed/frame rate). The 6502 critical path now has ~+12 MHz of
+> slack (`clk_core` Fmax 39.3 MHz vs 27 MHz constraint) → **the intermittent corruption is gone.**
+> Verified on hardware. The analysis below is kept for the record.
+>
+> **What's left for *exact* speed:** it is no longer a *timing* problem — it's purely the HDMI
+> scaler. Running the core faster (e.g. 28.6 MHz, `cycle_length=16`) is now trivially within timing,
+> but changes the frame rate and reopens the scaler genlock/jitter wall (the 47 kHz-line-rate /
+> H_TOTAL=1574 monitor-rejection from the earlier speed-tuning attempt). So exact speed = a
+> **frame-buffer/genlock scaler rework**, decoupled from the (now-solved) timing/memory bottleneck.
+
 **TL;DR:** The Atari core is *not* the hard part. Our single root bottleneck is the **SDRAM
 controller**: it takes ~20 core-clock steps per access, which forces a high core clock (54 MHz),
 which makes the 6502's critical path marginal on the Gowin fabric → ~6% slow *and* occasional

@@ -69,7 +69,7 @@ Pin 53** (see [Keyboard](#keyboard-input)).
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
 | SIO disk emulation (.atr) | ✅ Working — mount `.atr` images, boot DOS/games |
 | Video centering (frame + picture) | ✅ Working |
-| Core timing margin (`clk_core` 54 MHz) | ⚠️ Marginal — occasional graphical corruption in some games (see caveats) |
+| Core timing (`clk_core` 27 MHz, low-latency SDRAM) | ✅ Resolved — comfortable timing margin, no more corruption |
 | Cartridge images (.car / .rom) | 🔜 Planned |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
@@ -81,17 +81,17 @@ Pin 53** (see [Keyboard](#keyboard-input)).
 > **Keyboard runs in hardware:** the CH9350/UART keyboard is decoded by a dedicated RTL module
 > (`uart_kbd_ch9350.sv`), independent of the softcore and the SDRAM bus.
 
-> **Video / clock:** The Atari core and SDRAM run at **54 MHz / `cycle_length=32`** so each
-> SDRAM access completes within the Atari bus window (the original 27 MHz / `cycle_length=16`
-> exceeded it, causing video garble). The HDMI scaler genlocks to this 54 MHz line cadence.
+> **Video / clock:** The Atari core + SDRAM run at **27 MHz / `cycle_length=16`** using a
+> **low-latency (~5-cycle) SDRAM controller** (adapted from NESTang). The earlier 54 MHz design
+> existed only to give the *slow* ~20-cycle controller enough
+> cycles per access; with the fast controller, 27 MHz / `cycle_length=16` fits the bus window with
+> margin **and** gives the 6502 critical path huge timing slack — so the previous intermittent
+> corruption is gone. Atari speed is unchanged (`enable_179 = 27/16 = 1.6875 MHz`).
 
-> **Known caveats (this baseline):** ① The Atari currently runs slightly slow (~6%; timing tuning
-> pending). ② **`clk_core` (54 MHz) is marginally over the tool's reported Fmax** — the core's
-> critical path (6502 opcode decode) lands ~0.2 ns negative, so some games can show **occasional
-> graphical corruption** (garbled frames / corrupt sprites) when that path just misses timing. It
-> mostly runs fine; a small clock back-off (~52.6 MHz) or a critical-path optimization fixes it
-> reliably — tracked. ③ The status LEDs presently carry diagnostic signals (see
-> [Status LEDs](#status-leds)), not the normal status set.
+> **Known caveats (this baseline):** ① The Atari runs slightly slow (~6%): exact NTSC speed needs a
+> faster `enable_179`, which is now only gated by the HDMI scaler (a frame-buffer/genlock rework —
+> *no longer a timing limit*), tracked in `docs/performance_and_timing.md`. ② The status LEDs
+> presently carry diagnostic signals (see [Status LEDs](#status-leds)), not the normal status set.
 
 ---
 
@@ -507,9 +507,10 @@ atari800_tang_nano20k_parallel/
 ## Known Limitations / Roadmap
 
 - **SIO disk emulation** — ✅ working; cartridge (`.car`/`.rom`) loading still planned
-- **Atari speed** — currently runs slightly slow (~6%, `clk_core` 54 MHz vs ~57.3 MHz target); timing tuning pending
-- **clk_core timing margin** — `clk_core` (54 MHz) is modestly above the tool's reported Fmax;
-  boots reliably in practice, proper critical-path fix tracked
+- **Atari speed** — runs slightly slow (~6%); exact NTSC speed is now gated only by the HDMI
+  scaler (frame-buffer/genlock rework), not core timing — see `docs/performance_and_timing.md`
+- **core timing / corruption** — ✅ resolved: low-latency SDRAM controller → `clk_core` 27 MHz with
+  comfortable slack, no more graphical corruption
 - **Joystick paddles** — analogue pot inputs not implemented
 - **Cartridge images** — `.car` / `.rom` cartridge loading not yet implemented
 - **Machine is NTSC** (`PAL=0`); runtime PAL/NTSC switch planned
