@@ -28,11 +28,11 @@ The absolute essentials — everything below this section is detail.
    openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
    ```
 4. Plug in **HDMI** and the **SD card**, then **power on** → it auto-boots to **BASIC**.
-5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick on port 1** alone can drive it
+5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick connected to the hardware pins of Joystick port 1** alone can drive it
    (no keyboard needed). To boot a disk: OSD → *Select ATR Disk Image* → pick → *Hard Reset*.
 
 That's a working machine. For a keyboard, the simplest is a **CH9350 USB-host board, one wire to
-Pin 53** (see [Keyboard](#keyboard-input)).
+Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used instead of a joystick, configurable via OSD menu.**
 
 ---
 
