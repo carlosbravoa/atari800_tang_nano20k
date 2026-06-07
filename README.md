@@ -524,5 +524,9 @@ atari800_tang_nano20k_parallel/
 - **USB HID host** — [nand2mario/usb_hid_host](https://github.com/nand2mario/usb_hid_host) (Apache 2.0)
 - **PicoRV32** — [YosysHQ/picorv32](https://github.com/YosysHQ/picorv32) (ISC)
 - **IO subsystem** — adapted from [nand2mario/nestang](https://github.com/nand2mario/nestang)
+- **Low-latency SDRAM controller** — adapted from **nand2mario**'s NESTang Tang Nano 20K controller
+  ([sdram-tang-nano-20k](https://github.com/nand2mario/sdram-tang-nano-20k)). Our `sdram_nestang.v`
+  is that controller with a 32-bit masked-write path added. Huge thanks — this is what made the
+  27 MHz / corruption-free core possible.
 
 This Tang Nano 20K port: see upstream projects for their respective licence terms.
