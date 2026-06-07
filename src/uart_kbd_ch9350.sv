@@ -116,14 +116,14 @@ module uart_kbd_ch9350 #(
             ms_div   <= 17'd0;
             ms_cnt   <= 11'd0;
         end else begin
-            // Watchdog: tick every ms; clear keys after TIMEOUT_MS with no valid report.
+            // NO key auto-clear: a held key must last as long as it's held. The CH9350
+            // transmits only on CHANGE (key-down / key-up), so a held key never refreshes
+            // — a watchdog clear would wrongly "release" it after ~1 s. Keys are cleared
+            // instead by the actual key-up report (d3..d6 = 0 on release), below. ms_cnt
+            // kept (saturating) only as a since-last-packet counter.
             if (ms_div >= MS_TICKS-1) begin
                 ms_div <= 17'd0;
-                if (ms_cnt >= TIMEOUT_MS) begin
-                    kbd_mod<=8'd0; kbd_key1<=8'd0; kbd_key2<=8'd0; kbd_key3<=8'd0; kbd_key4<=8'd0;
-                end else begin
-                    ms_cnt <= ms_cnt + 11'd1;
-                end
+                if (ms_cnt < TIMEOUT_MS) ms_cnt <= ms_cnt + 11'd1;
             end else begin
                 ms_div <= ms_div + 17'd1;
             end
