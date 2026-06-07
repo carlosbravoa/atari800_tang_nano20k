@@ -101,3 +101,53 @@ parked behind lower-risk work.
 **Recommendation:** the cheap reliable fix is the ~52.6 MHz back-off. The *proper* cure is the
 SDRAM-controller speedup — it's the one change that fixes speed, reliability, and keeps the 128 KB
 machine. The BRAM route is appealing but disqualified by the 130XE target.
+
+---
+
+## Candidate replacement SDRAM controllers (evaluated 2026-06-07)
+
+We don't have to write a faster controller from scratch — two existing Tang Nano 20K controllers
+were evaluated as a base. Our controller is `src/gw2ar_sdram.sv` (single 32-bit port:
+`req`+`read_en`/`write_en` → `req_complete`, `addr[24:0]`, `rdata`/`wdata[31:0]`, `wmask[3:0]`,
+`refresh`; ~20-cycle closed-page access).
+
+### ❌ snestang `sdram_snes` (`../snestang/src/nano20k/sdram_nano.v`, ~2-cycle) — not usable
+Heavily SNES-specific: dedicated multi-ports (CPU bank0/1, BSRAM, ARAM bank2, VRAM1, VRAM2,
+RISC-V), **16-bit**, multi-clock (SDRAM `fclk` ≈ 86 MHz = 4× the 21.5 MHz `mclk`, plus `clkref`).
+Excellent latency but the architecture is nothing like ours — adopting it = a major rewrite with
+all the SNES bank logic stripped out. Skip.
+
+### ✅ nestang `sdram` (`../sdram-tang-nano-20k/src/sdram.v`, ~5-cycle) — strong base
+Generic, built for our exact device (used in NESTang):
+- Single port, parameterized **`DATA_WIDTH=32`**; 4 banks × 2048 rows × 256 cols × 32-bit =
+  **8 MB — matches our SDRAM geometry exactly**.
+- **~5-cycle** latency; runs up to **66.7 MHz** (chip supports up to ~166 MHz with tighter params).
+- Signals: `rd`/`wr`/`refresh`, `addr[22:0]` (byte), `din[7:0]`, `dout32[31:0]`, `busy`, `data_ready`.
+
+**Not a literal drop-in** (interface differs), but reusable behind a thin adapter:
+
+| | ours (`gw2ar_sdram`) | nestang `sdram` |
+|---|---|---|
+| handshake | `req` + `read_en`/`write_en` → `req_complete` | `rd`/`wr` pulse → `busy` / `data_ready` |
+| write | `wdata[31:0]` + `wmask[3:0]` | `din[7:0]` (byte) |
+| address | `[24:0]` (top 2 ignored) | `[22:0]` (8 MB) |
+
+Plan: keep the core + two-client arbiter untouched; write a **~50–100-line adapter wrapper** named
+`gw2ar_sdram` that exposes our existing ports while driving nestang's `rd/wr/busy/data_ready` and
+mapping the byte write (the 6502 writes one byte at a time anyway). The proven controller is reused
+as-is — this is what de-risks the rewrite.
+
+### Why this unlocks exact speed
+At ~5 cycles, an access fits `cycle_length = 16` with huge margin. Then:
+- `cycle_length = 16` + `clk_core ≈ 28.6 MHz` → **exact NTSC speed** (16 × 1.79 MHz).
+- 28.6 MHz is far under the fabric Fmax → **comfortable timing, no corruption**.
+- RAM stays in SDRAM → **keeps 128 KB / 130XE**.
+- At 28.6 MHz a 5-cycle access fits on a **single clock** → likely no separate fast SDRAM clock /
+  CDC needed (simpler than snestang's 4× scheme).
+
+So: exact speed + reliable + 128 KB, by reusing working code.
+
+**Remaining work / risks:** the adapter wrapper; the phase-shifted `clk_sdram` the controller wants
+(clk + 180°, easy from the PLL); re-verifying refresh and the two-client arbiter against the new
+timing; and the usual hard-to-catch intermittent-SDRAM verification. Multi-day, but grounded on a
+proven controller rather than a blank page. **This is the recommended route for the eventual fix.**
