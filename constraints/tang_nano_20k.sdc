@@ -15,7 +15,7 @@ create_clock -name clk_usb -period 83.333 [get_nets {clk_usb}]
 # Previously UNCONSTRAINED, so P&R never closed timing on this domain (achievable Fmax
 # was only ~43 MHz vs the 54 MHz it is actually clocked at). Constrain it so the tool
 # optimizes these paths and reports the true critical path.
-create_clock -name clk_core -period 18.518 [get_pins {clkdiv_core/CLKOUT}]
+create_clock -name clk_core -period 37.037 [get_pins {clkdiv_core/CLKOUT}]
 
 # Treat system clock, USB clock, core clock, and HDMI clocks as asynchronous clock groups
 set_clock_groups -asynchronous -group [get_clocks {sys_clk}] -group [get_clocks {clk_pix clk_5x}] -group [get_clocks {clk_usb}] -group [get_clocks {clk_core}]

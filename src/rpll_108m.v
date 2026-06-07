@@ -39,9 +39,9 @@ defparam rpll_inst.FCLKIN          = "27";
 defparam rpll_inst.DYN_IDIV_SEL    = "false";
 defparam rpll_inst.IDIV_SEL        = 0;      // divide input by 1
 defparam rpll_inst.DYN_FBDIV_SEL   = "false";
-defparam rpll_inst.FBDIV_SEL       = 7;      // multiply by 8 → 216 MHz
+defparam rpll_inst.FBDIV_SEL       = 3;      // 27*4 = 108 MHz → CLKDIV/4 = clk_core 27 MHz
 defparam rpll_inst.DYN_ODIV_SEL    = "false";
-defparam rpll_inst.ODIV_SEL        = 4;      // VCO = 216*4 = 864 MHz
+defparam rpll_inst.ODIV_SEL        = 8;      // VCO = 108*8 = 864 MHz (in range)
 defparam rpll_inst.PSDA_SEL        = "0000";
 defparam rpll_inst.DYN_DA_EN       = "true";
 defparam rpll_inst.DUTYDA_SEL      = "1000";

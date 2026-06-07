@@ -121,6 +121,7 @@ add_file "$src_dir/sigma_delta_dac.sv"
 
 # ── Custom 27 MHz SDRAM Controller ────────────────────────────────────────────
 add_file "$src_dir/gw2ar_sdram.sv"
+add_file "$src_dir/sdram_nestang.v"
 
 # ── Tang Nano top-level ───────────────────────────────────────────────────────
 add_file "$src_dir/tang_top.sv"

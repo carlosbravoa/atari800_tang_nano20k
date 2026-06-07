@@ -958,7 +958,7 @@ sio_handler sio_inst (
 // Atari 800 core
 // ─────────────────────────────────────────────────────────────────────────────
 atari800core_simple_sdram #(
-    .cycle_length               (32),
+    .cycle_length               (16),
     .video_bits                 (8),
     .palette                    (1),    // Altirra palette
     .internal_rom               (0),    // ROMs in SDRAM
