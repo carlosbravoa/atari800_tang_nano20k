@@ -1296,7 +1296,41 @@ end
 //   LED3 pin18 (leds_n[2]) = |sio_tx_stretch     : BLINKS when OUR DRIVE transmits to the Atari
 //   LED4 pin19 (leds_n[3]) = |sio_rx_stretch     : BLINKS when the Atari transmits to the drive
 //   LED5 pin20 (leds_n[4]) = ~blink_cnt[22]      : ~6 Hz FPGA-alive heartbeat
-assign leds_n = {~blink_cnt[22], ~(|sio_rx_stretch), ~(|sio_tx_stretch), sio_command};
+// ── STAGE 0 DIAGNOSTIC: SDRAM bandwidth meter (frame-buffer feasibility) ─────────
+// Peak-hold thermometer of arbiter SA_BUSY occupancy (= SDRAM access load) at exact
+// speed. The frame buffer needs ~46% free (write ~22% + read ~22% + refresh ~2%), so
+// the go/no-go is "does peak occupancy stay below ~54%?". Window = 2^20 clk_core
+// cycles (~37 ms). Peak-held since power-on (power-cycle to reset). Run a demanding
+// program (heavy-ANTIC game) and read the LEDs. See docs/frame_buffer_plan.md Stage 0.
+//   LED2 (pin17) on if peak > 20%   (sanity — core is accessing SDRAM)
+//   LED3 (pin18) on if peak > 39%   (above this the FB gets tight)
+//   LED4 (pin19) on if peak > 54%   (★ if this LIGHTS, the FB will NOT fit as-is)
+//   LED5 (pin20) on if peak > 70%   (way over budget)
+// VERDICT: LED4 stays dark across all scenes  ⇒  GO (frame buffer fits).
+reg  [19:0] u0_win  = 20'd0;
+reg  [19:0] u0_busy = 20'd0;
+reg  [3:0]  u0_peak = 4'd0;
+wire        u0_busy_now = (sadap_st == SA_BUSY);
+always_ff @(posedge clk_core) begin
+    if (!roms_loaded) begin
+        // ignore the boot ROM-load burst; only measure steady-state (Atari running)
+        u0_win  <= 20'd0;
+        u0_busy <= 20'd0;
+        u0_peak <= 4'd0;
+    end else if (u0_win == 20'hFFFFF) begin
+        u0_win  <= 20'd0;
+        u0_busy <= 20'd0;
+        u0_peak[0] <= u0_peak[0] | (u0_busy > 20'd209715);  // >20%
+        u0_peak[1] <= u0_peak[1] | (u0_busy > 20'd408944);  // >39%
+        u0_peak[2] <= u0_peak[2] | (u0_busy > 20'd566231);  // >54%
+        u0_peak[3] <= u0_peak[3] | (u0_busy > 20'd734003);  // >70%
+    end else begin
+        u0_win <= u0_win + 20'd1;
+        if (u0_busy_now) u0_busy <= u0_busy + 20'd1;
+    end
+end
+// active-low LEDs: light (drive 0) when the peak bucket is set
+assign leds_n = ~{u0_peak[3], u0_peak[2], u0_peak[1], u0_peak[0]};
 
 
 endmodule

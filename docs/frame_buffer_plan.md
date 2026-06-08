@@ -69,6 +69,23 @@ line-buffer existed. Acceptable given the alternative is flicker/no-lock.
 - **Standard-mode acceptance** — emit exact CEA-861 720p60 (1650/750, correct sync polarities) so monitors
   EDID-match it; this is the whole point (no more razor-thin window).
 
+## Dual-build strategy (ship BOTH — they're complementary, not redundant)
+The frame buffer's only downside is latency, which is exactly where the line buffer wins. So keep two
+flashable bitstreams as a deliberate latency-vs-exactness choice:
+
+| Bitstream | clk_core | Scaler | Speed | Steady | Latency | Best for |
+|---|---|---|---|---|---|---|
+| **`atari800_smooth.fs`** | 27 MHz | `scale720p` (line buffer, genlock) | 6% slow | yes (786-line integer frame) | ~0 | responsive / twitch gameplay |
+| **`atari800_exact.fs`** | 28.6875 MHz | `scale720p_fb` (frame buffer → 720p60) | exact | yes (standard 720p60) | ~1 frame | speed-accurate: music, demos, timing-sensitive SW |
+
+They share ~95% (core, SDRAM, firmware, audio, USB, OSD). They differ only in (1) the `rpll_108m` param
+and (2) the scaler module (+ arbiter video client in the exact build).
+
+**Mechanism:** develop the frame buffer on a branch first (zero risk to `main`/smooth). Once it works,
+unify into one codebase with a **build-time switch** — a single define (e.g. `EXACT_FB`) selecting the PLL
+params + scaler — so `build.tcl` emits both named `.fs` and a shared fix benefits both. **Not** a runtime
+toggle (can't reconfigure the PLL / swap scaler architecture on the fly; build-time is the right granularity).
+
 ## What this retires
 Once the reader emits standard 720p60, the genlock, the line-FIFO depth wars, the H_TOTAL/near-lock search,
 and the clk_pix-margin chase are all **moot** — the output timing is fixed and standard, independent of the
