@@ -1,7 +1,24 @@
-# Exact-speed video (frame-lock) — investigation log & open issues
+# Exact-speed video (frame-lock) — investigation log & conclusion
 
-**Status:** UNSOLVED / parked. Exact-speed core works; a *steady, monitor-legal* picture at
-exact speed does not yet build reliably. We got close but did not nail it. Last updated 2026-06-08.
+**Status:** Genlocked line-buffer approach is **exhausted and understood** (not a build flake — a real
+wall). Conclusion: exact speed + steady + robust requires a **frame buffer → standard 720p60 output**
+(see `docs/frame_buffer_plan.md`). Last updated 2026-06-08.
+
+## ★ THE ANSWER (why this is hard, and what actually works)
+- **`main` (clk_core 27 MHz, 6% slow) is rock-steady because its Atari frame is *exactly* 786 HDMI
+  lines — a clean integer** → constant V_TOTAL → monitors lock solid. The 6%-slowness is the very
+  thing that frame-locks it (27 MHz happens to divide evenly).
+- **Exact speed (28.6875 MHz) gives a 739.76-line frame — non-integer** → V_TOTAL wobbles 739/740 each
+  frame → flicker. *And* the resulting timing is non-standard enough that the monitor barely tolerates
+  it: the accepted window is **razor-thin (essentially only H_TOTAL≈1672, and even that flickers as
+  "1280×719" on the forgiving monitor; the strict monitor won't lock).** A 4-pixel H_TOTAL change
+  (1672→1676 or →1647) drops out of the window entirely → no image.
+- **No achievable PLL clock lands an integer frame at exact speed within that window** (searched core
+  clock + pixel clock + H_TOTAL jointly — confirmed none exists in 43.5–46.5 kHz).
+- Therefore the genlocked line-buffer **cannot** deliver exact + steady. Proven, not guessed.
+- The fix is to stop genlocking the *output* to the Atari: **free-run a textbook 720p60 raster** (which
+  every monitor locks solid) and absorb the 59.92↔60.00 Hz difference with a **frame buffer** (repeat
+  one frame every ~12 s). → `docs/frame_buffer_plan.md`.
 
 **Working fallbacks (both solid, on hardware):**
 - `main` — `clk_core` 27 MHz, `cycle_length=16`, ~6% slow, **zero jitter, zero corruption.**
@@ -74,7 +91,17 @@ Preserved WIP commits on `scaler-exact-speed`: `d7bda07` (frame-lock WIP, active
 
 ---
 
-## THE OPEN MYSTERY (this is what we have NOT nailed)
+## The "open mystery" — RESOLVED 2026-06-08 (it was never config/clk_pix)
+
+**The "no boot" builds were booting fine — the monitor was rejecting the non-baseline VIDEO timing.**
+Confirmed: the minimal one-variable build (193674e + `H_TOTAL=1647` only) **boots** (LEDs active, machine
+alive) with **no image** — and `H_TOTAL` cannot affect core/SDRAM/firmware, so "no image" was always a
+*video* result. `clk_pix` margin, firmware BSRAM, and the FIFO resize were all **red herrings**; the only
+real blocker is the razor-thin monitor tolerance of the non-standard genlocked timing. The genlocked
+approach is superseded by the frame buffer (`docs/frame_buffer_plan.md`); the historical notes below are
+kept only for the record.
+
+<details><summary>(historical — the wrong theory we chased)</summary>
 
 **Builds 23:32 (81.4 MHz) and 09:50 (83.0 MHz) had comfortable `clk_pix` and still would not boot/config.**
 This kills the "tight clk_pix → no config" theory. There is **no clean correlation** between any metric in
@@ -89,6 +116,8 @@ Things we changed that *might* be the real culprit (untested hypotheses):
   PFD → unreliable lock. (But 07:21 also used 28.5 and booted. Inconclusive — needs a PLL-lock check.)
 - **active-start genlock (`frame_start`)** was *never confirmed to produce a valid image* — every build
   using it had a second confound (marginal clk_pix, 45.86 kHz, or no-boot). Its correctness is unverified.
+
+</details>
 
 ---
 
