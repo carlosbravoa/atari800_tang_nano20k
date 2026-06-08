@@ -1302,11 +1302,13 @@ end
 // the go/no-go is "does peak occupancy stay below ~54%?". Window = 2^20 clk_core
 // cycles (~37 ms). Peak-held since power-on (power-cycle to reset). Run a demanding
 // program (heavy-ANTIC game) and read the LEDs. See docs/frame_buffer_plan.md Stage 0.
-//   LED2 (pin17) on if peak > 20%   (sanity — core is accessing SDRAM)
-//   LED3 (pin18) on if peak > 39%   (above this the FB gets tight)
-//   LED4 (pin19) on if peak > 54%   (★ if this LIGHTS, the FB will NOT fit as-is)
-//   LED5 (pin20) on if peak > 70%   (way over budget)
-// VERDICT: LED4 stays dark across all scenes  ⇒  GO (frame buffer fits).
+// (PASS 2 — zoomed into the 39-54% band found in pass 1)
+//   LED2 (pin17) on if peak > 42%
+//   LED3 (pin18) on if peak > 46%
+//   LED4 (pin19) on if peak > 50%
+//   LED5 (pin20) on if peak > 54%
+// Reading: fewer LEDs = more headroom. ≤LED2 (≤46%) ⇒ FB fits with margin; LED4/LED5
+// lit (>50-54%) ⇒ FB needs burst reads / faster SDRAM clock first.
 reg  [19:0] u0_win  = 20'd0;
 reg  [19:0] u0_busy = 20'd0;
 reg  [3:0]  u0_peak = 4'd0;
@@ -1320,10 +1322,11 @@ always_ff @(posedge clk_core) begin
     end else if (u0_win == 20'hFFFFF) begin
         u0_win  <= 20'd0;
         u0_busy <= 20'd0;
-        u0_peak[0] <= u0_peak[0] | (u0_busy > 20'd209715);  // >20%
-        u0_peak[1] <= u0_peak[1] | (u0_busy > 20'd408944);  // >39%
-        u0_peak[2] <= u0_peak[2] | (u0_busy > 20'd566231);  // >54%
-        u0_peak[3] <= u0_peak[3] | (u0_busy > 20'd734003);  // >70%
+        // zoomed into the 39-54% band found in the first pass (window = 2^20 = 1048576)
+        u0_peak[0] <= u0_peak[0] | (u0_busy > 20'd440401);  // >42%
+        u0_peak[1] <= u0_peak[1] | (u0_busy > 20'd482345);  // >46%
+        u0_peak[2] <= u0_peak[2] | (u0_busy > 20'd524288);  // >50%
+        u0_peak[3] <= u0_peak[3] | (u0_busy > 20'd566231);  // >54%
     end else begin
         u0_win <= u0_win + 20'd1;
         if (u0_busy_now) u0_busy <= u0_busy + 20'd1;

@@ -41,7 +41,13 @@ NESTang SDRAM controller. The bandwidth is now available (below).
 | FB read (240 lines × 88 words × 60) | ~1.27M | ~6.3M | 22% |
 | **Total (+ refresh/arbiter overhead)** | | **~22–24M** | **~80–85%** |
 
-**Feasible but tight.** This ~80% figure is the project's central risk — *measure it first* (Stage 0).
+**MEASURED (Stage 0, 2026-06-08): core peak ≈ 40%** at exact speed across heavy real games
+(scrollers, sprite-heavy titles) — arbiter SA_BUSY peak-hold meter, LED4(>50%)/LED5(>54%) never lit,
+LED2(>42%) never lit, but LED3(>39%, pass 1) lit ⇒ peak ∈ (39%,42%]. So **core 40% + FB 46% ≈ 86% total
+⇒ GO** (fits, ~14% margin). Not luxurious; burst reads are the fallback if Stages 2-3 glitch, but the
+controller does NOT need speeding up first.
+
+**Feasible but tight.** This ~80–86% figure is the project's central risk — *measured in Stage 0*.
 Both video clients are hard-real-time (must hit their deadlines), so the arbiter must interleave them with
 the core without starving any. Headroom levers if needed: burst reads in the controller; pack 2 px/byte
 less aggressively; or run the SDRAM on a faster dedicated clock (CDC).
@@ -52,8 +58,8 @@ perceptible only in twitch titles. This is the price for a rock-solid image — 
 line-buffer existed. Acceptable given the alternative is flicker/no-lock.
 
 ## Implementation stages (each independently verifiable)
-- **Stage 0 — bandwidth proof.** Instrument the arbiter to log idle SDRAM cycles at exact speed *before*
-  building anything. If there isn't ~20%+ idle, stop and reconsider (burst/faster-SDRAM-clock first).
+- **Stage 0 — bandwidth proof. ✅ DONE 2026-06-08: core peak ≈ 40% ⇒ ~14% idle headroom for the FB ⇒ GO.**
+  (LED peak-hold meter in tang_top.sv; measured at exact speed across heavy real games.)
 - **Stage 1 — writer.** Add Atari-video→SDRAM write path + 3rd arbiter client. Verify the machine still
   boots and runs (writes must not starve the core). No display change yet.
 - **Stage 2 — reader.** Free-running standard 720p60 raster + SDRAM→line-cache read + 3× upscale, reading
