@@ -68,7 +68,7 @@ localparam V_TOTAL  = 10'd750;
 // Sample on every pixce pulse to capture all 320 unique pixels.
 reg [8:0] wr_col;
 reg       wr_de_r, wr_vs_r;
-reg [4:0] wr_buf_idx;       // 32-deep line FIFO write pointer (was 3-line shallow follow)
+reg [3:0] wr_buf_idx;       // 16-line FIFO (free BSRAM for the Stage-1 writer test)
 reg       wr_line_toggle;
 
 wire wr_de_fall = wr_de_r && !de_in;
@@ -79,17 +79,17 @@ always_ff @(posedge clk_core or negedge rst_n) begin
         wr_col         <= 9'd0;
         wr_de_r        <= 1'b0;
         wr_vs_r        <= 1'b0;
-        wr_buf_idx     <= 5'd0;
+        wr_buf_idx     <= 4'd0;
         wr_line_toggle <= 1'b0;
     end else begin
         wr_de_r <= de_in;
         wr_vs_r <= vs_in;
 
         if (wr_vs_rise) begin
-            wr_buf_idx     <= 5'd0;
+            wr_buf_idx     <= 4'd0;
             wr_line_toggle <= 1'b0;
         end else if (wr_de_fall) begin
-            wr_buf_idx     <= (wr_buf_idx == 5'd31) ? 5'd0 : wr_buf_idx + 5'd1;
+            wr_buf_idx     <= (wr_buf_idx == 4'd15) ? 4'd0 : wr_buf_idx + 4'd1;
             wr_line_toggle <= ~wr_line_toggle;
         end
 
@@ -197,7 +197,7 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
     end
 end
 
-wire [4:0] rd_buf_idx = rd_line_count[4:0];    // ring index into the 32-line FIFO
+wire [3:0] rd_buf_idx = rd_line_count[3:0];    // ring index into the 16-line FIFO
 
 reg [1:0] pix_rep_cnt;
 reg [8:0] rd_col;
@@ -241,7 +241,7 @@ wire [7:0] rd_data;
 
 scale720p_tdp_ram #(
     .DATA_WIDTH(8),
-    .ADDR_WIDTH(14) // 32-line FIFO of 512 bytes each
+.ADDR_WIDTH(13) // 32-line FIFO of 512 bytes each
 ) line_buffer (
     .clk_a (clk_core),
     .we_a  (de_in && pixce), // Sample every pixce pulse
