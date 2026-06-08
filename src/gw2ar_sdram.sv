@@ -50,7 +50,7 @@ wire        n_busy;
 
 reg  r_rd = 1'b0, r_wr = 1'b0, r_ref = 1'b0;
 
-sdram_nestang #(.FREQ(27_000_000)) u_sdram (
+sdram_nestang #(.FREQ(28_687_500)) u_sdram (
     .SDRAM_DQ   (IO_sdram_dq),
     .SDRAM_A    (O_sdram_addr),
     .SDRAM_BA   (O_sdram_ba),
