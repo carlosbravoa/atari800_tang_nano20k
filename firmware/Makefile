@@ -8,12 +8,12 @@ RISCV = riscv64-unknown-elf
 CC = $(RISCV)-gcc
 OBJCOPY = $(RISCV)-objcopy
 OBJDUMP = $(RISCV)-objdump
-CFLAGS  = -Wall -O2 -g -mabi=ilp32 -march=rv32i -ffreestanding -I.
-LFLAGS = -mabi=ilp32 -march=rv32i -Wl,--build-id=none,-Bstatic,-T,baremetal.ld -nostdlib
+CFLAGS  = -Wall -Os -g -ffunction-sections -fdata-sections -mabi=ilp32 -march=rv32i -ffreestanding -I.
+LFLAGS = -mabi=ilp32 -march=rv32i -Wl,--build-id=none,-Bstatic,-T,baremetal.ld,--gc-sections -nostdlib
 LIBS = -lgcc
 
 SRCS := start.S firmware.c picorv32.c spi_sd.c spiflash.c \
-	fatfs/diskio.c fatfs/ff.c fatfs/ffunicode.c
+	fatfs/diskio.c fatfs/ff.c
 OBJS := $(SRCS:.c=.o)
 OBJS := $(OBJS:.S=.o)
 HDRS := $(wildcard *.h)
@@ -24,9 +24,8 @@ else
   Q = @
 endif
 
-# BSRAM boot-RAM depth in 32-bit words (64 KB = 16384 words = 32 BSRAM blocks).
-# This is the ceiling: only 37 BSRAM blocks are free; 64 KB uses 32, leaving margin.
-BRAM_DEPTH = 16384
+# BSRAM boot-RAM depth in 32-bit words (32 KB = 8192 words = 16 BSRAM blocks).
+BRAM_DEPTH = 8192
 BRAM_DIR   = ../src
 BRAM_HEX   = $(BRAM_DIR)/fw_lane0.hex
 

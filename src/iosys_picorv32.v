@@ -148,22 +148,25 @@ reg ram_ready /* synthesis syn_keep=1 */;
 reg [31:0] ram_rdata;
 
 // Low 8 MB region (addr[31:23]==0) is split:
-//   addr < 64 KB (0x0000_0000..0x0000_FFFF) → on-chip BSRAM = firmware code/data/stack
-//   addr >= 64 KB                            → SDRAM (Atari memory: ROM load 0x700000/
+//   addr < 32 KB (0x0000_0000..0x0000_7FFF) → on-chip BSRAM = firmware code/data/stack
+//   addr >= 32 KB                            → SDRAM (Atari memory: ROM load 0x700000/
 //                                              0x704000, COLDST 0x200244, etc.)
 // Firmware EXECUTES from BSRAM so its instruction fetches never touch SDRAM —
 // this is the whole point (ends CPU↔ANTIC SDRAM contention).
 wire        lowregion_sel = mem_valid && mem_addr[31:23] == 0;
-wire        bram_sel = lowregion_sel && (mem_addr[22:16] == 7'd0);  // < 64 KB
-wire        ram_sel  = lowregion_sel && (mem_addr[22:16] != 7'd0);  // SDRAM (Atari mem)
+wire        bram_sel = lowregion_sel && (mem_addr[22:15] == 8'd0);  // < 32 KB
+wire        ram_sel  = lowregion_sel && (mem_addr[22:15] != 8'd0);  // SDRAM (Atari mem)
 
-// ── Firmware BSRAM boot RAM (64 KB, byte-laned, $readmemh-initialised) ────────
+// ── Firmware BSRAM boot RAM (32 KB, byte-laned, $readmemh-initialised) ────────
 wire [31:0] bram_rdata;
 wire        bram_ready;
-fw_bram fw_bram_inst (
+fw_bram #(
+    .AWORDS(8192),
+    .AW(13)
+) fw_bram_inst (
     .clk   (clk),
     .sel   (bram_sel),
-    .waddr (mem_addr[15:2]),     // 14-bit word address within 64 KB
+    .waddr (mem_addr[14:2]),     // 13-bit word address within 32 KB
     .wdata (mem_wdata),
     .wstrb (bram_sel ? mem_wstrb : 4'b0000),
     .rdata (bram_rdata),

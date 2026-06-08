@@ -12,8 +12,9 @@
  */
 MEMORY
 {
-    RAM (RWX): ORIGIN = 0x00000, LENGTH = 64K
+    RAM (RWX): ORIGIN = 0x00000, LENGTH = 32K
 }
+ENTRY(_start)
 SECTIONS
 {
     .text :

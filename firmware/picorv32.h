@@ -107,28 +107,28 @@ extern void spiflash_page_program(uint32_t addr, uint8_t *buf);     // program 2
 extern uint8_t spiflash_read_status1();                             // [1]: write enable, [0]: busy
 extern void spiflash_ready();                                       // wait until flash is not busy
 
-inline int max(int x, int y) {
+static inline int max(int x, int y) {
     if (x > y) return x;
     else       return y;
 }
 
-inline int min(int x, int y) {
+static inline int min(int x, int y) {
     if (x < y) return x;
     else       return y;
 }
 
-inline int tolower(int c) {
+static inline int tolower(int c) {
     if (c >= 'A' && c <= 'Z')
         return c + ('a' - 'A');
     else
         return c;
 }
 
-inline uint32_t time_millis() {
+static inline uint32_t time_millis() {
     return reg_time;
 }
 
-inline uint32_t cycle_counter() {
+static inline uint32_t cycle_counter() {
     return reg_cycle;
 }
 

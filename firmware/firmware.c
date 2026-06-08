@@ -31,19 +31,18 @@ static inline void apply_input_options(void) {
                    | (option_arrow_joystick ? 0x200 : 0x000);
 }
 
-char load_fname[1024];
-char load_buf[1024];
+char load_fname[512];
 
 FATFS fs;
 
-#define PAGESIZE 22
+#define PAGESIZE 16
 #define TOPLINE 2
-#define PWD_SIZE 1024
+#define PWD_SIZE 256
 
-char pwd[PWD_SIZE];		// total path length 1023
+char pwd[PWD_SIZE];		// total path length 255
 // one page of file names to display
-char file_names[PAGESIZE][256];
-int file_dir[PAGESIZE];
+char file_names[PAGESIZE][16];
+char file_dir[PAGESIZE];
 int file_sizes[PAGESIZE];
 int file_len;		// number of files on this page
 
@@ -52,6 +51,7 @@ FIL atr_file;
 bool atr_mounted = false;
 uint16_t atr_sector_size = 128;
 
+static uint8_t sio_sector_buf[256];
 static uint8_t sio_cmd_buf[5];
 static int     sio_cmd_idx = 0;
 static uint32_t sio_cmd_timeout = 0;   // millis timestamp of first byte in current frame
@@ -118,7 +118,7 @@ void frame_rate_sample(void) {
         if (fr_last_cycle != 0) {
             uint32_t dc  = now - fr_last_cycle;
             uint16_t dvs = vs - fr_last_vs;             // frames elapsed
-            dbg_frame_rate = (uint32_t)(((uint64_t)dvs * 27000000u) / dc);
+            dbg_frame_rate = (dvs * 2700000u) / (dc / 10u);
         }
         fr_last_cycle = now;
         fr_last_vs    = vs;
@@ -558,11 +558,11 @@ int menu_loadrom(int *choice) {
                     } else {
                         // Mount the ATR file
                         *choice = active;
-                        strncpy(load_fname, pwd, 1024);
+                        strncpy(load_fname, pwd, sizeof(load_fname));
                         if (strcmp(pwd, "/") != 0) {
-                            strncat(load_fname, "/", 1024);
+                            strncat(load_fname, "/", sizeof(load_fname));
                         }
-                        strncat(load_fname, file_names[active], 1024);
+                        strncat(load_fname, file_names[active], sizeof(load_fname));
                         
                         int res = mount_atr(load_fname);
                         if (res != 0) {
@@ -919,7 +919,7 @@ void sio_process_command(void) {
         case 0x52: { // Read sector command
             uart_printf("SIO READ SECTOR %d\n", sector);
             dbg_sio_read_count++;
-            static uint8_t sector_buf[256];
+            uint8_t *sector_buf = sio_sector_buf;
             int sector_len = 128;
             
             // 1. Send ACK first to satisfy the tight 16ms command-to-ACK window
@@ -965,7 +965,7 @@ void sio_process_command(void) {
         case 0x50: { // Write sector command (without verify)
             uart_printf("SIO WRITE SECTOR %d\n", sector);
             dbg_sio_write_count++;
-            static uint8_t sector_buf[256];
+            uint8_t *sector_buf = sio_sector_buf;
             int sector_len = (atr_sector_size == 128 || sector <= 3) ? 128 : 256;
             
             // Send ACK (with command-to-ACK SIO delay)
@@ -1336,7 +1336,7 @@ int main() {
     }
 
     bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
-    char mounted_atr_name[256] = "None";
+    char mounted_atr_name[16] = "None";
     if (booted) overlay(0);      // hide OSD immediately on auto-boot
 
     for (;;) {
