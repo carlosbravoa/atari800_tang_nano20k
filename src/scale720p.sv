@@ -47,19 +47,21 @@ module scale720p (
 localparam H_ACTIVE = 11'd1280;
 localparam H_FP     = 11'd110;
 localparam H_SYNC   = 11'd40;
-localparam H_BP     = 11'd242;
-localparam H_TOTAL  = 11'd1672;
+localparam H_BP     = 11'd246;
+localparam H_TOTAL  = 11'd1676;   // frame-lock: exact-speed Atari frame = 738.00 HDMI lines
 
 // Source-column read offset: slides the 352-col read window right over the (wider)
 // captured Atari line to centre the active picture within the pillarbox (skips
 // excess left overscan, reveals the cut-off right border). +N = picture moves left.
 localparam [8:0] H_SRC_OFFSET = 9'd12;
 
-localparam V_ACTIVE = 10'd720;
-localparam V_FP     = 10'd5;
-localparam V_SYNC   = 10'd5;
-localparam V_BP     = 10'd20;
-localparam V_TOTAL  = 10'd750;
+// Vertical layout for the ~738-line exact-speed frame, genlocked to the Atari ACTIVE
+// start (vy=0 ≈ first Atari active line). Active = 720 lines; the Atari vertical blank
+// overlaps the HDMI blanking below it. V_ACT_START gives a small FIFO startup lag.
+localparam [9:0] V_ACT_START  = 10'd3;
+localparam [9:0] V_ACT_END    = V_ACT_START + 10'd720;   // 723 (active = vy 3..722)
+localparam [9:0] V_SYNC_START = 10'd725;
+localparam [9:0] V_SYNC_END   = 10'd730;
 
 // ── Write side (clk_core, 27 MHz) ─────────────────────────────────────────────
 // pixce (VIDEO_PIXCE) fires at 2x colour-clock rate. Divide by 2 so we capture
@@ -70,17 +72,26 @@ reg [8:0] wr_col;
 reg       wr_de_r, wr_vs_r;
 reg [4:0] wr_buf_idx;       // 32-deep line FIFO write pointer (was 3-line shallow follow)
 reg       wr_line_toggle;
+// Active-start detection lives here in clk_core (which has ample slack) so the clk_pix
+// raster stays uncongested. We arm on the Atari VSync and fire on the first active line,
+// flipping frame_start_toggle; clk_pix only sees a 1-bit toggle (cheap to sync).
+reg       frame_armed_core;
+reg       frame_start_toggle;
 
 wire wr_de_fall = wr_de_r && !de_in;
+wire wr_de_rise = de_in && !wr_de_r;
 wire wr_vs_rise = vs_in && !wr_vs_r;
+wire wr_vs_fall = !vs_in && wr_vs_r;   // start of vertical blank (vs_in high during active)
 
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
-        wr_col         <= 9'd0;
-        wr_de_r        <= 1'b0;
-        wr_vs_r        <= 1'b0;
-        wr_buf_idx     <= 5'd0;
-        wr_line_toggle <= 1'b0;
+        wr_col             <= 9'd0;
+        wr_de_r            <= 1'b0;
+        wr_vs_r            <= 1'b0;
+        wr_buf_idx         <= 5'd0;
+        wr_line_toggle     <= 1'b0;
+        frame_armed_core   <= 1'b0;
+        frame_start_toggle <= 1'b0;
     end else begin
         wr_de_r <= de_in;
         wr_vs_r <= vs_in;
@@ -89,8 +100,15 @@ always_ff @(posedge clk_core or negedge rst_n) begin
             wr_buf_idx     <= 5'd0;
             wr_line_toggle <= 1'b0;
         end else if (wr_de_fall) begin
-            wr_buf_idx     <= (wr_buf_idx == 5'd31) ? 5'd0 : wr_buf_idx + 5'd1;
+            wr_buf_idx     <= (wr_buf_idx == 5'd23) ? 5'd0 : wr_buf_idx + 5'd1;
             wr_line_toggle <= ~wr_line_toggle;
+        end
+
+        // arm at the start of vertical blank, fire on the first active line of the frame
+        if (wr_vs_fall)            frame_armed_core <= 1'b1;
+        else if (wr_de_rise && frame_armed_core) begin
+            frame_armed_core   <= 1'b0;
+            frame_start_toggle <= ~frame_start_toggle;
         end
 
         if (!de_in) begin
@@ -102,21 +120,23 @@ always_ff @(posedge clk_core or negedge rst_n) begin
 end
 
 // ── Clock domain crossing & synchronization ────────────────────────────────────
-reg [2:0] vs_in_sync_reg;
+// frame_start (active-start genlock) and wr_line completions arrive as 1-bit toggles
+// from clk_core; clk_pix just resynchronises and edge-detects them — no raster-path logic.
+reg [2:0] frame_start_sync_reg;
 reg [2:0] wr_line_toggle_sync_reg;
 
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
-        vs_in_sync_reg          <= 3'b111;
+        frame_start_sync_reg    <= 3'b000;
         wr_line_toggle_sync_reg <= 3'b000;
     end else begin
-        vs_in_sync_reg          <= {vs_in_sync_reg[1:0], vs_in};
+        frame_start_sync_reg    <= {frame_start_sync_reg[1:0], frame_start_toggle};
         wr_line_toggle_sync_reg <= {wr_line_toggle_sync_reg[1:0], wr_line_toggle};
     end
 end
 
-wire vs_in_sync_fall = (vs_in_sync_reg[2] && !vs_in_sync_reg[1]);
-wire wr_line_edge    = wr_line_toggle_sync_reg[2] ^ wr_line_toggle_sync_reg[1];
+wire frame_start  = frame_start_sync_reg[2] ^ frame_start_sync_reg[1];
+wire wr_line_edge = wr_line_toggle_sync_reg[2] ^ wr_line_toggle_sync_reg[1];
 
 // Genlock vertical sync pending flag (registers end-of-line alignment)
 reg vs_pending;
@@ -124,7 +144,7 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
         vs_pending <= 1'b0;
     end else begin
-        if (vs_in_sync_fall) begin
+        if (frame_start) begin
             vs_pending <= 1'b1;
         end else if (hx == H_TOTAL - 11'd1 && vs_pending) begin
             vs_pending <= 1'b0;
@@ -139,7 +159,7 @@ reg [7:0] wr_line_count;
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
         wr_line_count <= 8'd0;
-    end else if (vs_in_sync_fall) begin
+    end else if (frame_start) begin
         wr_line_count <= 8'd0;               // reset at start of frame (genlock)
     end else if (wr_line_edge) begin
         wr_line_count <= wr_line_count + 8'd1;
@@ -170,25 +190,30 @@ end
 reg [1:0] line_rep_cnt;
 reg [7:0] rd_row;
 reg [7:0] rd_line_count;    // FIFO read pointer: source lines consumed since VSync
+reg [4:0] rd_buf_idx;       // mod-24 ring index into the line FIFO (= rd_line_count mod 24)
 
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
         line_rep_cnt  <= 2'd0;
         rd_row        <= 8'd0;
         rd_line_count <= 8'd0;
+        rd_buf_idx    <= 5'd0;
     end else if (hx == H_TOTAL - 11'd1) begin
         if (vs_pending) begin
             line_rep_cnt  <= 2'd0;
             rd_row        <= 8'd0;
             rd_line_count <= 8'd0;
-        end else if (vy >= 10'd51 && vy < 10'd771) begin
+            rd_buf_idx    <= 5'd0;
+        end else if (vy >= V_ACT_START && vy < V_ACT_END) begin
             line_rep_cnt <= (line_rep_cnt == 2'd2) ? 2'd0 : line_rep_cnt + 2'd1;
             if (line_rep_cnt == 2'd2) begin
                 rd_row <= rd_row + 8'd1;
                 // pop the next source line, but never overtake the writer (underflow clamp).
-                // The 32-line FIFO depth absorbs the ~15-line read/write skew at exact speed.
-                if (rd_line_count != wr_line_count)
+                // The 24-line FIFO depth absorbs the ~16-line read/write skew at exact speed.
+                if (rd_line_count != wr_line_count) begin
                     rd_line_count <= rd_line_count + 8'd1;
+                    rd_buf_idx    <= (rd_buf_idx == 5'd23) ? 5'd0 : rd_buf_idx + 5'd1;
+                end
             end
         end else begin
             line_rep_cnt <= 2'd0;
@@ -196,8 +221,6 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
         end
     end
 end
-
-wire [4:0] rd_buf_idx = rd_line_count[4:0];    // ring index into the 32-line FIFO
 
 reg [1:0] pix_rep_cnt;
 reg [8:0] rd_col;
@@ -241,7 +264,8 @@ wire [7:0] rd_data;
 
 scale720p_tdp_ram #(
     .DATA_WIDTH(8),
-    .ADDR_WIDTH(14) // 32-line FIFO of 512 bytes each
+    .ADDR_WIDTH(14),     // address = {buf_idx[4:0], col[8:0]}, buf_idx 0..23
+    .DEPTH(24*512)       // 24-line FIFO (6 BSRAM blocks vs 8) — frees room for OSD BRAM placement
 ) line_buffer (
     .clk_a (clk_core),
     .we_a  (de_in && pixce), // Sample every pixce pulse
@@ -261,10 +285,10 @@ scale720p_tdp_ram #(
 // sees a normal frame and fills/centres the panel. The 1056-px Atari content is
 // pillarboxed centred at hx 112..1167 (cont_s0, same window the rd_col read uses),
 // with black borders for the outer 112 px each side.
-wire de_s0   = (hx < 11'd1280) && (vy >= 10'd51) && (vy < 10'd771);
-wire cont_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= 10'd51) && (vy < 10'd771);
+wire de_s0   = (hx < 11'd1280) && (vy >= V_ACT_START) && (vy < V_ACT_END);
+wire cont_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= V_ACT_START) && (vy < V_ACT_END);
 wire hs_s0 = (hx >= H_ACTIVE + H_FP) && (hx < H_ACTIVE + H_FP + H_SYNC);
-wire vs_s0 = (vy < 10'd5);
+wire vs_s0 = (vy >= V_SYNC_START) && (vy < V_SYNC_END);
 
 reg de_p1, hs_p1, vs_p1, cont_p1;
 reg de_p2, hs_p2, vs_p2, cont_p2;
@@ -294,7 +318,8 @@ endmodule
 // ── Inferred True Dual-Port Block RAM Module ───────────────────────────────────
 module scale720p_tdp_ram #(
     parameter DATA_WIDTH = 8,
-    parameter ADDR_WIDTH = 9
+    parameter ADDR_WIDTH = 9,
+    parameter DEPTH      = (1 << ADDR_WIDTH)   // explicit word count (may be < 2**ADDR_WIDTH)
 ) (
     input  wire                  clk_a,
     input  wire                  we_a,
@@ -309,7 +334,7 @@ module scale720p_tdp_ram #(
     output reg  [DATA_WIDTH-1:0] dout_b
 );
     (* ram_style = "block" *)
-    reg [DATA_WIDTH-1:0] ram [0:(2**ADDR_WIDTH)-1];
+    reg [DATA_WIDTH-1:0] ram [0:DEPTH-1];
 
     always_ff @(posedge clk_a) begin
         if (we_a) begin
