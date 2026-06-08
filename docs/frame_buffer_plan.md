@@ -32,6 +32,10 @@ NESTang SDRAM controller. The bandwidth is now available (below).
   (e.g. base 0x200000), well clear of the 130XE 128 KB + ROMs.
 - Reader fetches one source line (≈88 × 32-bit words) per *source* line, 240 source lines per output
   frame, into the line cache; horizontal ×3 and vertical ×3 come from the cache (no re-fetch).
+- **FB_BASE = 0x780000** — the core's documented "Free 512K below 8MB" (`address_decoder.vhdl:915`).
+  ⚠️ Do NOT use 0x500000–0x6FFFFF (**cartridge**, 2 MB), 0x700000–0x77FFFF (BASIC/OS ROM), or low SDRAM
+  (RAM up to 4 MB). The core's 25-bit address masks into the 8 MB, so it reaches high. 169 KB
+  (2×84480) fits in the free 512 K.
 
 ## Bandwidth budget (clk_core 28.6875 MHz, NESTang ~5-cycle 32-bit access ⇒ ~5.7M acc/s ceiling)
 | Client | accesses/s | cycles/s | % of 28.69M |
@@ -60,8 +64,14 @@ line-buffer existed. Acceptable given the alternative is flicker/no-lock.
 ## Implementation stages (each independently verifiable)
 - **Stage 0 — bandwidth proof. ✅ DONE 2026-06-08: core peak ≈ 40% ⇒ ~14% idle headroom for the FB ⇒ GO.**
   (LED peak-hold meter in tang_top.sv; measured at exact speed across heavy real games.)
-- **Stage 1 — writer.** Add Atari-video→SDRAM write path + 3rd arbiter client. Verify the machine still
-  boots and runs (writes must not starve the core). No display change yet.
+- **Stage 1 — writer. ⚠️ ATTEMPTED 2026-06-08: infra validated, BLOCKED on resources.** Built
+  `src/fb_writer.sv` + a 3-client arbiter (Atari>FBwriter>PicoRV32) in tang_top (commit on
+  `scaler-exact-speed`). Proven on HW: arbiter correct (writer gated off → Atari boots/runs normally),
+  FB region 0x780000 correct, writer logic correct (register FIFO — Gowin ignored `ram_style`, forced
+  via explicit regs). **BUT** with the writer's logic actually present, placement congestion (BSRAM
+  96–100% + routing) breaks the firmware ROM load and pushes clk_pix marginal. FFs only ~30% used, so
+  it's BSRAM/routing, not logic count. **⇒ PREREQUISITE: shrink the PicoRV32 firmware's BSRAM footprint
+  first** (frees blocks + relaxes placement). Stage 1 resumes cleanly once that headroom exists.
 - **Stage 2 — reader.** Free-running standard 720p60 raster + SDRAM→line-cache read + 3× upscale, reading
   a fixed (single) buffer. Expect a solid, locked picture (maybe tearing without double-buffer yet).
 - **Stage 3 — double-buffer + swap-on-read-VSync.** Tearing gone; frame-repeat absorbs 59.92↔60.00.
