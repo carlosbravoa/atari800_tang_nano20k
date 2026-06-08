@@ -47,21 +47,19 @@ module scale720p (
 localparam H_ACTIVE = 11'd1280;
 localparam H_FP     = 11'd110;
 localparam H_SYNC   = 11'd40;
-localparam H_BP     = 11'd246;
-localparam H_TOTAL  = 11'd1676;   // frame-lock: exact-speed Atari frame = 738.00 HDMI lines
+localparam H_BP     = 11'd242;
+localparam H_TOTAL  = 11'd1672;
 
 // Source-column read offset: slides the 352-col read window right over the (wider)
 // captured Atari line to centre the active picture within the pillarbox (skips
 // excess left overscan, reveals the cut-off right border). +N = picture moves left.
 localparam [8:0] H_SRC_OFFSET = 9'd12;
 
-// Vertical layout for the ~738-line exact-speed frame, genlocked to the Atari ACTIVE
-// start (vy=0 ≈ first Atari active line). Active = 720 lines; the Atari vertical blank
-// overlaps the HDMI blanking below it. V_ACT_START gives a small FIFO startup lag.
-localparam [9:0] V_ACT_START  = 10'd3;
-localparam [9:0] V_ACT_END    = V_ACT_START + 10'd720;   // 723 (active = vy 3..722)
-localparam [9:0] V_SYNC_START = 10'd725;
-localparam [9:0] V_SYNC_END   = 10'd730;
+localparam V_ACTIVE = 10'd720;
+localparam V_FP     = 10'd5;
+localparam V_SYNC   = 10'd5;
+localparam V_BP     = 10'd20;
+localparam V_TOTAL  = 10'd750;
 
 // ── Write side (clk_core, 27 MHz) ─────────────────────────────────────────────
 // pixce (VIDEO_PIXCE) fires at 2x colour-clock rate. Divide by 2 so we capture
@@ -105,36 +103,20 @@ end
 
 // ── Clock domain crossing & synchronization ────────────────────────────────────
 reg [2:0] vs_in_sync_reg;
-reg [2:0] de_in_sync_reg;
 reg [2:0] wr_line_toggle_sync_reg;
 
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
         vs_in_sync_reg          <= 3'b111;
-        de_in_sync_reg          <= 3'b000;
         wr_line_toggle_sync_reg <= 3'b000;
     end else begin
         vs_in_sync_reg          <= {vs_in_sync_reg[1:0], vs_in};
-        de_in_sync_reg          <= {de_in_sync_reg[1:0], de_in};
         wr_line_toggle_sync_reg <= {wr_line_toggle_sync_reg[1:0], wr_line_toggle};
     end
 end
 
 wire vs_in_sync_fall = (vs_in_sync_reg[2] && !vs_in_sync_reg[1]);
-wire de_in_sync_rise = (!de_in_sync_reg[2] && de_in_sync_reg[1]);
 wire wr_line_edge    = wr_line_toggle_sync_reg[2] ^ wr_line_toggle_sync_reg[1];
-
-// Genlock to the Atari ACTIVE start: arm on VSync, fire on the first active line.
-// This aligns HDMI vy=0 with the first line that actually has pixel data, so the
-// 720-line active fits inside the ~738-line frame (resetting on VSync instead wastes
-// the Atari vertical blank — ~62 HDMI lines — and overruns the frame).
-reg  frame_armed;
-wire frame_start = de_in_sync_rise && frame_armed;
-always_ff @(posedge clk_pixel or negedge rst_n) begin
-    if (!rst_n)                  frame_armed <= 1'b0;
-    else if (vs_in_sync_fall)    frame_armed <= 1'b1;
-    else if (de_in_sync_rise)    frame_armed <= 1'b0;
-end
 
 // Genlock vertical sync pending flag (registers end-of-line alignment)
 reg vs_pending;
@@ -142,7 +124,7 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
         vs_pending <= 1'b0;
     end else begin
-        if (frame_start) begin
+        if (vs_in_sync_fall) begin
             vs_pending <= 1'b1;
         end else if (hx == H_TOTAL - 11'd1 && vs_pending) begin
             vs_pending <= 1'b0;
@@ -157,7 +139,7 @@ reg [7:0] wr_line_count;
 always_ff @(posedge clk_pixel or negedge rst_n) begin
     if (!rst_n) begin
         wr_line_count <= 8'd0;
-    end else if (frame_start) begin
+    end else if (vs_in_sync_fall) begin
         wr_line_count <= 8'd0;               // reset at start of frame (genlock)
     end else if (wr_line_edge) begin
         wr_line_count <= wr_line_count + 8'd1;
@@ -199,7 +181,7 @@ always_ff @(posedge clk_pixel or negedge rst_n) begin
             line_rep_cnt  <= 2'd0;
             rd_row        <= 8'd0;
             rd_line_count <= 8'd0;
-        end else if (vy >= V_ACT_START && vy < V_ACT_END) begin
+        end else if (vy >= 10'd51 && vy < 10'd771) begin
             line_rep_cnt <= (line_rep_cnt == 2'd2) ? 2'd0 : line_rep_cnt + 2'd1;
             if (line_rep_cnt == 2'd2) begin
                 rd_row <= rd_row + 8'd1;
@@ -279,10 +261,10 @@ scale720p_tdp_ram #(
 // sees a normal frame and fills/centres the panel. The 1056-px Atari content is
 // pillarboxed centred at hx 112..1167 (cont_s0, same window the rd_col read uses),
 // with black borders for the outer 112 px each side.
-wire de_s0   = (hx < 11'd1280) && (vy >= V_ACT_START) && (vy < V_ACT_END);
-wire cont_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= V_ACT_START) && (vy < V_ACT_END);
+wire de_s0   = (hx < 11'd1280) && (vy >= 10'd51) && (vy < 10'd771);
+wire cont_s0 = (hx >= 11'd112) && (hx < 11'd1168) && (vy >= 10'd51) && (vy < 10'd771);
 wire hs_s0 = (hx >= H_ACTIVE + H_FP) && (hx < H_ACTIVE + H_FP + H_SYNC);
-wire vs_s0 = (vy >= V_SYNC_START) && (vy < V_SYNC_END);
+wire vs_s0 = (vy < 10'd5);
 
 reg de_p1, hs_p1, vs_p1, cont_p1;
 reg de_p2, hs_p2, vs_p2, cont_p2;
