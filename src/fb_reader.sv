@@ -198,14 +198,20 @@ wire de_s0   = (hx < H_ACTIVE) && in_v;
 wire cont_s0 = (hx >= CONT_X0) && (hx < CONT_X1) && in_v;
 wire hs_s0   = (hx >= H_ACTIVE + H_FP) && (hx < H_ACTIVE + H_FP + H_SYNC);
 wire vs_s0   = (vy < V_SYNC);
+// cache_raddr is combinational at clock T; the cache BRAM read is 2 cycles (addr reg +
+// output reg) → cache_rdata is valid at T+2.  The byte select and the sync pipeline must
+// therefore also be 2 cycles so word, byte, and de/cont all line up (fixes the intra-word
+// green ghost from a 1-cycle byte select against a 2-cycle word read).
+// cache read (word) + byte select are 1 cycle; align the sync/position pipeline to 1 cycle
+// too so word, byte, and de/cont/position all land together (no edge fringe).
 reg [1:0] rd_byte_p;
-reg de_p1, hs_p1, vs_p1, cont_p1, de_p2, hs_p2, vs_p2, cont_p2;
+reg de_p1, hs_p1, vs_p1, cont_p1;
 always_ff @(posedge clk_pixel) begin
     rd_byte_p <= rd_byte;
     de_p1 <= de_s0; hs_p1 <= hs_s0; vs_p1 <= vs_s0; cont_p1 <= cont_s0;
-    de_p2 <= de_p1; hs_p2 <= hs_p1; vs_p2 <= vs_p1; cont_p2 <= cont_p1;
 end
 wire [7:0] px = cache_rdata[{rd_byte_p, 3'b000} +: 8];   // select the byte (RGB332)
+wire de_p2 = de_p1, hs_p2 = hs_p1, vs_p2 = vs_p1, cont_p2 = cont_p1; // 1-cycle alias
 // DIAGNOSTIC: TESTPAT=1 outputs an internal gradient (picture area) + blue pillarbox,
 // bypassing the SDRAM/cache path → isolates raster/sync/window from the data path.
 // Set TESTPAT=0 once the raster is confirmed.
