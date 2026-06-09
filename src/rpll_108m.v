@@ -39,7 +39,7 @@ defparam rpll_inst.FCLKIN          = "27";
 defparam rpll_inst.DYN_IDIV_SEL    = "false";
 defparam rpll_inst.IDIV_SEL        = 3;      // divide input by 4
 defparam rpll_inst.DYN_FBDIV_SEL   = "false";
-defparam rpll_inst.FBDIV_SEL       = 16;     // 27*17/4 = 114.75 MHz → CLKDIV/4 = clk_core 28.6875 MHz (exact NTSC)
+defparam rpll_inst.FBDIV_SEL       = 16;     // 27*17/4 = 114.75 MHz → ÷4=clk_core 28.6875 (exact), ÷2=clk_mem 57.375
 defparam rpll_inst.DYN_ODIV_SEL    = "false";
 defparam rpll_inst.ODIV_SEL        = 8;      // VCO = 114.75*8 = 918 MHz (in range)
 defparam rpll_inst.PSDA_SEL        = "0000";

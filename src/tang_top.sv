@@ -70,8 +70,9 @@ GSR GSR_INST (.GSRI(1'b1));
 wire clk_5x;               // 371.25 MHz — HDMI OSER10 5x clock
 wire clk_pix;              // 74.25 MHz  — HDMI pixel clock (371.25 ÷ 5)
 wire clk_usb;              // 12 MHz     — USB HID host (rpll_108m CLKOUTD ÷18)
-wire clk_108m;             // 216 MHz    — intermediate (rpll_108m CLKOUT)
-wire clk_core;             // 54 MHz     — Atari core + SDRAM (clk_108m ÷ 4 via CLKDIV)
+wire clk_108m;             // 114.75 MHz — intermediate (rpll_108m CLKOUT)
+wire clk_core;             // 28.6875 MHz — Atari core (clk_108m ÷ 4; cl=16 → 1.7898 MHz exact NTSC)
+wire clk_mem;              // 57.375 MHz — SDRAM controller (clk_108m ÷ 2; 2:1 synchronous w/ clk_core)
 wire pll_locked, pll_core_locked;
 
 rpll_371m pll (
@@ -97,6 +98,18 @@ CLKDIV #(
     .GSREN    ("false")
 ) clkdiv_core (
     .CLKOUT (clk_core),
+    .HCLKIN (clk_108m),
+    .RESETN (pll_core_locked),
+    .CALIB  (1'b1)
+);
+
+// clk_mem = 114.75 ÷ 2 = 57.375 MHz — SDRAM controller clock (Path B). 2:1 synchronous with
+// clk_core (both divide clk_108m), so the SDRAM↔arbiter crossing is related-clock, not async.
+CLKDIV #(
+    .DIV_MODE ("2"),
+    .GSREN    ("false")
+) clkdiv_mem (
+    .CLKOUT (clk_mem),
     .HCLKIN (clk_108m),
     .RESETN (pll_core_locked),
     .CALIB  (1'b1)
@@ -216,6 +229,23 @@ wire [3:0]  rv_wstrb;
 wire [31:0] rv_rdata;
 wire        sdram_ready;
 
+// ── Frame-buffer writer client (Stage 1, docs/frame_buffer_plan.md) ──────────
+// Write-only SDRAM client in the clk_core domain (no CDC).  Captures the Atari
+// video stream and packs it into the SDRAM double frame buffer.  Nothing reads
+// the buffer yet — this stage proves the 3rd arbiter client coexists with the
+// hard-real-time Atari core without disturbing it.
+wire        fbw_req_raw;
+wire [24:0] fbw_addr;
+wire [31:0] fbw_wdata;
+wire        fbw_ack;
+// B0/B1: validate the decoupled SDRAM (clk_mem) + Atari handshake with the writer OFF.
+// Flip FB_WRITER_EN to 1'b1 in B3 to bring the writer onto the bus as the 3rd client.
+localparam FB_WRITER_EN = 1'b1;
+wire        fbw_req = fbw_req_raw & FB_WRITER_EN;
+
+// 3-client SDRAM owner encoding (strict priority Atari > FBwriter > PicoRV32).
+localparam [1:0] OWN_ATARI = 2'd0, OWN_RV = 2'd1, OWN_FBW = 2'd2;
+
 // ── PicoRV32 ↔ SDRAM arbiter CDC ─────────────────────────────────────────────
 // iosys_picorv32 stays on sys_clk (27 MHz) so its firmware-compiled SPI timing
 // (SD card init ≤400 kHz) is preserved.  The SDRAM arbiter runs at clk_core
@@ -308,10 +338,10 @@ wire rv_req = rv_valid_core && !rv_hold && cpu_run_allowed;  // gated new reques
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
 wire        sdram_complete;
 reg         sdram_complete_r = 1'b0;
-reg         sdram_owner = 1'b0; // 0 = Atari core, 1 = PicoRV32
+reg  [1:0]  sdram_owner = OWN_ATARI; // OWN_ATARI / OWN_RV / OWN_FBW
 
 assign sdram_complete = sdram_complete_r;
-assign core_sdram_req_complete = sdram_complete && (sdram_owner == 1'b0);
+assign core_sdram_req_complete = sdram_complete && (sdram_owner == OWN_ATARI);
 assign rv_ready                = rv_ready_sync;
 
 wire [31:0] sdram_rd_data_wire;
@@ -365,7 +395,7 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
     end else begin
         if (atari_req_rise) begin
             atari_req_pending <= 1'b1;
-        end else if (sadap_st == SA_BUSY && sdram_owner == 1'b0 && sdram_complete_wire) begin
+        end else if (sadap_st == SA_BUSY && sdram_owner == OWN_ATARI && sdram_complete_wire) begin
             atari_req_pending <= 1'b0;
         end
     end
@@ -387,33 +417,54 @@ end
 // moving firmware off SDRAM; do NOT re-add softcore priority here).
 reg rv_slot = 1'b0;  // retained (assigned but unused) to minimise churn; always 0 in policy
 
-wire next_owner = atari_req_pending             ? 1'b0 :
-                  (rv_req && !sdram_complete_r) ? 1'b1 : 1'b1;
+// Strict priority: Atari first, then the frame-buffer writer (fills idle cycles
+// without ever preempting the Atari), then PicoRV32.  The writer is a clk_core,
+// write-only client — no CDC, the simplest of the three.
+wire [1:0] next_owner = atari_req_pending             ? OWN_ATARI :
+                        fbw_req                       ? OWN_FBW   :
+                        (rv_req && !sdram_complete_r) ? OWN_RV    : OWN_ATARI;
 
-wire next_req = atari_req_pending ||
+wire next_req = atari_req_pending || fbw_req ||
                 (rv_req && !sdram_complete_r);
 
-wire current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
-// During SA_BUSY keep rv_valid_core (not rv_req) so an in-progress PicoRV32
-// transaction is not dropped mid-flight if rv_hold happens to be set.
-wire sdram_ctrl_req = (sadap_st == SA_BUSY) ? (sdram_owner ? rv_valid_core : atari_req_pending) : next_req;
-wire        sdram_ctrl_read_en  = current_owner ? (~|rv_wstrb) : core_sdram_read_en;
-wire        sdram_ctrl_write_en = current_owner ? (|rv_wstrb)  : core_sdram_write_en;
-wire [24:0] sdram_ctrl_addr     = current_owner ? rv_physical_addr : core_sdram_addr;
-wire [31:0] sdram_ctrl_wdata    = current_owner ? rv_wdata : {4{core_sdram_data_from_core[7:0]}};
-wire [3:0]  sdram_ctrl_wmask    = current_owner ? rv_wstrb : core_sdram_wmask;
+wire [1:0] current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
+// During SA_BUSY keep the persistent request of the active owner (rv_valid_core,
+// not rv_req, so an in-progress PicoRV32 transaction is not dropped mid-flight if
+// rv_hold happens to be set; fbw_req is held by the writer until its ack).
+// SA_WAIT forces req low for one clk_core cycle (= 2 clk_mem cycles) after each access so the
+// clk_mem SDRAM wrapper sees a clean req-deassert boundary between back-to-back accesses
+// (4-phase handshake across the 2:1 clk_core↔clk_mem crossing).
+wire sdram_ctrl_req = (sadap_st == SA_WAIT) ? 1'b0 :
+                      (sadap_st == SA_BUSY) ?
+                          ((sdram_owner == OWN_RV)  ? rv_valid_core    :
+                           (sdram_owner == OWN_FBW) ? fbw_req          :
+                                                      atari_req_pending)
+                          : next_req;
+wire        sdram_ctrl_read_en  = (current_owner == OWN_RV)  ? (~|rv_wstrb) :
+                                  (current_owner == OWN_FBW) ? 1'b0         : core_sdram_read_en;
+wire        sdram_ctrl_write_en = (current_owner == OWN_RV)  ? (|rv_wstrb)  :
+                                  (current_owner == OWN_FBW) ? 1'b1         : core_sdram_write_en;
+wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV)  ? rv_physical_addr :
+                                  (current_owner == OWN_FBW) ? fbw_addr         : core_sdram_addr;
+wire [31:0] sdram_ctrl_wdata    = (current_owner == OWN_RV)  ? rv_wdata  :
+                                  (current_owner == OWN_FBW) ? fbw_wdata : {4{core_sdram_data_from_core[7:0]}};
+wire [3:0]  sdram_ctrl_wmask    = (current_owner == OWN_RV)  ? rv_wstrb :
+                                  (current_owner == OWN_FBW) ? 4'b1111  : core_sdram_wmask;
 wire        sdram_ctrl_refresh  = core_sdram_refresh;
+
+// fb_writer FIFO pop: pulses when the writer's SDRAM transaction completes.
+assign fbw_ack = (sadap_st == SA_BUSY) && (sdram_owner == OWN_FBW) && sdram_complete_wire;
 
 wire        sdram_complete_wire;
 
-typedef enum logic { SA_IDLE, SA_BUSY } sadap_t;
+typedef enum logic [1:0] { SA_IDLE, SA_BUSY, SA_WAIT } sadap_t;
 sadap_t sadap_st = SA_IDLE;
 
 always_ff @(posedge clk_core or negedge hw_reset_n) begin
     if (!hw_reset_n) begin
         sdram_complete_r <= 1'b0;
         sadap_st         <= SA_IDLE;
-        sdram_owner      <= 1'b0;
+        sdram_owner      <= OWN_ATARI;
         rv_slot          <= 1'b0;
         rv_done_toggle_r <= 1'b0;
         rv_hold          <= 1'b0;
@@ -423,19 +474,24 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
         // rv_hold: set when a PicoRV32 transaction completes; cleared when
         // rv_valid_core deasserts.  Prevents phantom re-launches while waiting
         // for the rv_ready toggle-sync pulse to reach iosys (≈8 clk_core cycles).
-        if (sdram_complete_r && sdram_owner == 1'b1) rv_hold <= 1'b1;
-        if (!rv_valid_core)                          rv_hold <= 1'b0;
+        if (sdram_complete_r && sdram_owner == OWN_RV) rv_hold <= 1'b1;
+        if (!rv_valid_core)                            rv_hold <= 1'b0;
 
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    // Strict Atari priority: Atari wins whenever it has a pending
-                    // request; PicoRV32 is served only when the Atari is idle.
+                    // Strict priority Atari > FBwriter > PicoRV32.  The Atari wins
+                    // whenever it has a pending request; the frame-buffer writer
+                    // takes the next idle cycle; PicoRV32 is served only when both
+                    // the Atari and the writer are idle.
                     if (atari_req_pending) begin
-                        sdram_owner <= 1'b0;
+                        sdram_owner <= OWN_ATARI;
+                        sadap_st    <= SA_BUSY;
+                    end else if (fbw_req) begin
+                        sdram_owner <= OWN_FBW;
                         sadap_st    <= SA_BUSY;
                     end else if (rv_req && !sdram_complete_r) begin
-                        sdram_owner <= 1'b1;
+                        sdram_owner <= OWN_RV;
                         sadap_st    <= SA_BUSY;
                     end
                 end
@@ -443,7 +499,7 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
             SA_BUSY: begin
                 if (sdram_complete_wire) begin
                     sdram_complete_r <= 1'b1;
-                    sadap_st         <= SA_IDLE;
+                    sadap_st         <= SA_WAIT;   // one req-low cycle before the next access
                     // (rv_slot forced-fairness removed — strict Atari priority now.)
                     rv_slot <= 1'b0;
                     // Pulse the toggle-sync for iosys rv_ready, and CAPTURE the
@@ -453,12 +509,13 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
                     // (completion toggle crossing clk_core→sys_clk) would overwrite
                     // it → PicoRV32 latches Atari data → corrupted firmware word →
                     // wild jump → undecoded-address hang.  Latching here prevents it.
-                    if (sdram_owner == 1'b1) begin
+                    if (sdram_owner == OWN_RV) begin
                         rv_done_toggle_r <= ~rv_done_toggle_r;
                         rv_rdata_hold    <= sdram_rd_data_wire;
                     end
                 end
             end
+            SA_WAIT: sadap_st <= SA_IDLE;   // req held low here; wrapper sees the boundary
             default: sadap_st <= SA_IDLE;
         endcase
     end
@@ -529,6 +586,7 @@ end
 
 gw2ar_sdram sdram_ip (
     .clk          (clk_core),
+    .clk_mem      (clk_mem),
     .reset_n      (hw_reset_n),
 
     // User interface
@@ -555,6 +613,32 @@ gw2ar_sdram sdram_ip (
     .IO_sdram_dq  (IO_sdram_dq),
 
     .sdram_ready  (sdram_ready_wire)
+);
+
+// ── Frame-buffer writer (Stage 1) ────────────────────────────────────────────
+// Captures the Atari video stream and packs RGB332 words into the SDRAM double
+// frame buffer at FB_BASE = 0x780000 (the core's documented "Free 512K below 8MB",
+// address_decoder.vhdl:915 — clear of RAM/ROM/cartridge).  Reset with core_reset_n
+// so it stays idle until the ROMs are loaded (iosys keeps SDRAM priority during
+// load).  Nothing reads the buffer yet — Stage 2 adds the reader.
+fb_writer #(
+    .FB_BASE        (25'h0078_0000),
+    .WORDS_PER_LINE (88),
+    .LINES          (240),
+    .FB_SIZE        (25'd84480)
+) fb_writer_inst (
+    .clk_core (clk_core),
+    .rst_n    (core_reset_n),
+    .r_in     (video_r),
+    .g_in     (video_g),
+    .b_in     (video_b),
+    .de_in    (~video_blank),
+    .vs_in    (video_vs),
+    .pixce    (video_pixce),
+    .fbw_req  (fbw_req_raw),
+    .fbw_addr (fbw_addr),
+    .fbw_wdata(fbw_wdata),
+    .fbw_ack  (fbw_ack)
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -17,6 +17,10 @@ create_clock -name clk_usb -period 83.333 [get_nets {clk_usb}]
 # optimizes these paths and reports the true critical path.
 create_clock -name clk_core -period 34.857 [get_pins {clkdiv_core/CLKOUT}]
 
-# Treat system clock, USB clock, core clock, and HDMI clocks as asynchronous clock groups
-set_clock_groups -asynchronous -group [get_clocks {sys_clk}] -group [get_clocks {clk_pix clk_5x}] -group [get_clocks {clk_usb}] -group [get_clocks {clk_core}]
+# clk_mem: 57.375 MHz (114.75 ÷ 2) — SDRAM controller. 2:1 synchronous with clk_core (same
+# clk_108m source) — kept in the SAME clock group so the tool analyses the crossing.
+create_clock -name clk_mem -period 17.429 [get_pins {clkdiv_mem/CLKOUT}]
+
+# Treat system clock, USB clock, core+mem clocks, and HDMI clocks as asynchronous clock groups
+set_clock_groups -asynchronous -group [get_clocks {sys_clk}] -group [get_clocks {clk_pix clk_5x}] -group [get_clocks {clk_usb}] -group [get_clocks {clk_core clk_mem}]
 

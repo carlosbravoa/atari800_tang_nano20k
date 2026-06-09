@@ -11,7 +11,8 @@
 // a direct SDRAM access well within the Atari bus window.
 
 module gw2ar_sdram (
-    input  wire        clk,
+    input  wire        clk,       // bus/interface clock (clk_core) — req/req_complete handshake
+    input  wire        clk_mem,   // controller clock (clk_mem, 2x clk_core, synchronous)
     input  wire        reset_n,
 
     // Atari core / ROM-loader interface (time-shared via the arbiter)
@@ -40,8 +41,8 @@ module gw2ar_sdram (
     output reg         sdram_ready = 1'b0
 );
 
-// SDRAM clock = inverted system clock (180-degree phase), same as the previous controller.
-wire clk_sdram = ~clk;
+// SDRAM clock = inverted controller clock (180-degree phase).
+wire clk_sdram = ~clk_mem;
 
 // ── NESTang controller ────────────────────────────────────────────────────────
 wire [31:0] n_dout32;
@@ -50,7 +51,7 @@ wire        n_busy;
 
 reg  r_rd = 1'b0, r_wr = 1'b0, r_ref = 1'b0;
 
-sdram_nestang #(.FREQ(28_687_500)) u_sdram (
+sdram_nestang #(.FREQ(57_375_000)) u_sdram (
     .SDRAM_DQ   (IO_sdram_dq),
     .SDRAM_A    (O_sdram_addr),
     .SDRAM_BA   (O_sdram_ba),
@@ -62,7 +63,7 @@ sdram_nestang #(.FREQ(28_687_500)) u_sdram (
     .SDRAM_CKE  (O_sdram_cke),
     .SDRAM_DQM  (O_sdram_dqm),
 
-    .clk        (clk),
+    .clk        (clk_mem),
     .clk_sdram  (clk_sdram),
     .resetn     (reset_n),
     .rd         (r_rd),
@@ -77,7 +78,7 @@ sdram_nestang #(.FREQ(28_687_500)) u_sdram (
 );
 
 // ── Handshake adapter FSM ──────────────────────────────────────────────────────
-localparam [1:0] A_IDLE = 2'd0, A_ACCESS = 2'd1, A_REFRESH = 2'd2;
+localparam [1:0] A_IDLE = 2'd0, A_ACCESS = 2'd1, A_REFRESH = 2'd2, A_DONE = 2'd3;
 reg [1:0] ast = A_IDLE;
 reg       busy_d = 1'b1;           // delayed busy for falling-edge detect
 reg       init_done = 1'b0;
@@ -86,7 +87,7 @@ reg       refresh_d = 1'b0;
 
 wire busy_fell = busy_d & ~n_busy;
 
-always @(posedge clk or negedge reset_n) begin
+always @(posedge clk_mem or negedge reset_n) begin
     if (!reset_n) begin
         ast             <= A_IDLE;
         r_rd            <= 1'b0;
@@ -103,7 +104,9 @@ always @(posedge clk or negedge reset_n) begin
         r_rd  <= 1'b0;
         r_wr  <= 1'b0;
         r_ref <= 1'b0;
-        req_complete <= 1'b0;
+        // req_complete is NOT a per-cycle pulse anymore: it is a level driven in A_DONE
+        // and held until the clk_core arbiter drops req (4-phase handshake across the
+        // clk_core↔clk_mem boundary).  Do not clear it blindly here.
         busy_d <= n_busy;
 
         // latch refresh requests (rising edge), service when idle
@@ -131,8 +134,16 @@ always @(posedge clk or negedge reset_n) begin
 
             A_ACCESS: begin
                 if (n_data_ready) rdata <= n_dout32;   // capture read data (1 cyc before busy falls)
-                if (busy_fell) begin
-                    req_complete <= 1'b1;
+                if (busy_fell) ast <= A_DONE;
+            end
+
+            // Hold req_complete high until the arbiter drops req (it forces req low for one
+            // clk_core cycle via SA_WAIT), then return to idle.  This is the handshake
+            // boundary that lets clk_core reliably catch completion across the 2:1 crossing.
+            A_DONE: begin
+                req_complete <= 1'b1;
+                if (!req) begin
+                    req_complete <= 1'b0;
                     ast          <= A_IDLE;
                 end
             end
