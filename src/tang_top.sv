@@ -1257,7 +1257,7 @@ usb_to_atari800 keyboard (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HDMI video source: scale720p scales Atari core output to 720p/60Hz
+// HDMI video source: fb_reader scales Atari core output to 720p/60Hz from SDRAM
 // ─────────────────────────────────────────────────────────────────────────────
 wire [7:0] hdmi_r, hdmi_g, hdmi_b;
 wire       hdmi_hs, hdmi_vs, hdmi_de;

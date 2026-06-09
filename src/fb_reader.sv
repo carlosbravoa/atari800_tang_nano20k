@@ -4,7 +4,7 @@
 // source frame from the SDRAM frame buffer (written by fb_writer) and 3x-upscales it with
 // pillarbox. It is asynchronous to the Atari: no genlock. With a SINGLE shared SDRAM buffer
 // the reader and writer race → a slow-moving tear line, traded for minimum latency (no
-// double-buffer). Output interface matches scale720p (r/g/b/hs/vs/de + osd_x/osd_y) so the
+// double-buffer). Output interface matches the old scale720p (r/g/b/hs/vs/de + osd_x/osd_y) so the
 // downstream HDMI/OSD path is unchanged.
 //
 // Two clock domains:
