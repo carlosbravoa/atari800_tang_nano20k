@@ -243,8 +243,19 @@ wire        fbw_ack;
 localparam FB_WRITER_EN = 1'b1;
 wire        fbw_req = fbw_req_raw & FB_WRITER_EN;
 
+// Frame-buffer reader client (B4) — read-only SDRAM client (clk_core domain).
+// Gate fbr_req with core_reset_n so the reader stays OFF the bus until the ROMs are loaded
+// (it outranks PicoRV32; ungated it starves the iosys ROM loader → no boot).  The reader's
+// raster still free-runs on hdmi_rst_n so HDMI stays locked; only the SDRAM fetch waits.
+wire        fbr_req_raw;
+wire        fbr_req = fbr_req_raw & core_reset_n;
+wire [24:0] fbr_addr;
+wire        fbr_ack;
+wire [255:0] fbr_rdata;            // 8-word burst read result for the reader
+wire [255:0] sdram_burst_dout;
+
 // 3-client SDRAM owner encoding (strict priority Atari > FBwriter > PicoRV32).
-localparam [1:0] OWN_ATARI = 2'd0, OWN_RV = 2'd1, OWN_FBW = 2'd2;
+localparam [1:0] OWN_ATARI = 2'd0, OWN_RV = 2'd1, OWN_FBW = 2'd2, OWN_FBR = 2'd3;
 
 // ── PicoRV32 ↔ SDRAM arbiter CDC ─────────────────────────────────────────────
 // iosys_picorv32 stays on sys_clk (27 MHz) so its firmware-compiled SPI timing
@@ -422,9 +433,10 @@ reg rv_slot = 1'b0;  // retained (assigned but unused) to minimise churn; always
 // write-only client — no CDC, the simplest of the three.
 wire [1:0] next_owner = atari_req_pending             ? OWN_ATARI :
                         fbw_req                       ? OWN_FBW   :
+                        fbr_req                       ? OWN_FBR   :
                         (rv_req && !sdram_complete_r) ? OWN_RV    : OWN_ATARI;
 
-wire next_req = atari_req_pending || fbw_req ||
+wire next_req = atari_req_pending || fbw_req || fbr_req ||
                 (rv_req && !sdram_complete_r);
 
 wire [1:0] current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
@@ -438,22 +450,31 @@ wire sdram_ctrl_req = (sadap_st == SA_WAIT) ? 1'b0 :
                       (sadap_st == SA_BUSY) ?
                           ((sdram_owner == OWN_RV)  ? rv_valid_core    :
                            (sdram_owner == OWN_FBW) ? fbw_req          :
+                           (sdram_owner == OWN_FBR) ? fbr_req          :
                                                       atari_req_pending)
                           : next_req;
 wire        sdram_ctrl_read_en  = (current_owner == OWN_RV)  ? (~|rv_wstrb) :
-                                  (current_owner == OWN_FBW) ? 1'b0         : core_sdram_read_en;
+                                  (current_owner == OWN_FBW) ? 1'b0         :
+                                  (current_owner == OWN_FBR) ? 1'b1         : core_sdram_read_en;
 wire        sdram_ctrl_write_en = (current_owner == OWN_RV)  ? (|rv_wstrb)  :
-                                  (current_owner == OWN_FBW) ? 1'b1         : core_sdram_write_en;
+                                  (current_owner == OWN_FBW) ? 1'b1         :
+                                  (current_owner == OWN_FBR) ? 1'b0         : core_sdram_write_en;
 wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV)  ? rv_physical_addr :
-                                  (current_owner == OWN_FBW) ? fbw_addr         : core_sdram_addr;
+                                  (current_owner == OWN_FBW) ? fbw_addr         :
+                                  (current_owner == OWN_FBR) ? fbr_addr         : core_sdram_addr;
 wire [31:0] sdram_ctrl_wdata    = (current_owner == OWN_RV)  ? rv_wdata  :
                                   (current_owner == OWN_FBW) ? fbw_wdata : {4{core_sdram_data_from_core[7:0]}};
 wire [3:0]  sdram_ctrl_wmask    = (current_owner == OWN_RV)  ? rv_wstrb :
-                                  (current_owner == OWN_FBW) ? 4'b1111  : core_sdram_wmask;
+                                  (current_owner == OWN_FBW) ? 4'b1111  :
+                                  (current_owner == OWN_FBR) ? 4'b0000  : core_sdram_wmask;
 wire        sdram_ctrl_refresh  = core_sdram_refresh;
 
-// fb_writer FIFO pop: pulses when the writer's SDRAM transaction completes.
-assign fbw_ack = (sadap_st == SA_BUSY) && (sdram_owner == OWN_FBW) && sdram_complete_wire;
+// fb_writer FIFO pop / fb_reader word strobe: 1-cycle pulses at their access completion.
+assign fbw_ack  = (sadap_st == SA_BUSY) && (sdram_owner == OWN_FBW) && sdram_complete_wire;
+assign fbr_ack  = (sadap_st == SA_BUSY) && (sdram_owner == OWN_FBR) && sdram_complete_wire;
+assign fbr_rdata = sdram_burst_dout;
+// Reader accesses are always BL8 burst reads.
+wire   sdram_ctrl_burst = (current_owner == OWN_FBR);
 
 wire        sdram_complete_wire;
 
@@ -489,6 +510,9 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
                         sadap_st    <= SA_BUSY;
                     end else if (fbw_req) begin
                         sdram_owner <= OWN_FBW;
+                        sadap_st    <= SA_BUSY;
+                    end else if (fbr_req) begin
+                        sdram_owner <= OWN_FBR;
                         sadap_st    <= SA_BUSY;
                     end else if (rv_req && !sdram_complete_r) begin
                         sdram_owner <= OWN_RV;
@@ -594,8 +618,10 @@ gw2ar_sdram sdram_ip (
     .req_complete (sdram_complete_wire),
     .read_en      (sdram_ctrl_read_en),
     .write_en     (sdram_ctrl_write_en),
+    .burst        (sdram_ctrl_burst),
     .addr         (sdram_ctrl_addr),
     .rdata        (sdram_rd_data_wire),
+    .burst_rdata  (sdram_burst_dout),
     .wdata        (sdram_ctrl_wdata),
     .wmask        (sdram_ctrl_wmask),
     .refresh      (sdram_ctrl_refresh),
@@ -1216,12 +1242,20 @@ usb_to_atari800 keyboard (
 wire [7:0] hdmi_r, hdmi_g, hdmi_b;
 wire       hdmi_hs, hdmi_vs, hdmi_de;
 
-scale720p scaler (
+// B4: free-running standard 720p60 reader, reading the SDRAM frame buffer (written by
+// fb_writer) via its own read-only arbiter client.  No genlock — Atari video taps unused here.
+fb_reader #(
+    .FB_BASE        (25'h0078_0000),
+    .WORDS_PER_LINE (88),
+    .LINES          (240)
+) scaler (
     .clk_core  (clk_core),
     .rst_n     (hdmi_rst_n),
-    .r_in      (video_r), .g_in(video_g), .b_in(video_b),
-    .hs_in     (video_hs), .vs_in(video_vs), .de_in(~video_blank),
-    .pixce     (video_pixce), .clk_pixel(clk_pix),
+    .fbr_req   (fbr_req_raw),
+    .fbr_addr  (fbr_addr),
+    .fbr_ack   (fbr_ack),
+    .fbr_rdata (fbr_rdata),
+    .clk_pixel (clk_pix),
     .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
     .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
     .osd_x(osd_x), .osd_y(osd_y)
@@ -1416,8 +1450,28 @@ always_ff @(posedge clk_core) begin
         if (u0_busy_now) u0_busy <= u0_busy + 20'd1;
     end
 end
-// active-low LEDs: light (drive 0) when the peak bucket is set
-assign leds_n = ~{u0_peak[3], u0_peak[2], u0_peak[1], u0_peak[0]};
+// ── DIAGNOSTIC LEDs (no monitor needed) ──────────────────────────────────────
+//   LED2 (leds_n[1]) = vshb     : ~1 Hz blink iff fb_reader raster emits VSYNC (raster ALIVE)
+//   LED3 (leds_n[2]) = roms_loaded : ON once the Atari has booted
+//   LED4 (leds_n[3]) = fbr active  : ON if the reader is fetching from SDRAM
+//   LED5 (leds_n[4]) = sysblink    : ~0.8 Hz free-run heartbeat (FPGA alive baseline)
+reg [24:0] sysblink = 25'd0;
+always_ff @(posedge sys_clk) sysblink <= sysblink + 25'd1;
+reg        vs_d2 = 1'b0, vshb = 1'b0;
+reg [5:0]  vscnt = 6'd0;
+always_ff @(posedge clk_pix) begin
+    vs_d2 <= hdmi_vs;
+    if (hdmi_vs & ~vs_d2) begin
+        if (vscnt == 6'd29) begin vscnt <= 6'd0; vshb <= ~vshb; end
+        else                      vscnt <= vscnt + 6'd1;
+    end
+end
+reg [23:0] fbrcnt = 24'd0;
+always_ff @(posedge clk_core) begin
+    if (fbr_req)          fbrcnt <= 24'hFFFFFF;
+    else if (fbrcnt != 0) fbrcnt <= fbrcnt - 24'd1;
+end
+assign leds_n = ~{ sysblink[24], (fbrcnt != 0), roms_loaded, vshb };
 
 
 endmodule

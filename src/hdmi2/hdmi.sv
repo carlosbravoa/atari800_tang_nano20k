@@ -131,7 +131,7 @@ generate
             end
         4:
         begin
-            assign frame_width = 1672;
+            assign frame_width = 1650;   // standard CEA-861 720p60 H-total (was 1672 — non-standard; picky monitors rejected it). fb_reader emits 1650 to match.
             assign frame_height = 750;
             assign screen_width = 1280;
             assign screen_height = 720;

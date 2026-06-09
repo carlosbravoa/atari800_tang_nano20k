@@ -47,14 +47,18 @@ module sdram_nestang
     input             resetn,
     input             rd,           // read command pulse
     input             wr,           // write command pulse
+    input             burst,        // 1 with rd: BL8 page-mode burst read (8 words)
     input             refresh,      // auto-refresh command pulse
     input      [22:0] addr,         // byte address, latched at rd/wr pulse
     input      [31:0] din,          // 32-bit write data, latched at wr pulse
     input      [3:0]  wmask,        // active-high byte write mask
     output [DATA_WIDTH-1:0] dout32, // 32-bit read data (valid at data_ready)
+    output reg [255:0] burst_dout,  // 8-word burst read data (valid at busy fall)
     output reg        data_ready,   // pulses when read data is valid
     output reg        busy          // 1: controller busy / not ready for next command
 );
+localparam [3:0] BLEN = 4'd4;       // burst length (words). BL4 keeps the non-preemptible
+                                    // burst short enough that ANTIC never misses its bus window.
 
 reg dq_oen;
 reg [DATA_WIDTH-1:0] dq_out;
@@ -73,6 +77,7 @@ localparam IDLE    = 3'd2;
 localparam READ    = 3'd3;
 localparam WRITE   = 3'd4;
 localparam REFRESH = 3'd5;
+localparam BREAD   = 3'd6;   // BL8 page-mode burst read
 
 // RAS# CAS# WE#
 localparam CMD_SetModeReg  = 3'b000;
@@ -89,6 +94,8 @@ localparam [10:0] MODE_REG  = {4'b0, CAS[2:0], BURST_MODE, BURST_LEN};
 
 reg cfg_now;
 reg [3:0]  cycle;
+wire [2:0] beat = cycle - 4'd2 - CAS;   // burst data beat: read@cycle k → captured @ k+CAS+1
+                                        // (+1 matches the single-read path's registered data_ready)
 reg [31:0] din_buf;
 reg [3:0]  wmask_buf;
 reg [22:0] addr_buf;
@@ -118,7 +125,7 @@ always @(posedge clk) begin
             {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_BankActivate;
             SDRAM_BA <= addr[ROW_WIDTH+COL_WIDTH+BANK_WIDTH-1+2 : ROW_WIDTH+COL_WIDTH+2];
             SDRAM_A  <= addr[ROW_WIDTH+COL_WIDTH-1+2:COL_WIDTH+2];
-            state    <= rd ? READ : WRITE;
+            state    <= rd ? (burst ? BREAD : READ) : WRITE;
             addr_buf <= addr;
             if (wr) begin din_buf <= din; wmask_buf <= wmask; end
             cycle <= 4'd1;
@@ -155,6 +162,27 @@ always @(posedge clk) begin
         end
         {WRITE, T_RCD+4'd1}:      dq_oen <= 1'b1;
         {WRITE, T_RCD+T_WR+T_RP}: begin busy <= 0; state <= IDLE; end
+
+        // BL8 page-mode burst read: 8 Reads (no auto-precharge) at col..col+7, then 1 Precharge.
+        // Reads issued on cycles 1..8 → data on cycles (1+CAS)..(8+CAS); precharge after.
+        {BREAD, 4'bxxxx}: begin
+            if (cycle >= 4'd1 && cycle <= BLEN) begin
+                {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_Read;
+                SDRAM_A[10]  <= 1'b0;                                  // NO auto-precharge
+                SDRAM_A[9:0] <= {2'b0, addr_buf[COL_WIDTH-1+2:2] + (cycle - 4'd1)};
+                SDRAM_DQM    <= 4'b0;
+            end
+            if (cycle >= (CAS+4'd2) && cycle <= (BLEN+CAS+4'd1))
+                burst_dout[ {beat, 5'b0} +: 32 ] <= dq_in;   // beat*32, 8-bit base
+            if (cycle == (BLEN+CAS+4'd2)) begin
+                {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_PreCharge;
+                SDRAM_A[10] <= 1'b1;                                   // precharge all
+            end
+            if (cycle == (BLEN+CAS+4'd2+T_RP)) begin
+                busy  <= 1'b0;
+                state <= IDLE;
+            end
+        end
 
         {REFRESH, T_RC}: begin state <= IDLE; busy <= 0; end
     endcase

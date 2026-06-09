@@ -16,7 +16,10 @@
 
 module fb_writer #(
     parameter [24:0]  FB_BASE        = 25'h0060_0000,  // byte base of buffer 0 (well clear of Atari RAM/ROM)
-    parameter integer WORDS_PER_LINE = 88,             // 352 px / 4
+    parameter integer WORDS_PER_LINE = 88,             // 352 px / 4 (actual data)
+    parameter integer STRIDE         = 128,            // words/line incl. padding — power-of-2 so
+                                                       // each line sits in one 256-col SDRAM row
+                                                       // (reader BL8 bursts never cross a row)
     parameter integer LINES          = 240,
     parameter [24:0]  FB_SIZE        = 25'd84480       // bytes per buffer = 240*88*4
 )(
@@ -82,14 +85,14 @@ module fb_writer #(
 
             // ── pixel capture / packing / addressing ──
             if (vs_rise) begin
-                buf_sel    <= ~buf_sel;
+                buf_sel    <= 1'b0;   // B4: single shared buffer (lowest latency, slow tear line)
                 line_base  <= 15'd0;
                 row        <= 8'd0;
                 col_word   <= 7'd0;
                 px_in_word <= 2'd0;
             end else if (de_fall) begin
                 if (row < LINES-1) begin
-                    line_base <= line_base + WORDS_PER_LINE[14:0];
+                    line_base <= line_base + STRIDE[14:0];
                     row       <= row + 8'd1;
                 end
                 col_word   <= 7'd0;

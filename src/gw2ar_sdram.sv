@@ -20,8 +20,10 @@ module gw2ar_sdram (
     output reg         req_complete,
     input  wire        read_en,
     input  wire        write_en,
+    input  wire        burst,        // 1 with read_en: BL8 burst read (8 words)
     input  wire [24:0] addr,
     output reg  [31:0] rdata,
+    output wire [255:0] burst_rdata,  // 8-word burst read result
     input  wire [31:0] wdata,
     input  wire [3:0]  wmask,
     input  wire        refresh,
@@ -68,6 +70,8 @@ sdram_nestang #(.FREQ(57_375_000)) u_sdram (
     .resetn     (reset_n),
     .rd         (r_rd),
     .wr         (r_wr),
+    .burst      (burst),
+    .burst_dout (burst_rdata),
     .refresh    (r_ref),
     .addr       (addr[22:0]),
     .din        (wdata),
