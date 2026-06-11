@@ -140,8 +140,9 @@ always_ff @(posedge clk_core or negedge rst_n) begin
 end
 wire frame_start_core = fstoggle_sync[2] ^ fstoggle_sync[1];
 
-// Fetch each source line as 11 BL8 bursts (88 words / 8). Per burst: issue req, wait one
-// fbr_ack, latch the 8 words, then write them to the cache over 8 cycles.
+// Fetch each source line as 44 BL2 bursts (88 words / 2). Per burst: issue req, wait one
+// fbr_ack, latch the words, then write them to the cache one per cycle. BL2 keeps each
+// non-preemptible SDRAM burst short enough that ANTIC never misses its bus window.
 reg [7:0]   fetch_row;         // source row being fetched
 reg [6:0]   word_base;         // first word of the current burst (0,8,..,80)
 reg [14:0]  fetch_rowbase;     // fetch_row * WORDS_PER_LINE
@@ -165,17 +166,17 @@ always_ff @(posedge clk_core or negedge rst_n) begin
             fetch_row <= 8'd0; word_base <= 7'd0; fetch_rowbase <= 15'd0;
             fetching <= 1'b0; wb_active <= 1'b0; fbr_req <= 1'b0;
         end else if (wb_active) begin
-            // write the BL4 captured words (lower 128b of rdata_lat) to the cache, one/cycle
+            // write the BL2 captured words (lower 64b of rdata_lat) to the cache, one/cycle
             cache_wdata <= rdata_lat[{wb, 5'b0} +: 32];
             cache_waddr <= {fetch_row[1:0], word_base + {4'd0, wb}};
             cache_we    <= 1'b1;
-            if (wb == 3'd3) begin
+            if (wb == 3'd1) begin
                 wb_active <= 1'b0;
-                if (word_base == WORDS_PER_LINE-4) begin   // last burst of the line
+                if (word_base == WORDS_PER_LINE-2) begin   // last burst of the line
                     fetch_row     <= fetch_row + 8'd1;
                     fetch_rowbase <= fetch_rowbase + STRIDE[14:0];
                     word_base     <= 7'd0;
-                end else word_base <= word_base + 7'd4;
+                end else word_base <= word_base + 7'd2;
             end else wb <= wb + 3'd1;
         end else if (fetching) begin
             if (fbr_ack) begin

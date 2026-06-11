@@ -94,8 +94,15 @@ localparam [10:0] MODE_REG  = {4'b0, CAS[2:0], BURST_MODE, BURST_LEN};
 
 reg cfg_now;
 reg [3:0]  cycle;
-wire [2:0] beat = cycle - 4'd2 - CAS;   // burst data beat: read@cycle k → captured @ k+CAS+1
-                                        // (+1 matches the single-read path's registered data_ready)
+// Half-rate BL2 burst: READ commands at odd cycles 1,3 (one per 2 cycles), data captured
+// exactly like the upstream single-read path: at the posedge in the middle of each beat's
+// driven cycle (cmd on bus cycle k → data on bus cycle k+CAS → capture at its end).
+// Full-rate back-to-back reads made the bus transition every cycle with no settle time —
+// the only access pattern upstream never uses, and the source of the per-build burst-read
+// corruption (green ghost / dropped beats). The gap cycle between beats gives every sample
+// a quiet, settled bus; BL2 keeps the non-preemptible burst as short as the original
+// (proven) BL4 full-rate burst so ANTIC never misses its bus window. Assumes even CAS.
+wire [2:0] beat = (cycle - 4'd2 - CAS) >> 1;   // capture cycles CAS+2,CAS+4 → beats 0,1
 reg [31:0] din_buf;
 reg [3:0]  wmask_buf;
 reg [22:0] addr_buf;
@@ -166,19 +173,20 @@ always @(posedge clk) begin
         // BL8 page-mode burst read: 8 Reads (no auto-precharge) at col..col+7, then 1 Precharge.
         // Reads issued on cycles 1..8 → data on cycles (1+CAS)..(8+CAS); precharge after.
         {BREAD, 4'bxxxx}: begin
-            if (cycle >= 4'd1 && cycle <= BLEN) begin
+            if (cycle >= 4'd1 && cycle <= 4'd3 && cycle[0]) begin      // cycles 1,3 (BL2)
                 {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_Read;
                 SDRAM_A[10]  <= 1'b0;                                  // NO auto-precharge
-                SDRAM_A[9:0] <= {2'b0, addr_buf[COL_WIDTH-1+2:2] + (cycle - 4'd1)};
+                SDRAM_A[9:0] <= {2'b0, addr_buf[COL_WIDTH-1+2:2] + {5'b0, cycle[3:1]}};
                 SDRAM_DQM    <= 4'b0;
             end
-            if (cycle >= (CAS+4'd2) && cycle <= (BLEN+CAS+4'd1))
-                burst_dout[ {beat, 5'b0} +: 32 ] <= dq_in;   // beat*32, 8-bit base
-            if (cycle == (BLEN+CAS+4'd2)) begin
+            // capture beats at even cycles CAS+2 .. CAS+4 (4,6 for CAS=2)
+            if (cycle >= (CAS+4'd2) && cycle <= (CAS+4'd4) && !cycle[0])
+                burst_dout[ {beat, 5'b0} +: 32 ] <= dq_in;   // beat*32
+            if (cycle == (CAS+4'd5)) begin
                 {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_PreCharge;
                 SDRAM_A[10] <= 1'b1;                                   // precharge all
             end
-            if (cycle == (BLEN+CAS+4'd2+T_RP)) begin
+            if (cycle == (CAS+4'd5+T_RP)) begin
                 busy  <= 1'b0;
                 state <= IDLE;
             end
