@@ -146,8 +146,9 @@ module uart_kbd_ch9350 #(
                     S_DATA: begin
                                 if (ch_idx == ch_len - 5'd1) begin
                                     // final byte = checksum
-                                    if (ch_sum == rx_byte &&
-                                        (ch_cmd == 8'h88 || ch_cmd == 8'h83) && d0 == 8'h10) begin
+                                    if ((ch_sum == rx_byte || (ch_sum - d0) == rx_byte) &&
+                                        (ch_cmd == 8'h88 || ch_cmd == 8'h83) &&
+                                        (d0 == 8'h10 || d0 == 8'h11)) begin
                                         kbd_mod  <= d1;
                                         kbd_key1 <= d3;
                                         kbd_key2 <= d4;
