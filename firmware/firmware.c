@@ -498,6 +498,7 @@ int menu_loadrom(int *choice) {
             delay(300);
             while (1) {
                 uart_keyboard_poll();
+                sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
                 int r = joy_choice(TOPLINE, file_len, &active, OSD_KEY_CODE);
                 int j1, j2;
                 joy_get(&j1, &j2);
@@ -1104,6 +1105,7 @@ void menu_options() {
 
         for (;;) {
             uart_keyboard_poll();
+            sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
             if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     return;
@@ -1335,6 +1337,7 @@ int main() {
             int choice = 0;
             for (;;) {
                 uart_keyboard_poll();
+                sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
                 int r = joy_choice(10, 8, &choice, OSD_KEY_CODE);
                 if (r == 1) break;
                 int j1, j2;

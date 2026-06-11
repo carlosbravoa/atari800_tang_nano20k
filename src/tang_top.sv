@@ -306,65 +306,13 @@ wire      rv_ready_sync     = rv_done_sys_r[2] ^ rv_done_sys_r[1];
 // corrupt the toggle-sync and leave PicoRV32 with 0 or 2 rv_ready pulses.
 reg rv_hold = 1'b0;
 
-// PicoRV32 SDRAM access is FROZEN while the Atari core is running, because the
-// firmware executes from SDRAM and its continuous instruction fetches otherwise
-// steal the Atari's SDRAM bus window (an in-flight CPU access can't be preempted
-// and pushes the Atari past its cycle_length=32 budget → ANTIC corruption / no
-// boot).  We gate rv_req (the access *launch*), so any access already in SA_BUSY
-// still completes cleanly.  Real long-term fix: firmware off SDRAM — see memory
-// project-firmware-off-sdram.  This is the interim that lets the Atari boot.
-//
-// CPU runs when: overlay is up (menu shown → Atari HALTed, no contention), OR a
-// hardware wake is latched.  Wake is needed because the firmware itself raises the
-// overlay in response to S2/F12 — but a frozen CPU can't poll those keys, so the
-// wake must come from HARDWARE (outside the CPU): S2 button (btn_n[1]) or F12
-// (key_f12, from the hardware keyboard decoder — both SDRAM-independent).
-//   - wake set by S2/F12 → CPU unfreezes → firmware sees the key, raises overlay
-//   - once overlay is up, it holds the CPU running; the wake latch is then cleared
-//   - user dismisses menu → firmware lowers overlay → CPU re-freezes → Atari resumes
-// Wake-latch: gives the frozen CPU a momentary window to notice an S2/F12 press
-// and raise the overlay; once overlay is up it holds the CPU running.
-// Key insight for the "Atari breaks on dismiss" bug:
-//   - KICK only on the rising edge of S2/F12 AND only while overlay is DOWN, i.e.
-//     only when ENTERING the menu from the frozen state.  When overlay is already
-//     UP (the press means DISMISS), we must NOT kick — the CPU is already running
-//     via overlay, and on dismiss it should simply re-freeze the instant overlay
-//     drops, so the resumed Atari gets the full SDRAM bus with NO contention window.
-//   - HOLD the latch until overlay actually comes up (CPU acknowledged), then clear.
-//     (Edge-triggered set + brief tap still works, because the edge is captured.)
-reg [2:0] overlay_sync_r = 3'b111; // sync overlay into clk_core; default running (ROM load)
-reg [2:0] s2_sync_r      = 3'b000;
-reg [2:0] f12_sync_r     = 3'b000;
-reg       wake_latch     = 1'b0;
-wire s2_rise  = s2_sync_r[2:1]  == 2'b01;   // synced rising edge
-wire f12_rise = f12_sync_r[2:1] == 2'b01;
-always_ff @(posedge clk_core or negedge hw_reset_n) begin
-    if (!hw_reset_n) begin
-        overlay_sync_r <= 3'b111;
-        s2_sync_r      <= 3'b000;
-        f12_sync_r     <= 3'b000;
-        wake_latch     <= 1'b0;
-    end else begin
-        overlay_sync_r <= {overlay_sync_r[1:0], overlay};
-        s2_sync_r      <= {s2_sync_r[1:0],      btn_n[1]};
-        f12_sync_r     <= {f12_sync_r[1:0],     key_f12};
-        if ((s2_rise || f12_rise) && !overlay_sync_r[2])
-            wake_latch <= 1'b1;          // kick to ENTER menu from frozen state
-        else if (overlay_sync_r[2])
-            wake_latch <= 1'b0;          // overlay up → it now holds the CPU running
-    end
-end
-// cpu_run_allowed = overlay only. The wake_latch entry-handshake is removed:
-// it existed for when firmware ran from SDRAM (gated off until "woken"), but
-// firmware now runs from BSRAM and always polls S2/F12 — so it raises the overlay
-// itself, no hardware kick needed. The old latch could stick high (S2 -> halt,
-// overlay never came up -> Atari frozen unrecoverably). The menu loop touches no
-// SDRAM, so the firmware never stalls with the overlay down.
-wire cpu_run_allowed = overlay_sync_r[2];
-wire _unused_wake = wake_latch; // keep signal defined; logic below is now dead
-
-
-wire rv_req = rv_valid_core && !rv_hold && cpu_run_allowed;  // gated new request
+// PicoRV32 SDRAM requests are ungated: the firmware runs entirely from BSRAM, so
+// its SDRAM traffic is rare and explicit (ROM loads — with the core in reset — and
+// the occasional COLDST poke). The arbiter's strict Atari-first priority protects
+// the bus. The historical overlay/wake-latch gating (from the firmware-in-SDRAM
+// era, when fetches contended with ANTIC) is gone — and so is HALT-on-menu: the
+// menu is now a pure pixel overlay over the live, running Atari (see .HALT below).
+wire rv_req = rv_valid_core && !rv_hold;
 
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
 wire        sdram_complete;
@@ -763,15 +711,20 @@ wire key_f12   = (combined_key1 == 8'h45) || (combined_key2 == 8'h45) || (combin
 wire key_lalt = combined_key_mod[2];   // HID Left-Alt modifier
 wire [4:0] joy1_kbd_n = joystick_mode ? ~{key_lalt, key_right, key_left, key_down, key_up}
                                       : 5'b11111;
-wire [4:0] joy1_to_core = joy1_n & joy1_kbd_n;   // key OR physical stick pulls a bit low
+// While the OSD overlay is up, mask ALL inputs from the Atari core (the machine keeps
+// running live behind the menu — HALT is gone — so menu navigation must not play the
+// game). The firmware reads its own input registers for menu navigation, unaffected.
+wire [4:0] joy1_to_core = overlay ? 5'b11111 : (joy1_n & joy1_kbd_n);
+wire [4:0] joy2_to_core = overlay ? 5'b11111 : joy2_n;
 
 // Keyboard-matrix keys with the joystick keys (arrows 0x4F-0x52, Left-Alt) removed
 // while joystick_mode is on, so they only move the stick and don't type.
-wire [7:0] mtx_key1 = (joystick_mode && combined_key1 >= 8'h4F && combined_key1 <= 8'h52) ? 8'h00 : combined_key1;
-wire [7:0] mtx_key2 = (joystick_mode && combined_key2 >= 8'h4F && combined_key2 <= 8'h52) ? 8'h00 : combined_key2;
-wire [7:0] mtx_key3 = (joystick_mode && combined_key3 >= 8'h4F && combined_key3 <= 8'h52) ? 8'h00 : combined_key3;
-wire [7:0] mtx_key4 = (joystick_mode && combined_key4 >= 8'h4F && combined_key4 <= 8'h52) ? 8'h00 : combined_key4;
-wire [7:0] mtx_mod  = joystick_mode ? (combined_key_mod & ~8'h04) : combined_key_mod; // drop Left-Alt
+// All keys masked while the OSD overlay is up (see above).
+wire [7:0] mtx_key1 = overlay ? 8'h00 : ((joystick_mode && combined_key1 >= 8'h4F && combined_key1 <= 8'h52) ? 8'h00 : combined_key1);
+wire [7:0] mtx_key2 = overlay ? 8'h00 : ((joystick_mode && combined_key2 >= 8'h4F && combined_key2 <= 8'h52) ? 8'h00 : combined_key2);
+wire [7:0] mtx_key3 = overlay ? 8'h00 : ((joystick_mode && combined_key3 >= 8'h4F && combined_key3 <= 8'h52) ? 8'h00 : combined_key3);
+wire [7:0] mtx_key4 = overlay ? 8'h00 : ((joystick_mode && combined_key4 >= 8'h4F && combined_key4 <= 8'h52) ? 8'h00 : combined_key4);
+wire [7:0] mtx_mod  = overlay ? 8'h00 : (joystick_mode ? (combined_key_mod & ~8'h04) : combined_key_mod); // drop Left-Alt
 
 // Combine USB keyboard keys and physical DB9 Joystick 1 (active low, so ~joy1_n)
 wire joy_up    = key_up    || ~joy1_n[0];
@@ -1123,7 +1076,7 @@ atari800core_simple_sdram #(
 
     // Joysticks
     .JOY1_n                     (joy1_to_core),
-    .JOY2_n                     (joy2_n),
+    .JOY2_n                     (joy2_to_core),
     .JOY3_n                     (5'b11111),
     .JOY4_n                     (5'b11111),
 
@@ -1188,13 +1141,12 @@ atari800core_simple_sdram #(
     .VBXE_PALETTE_RGB           (3'd0),
     .VBXE_PALETTE_INDEX         (8'd0),
     .VBXE_PALETTE_COLOR         (7'd0),
-    // HALT the Atari whenever the PicoRV32 is permitted SDRAM access, NOT just when
-    // the overlay is up.  cpu_run_allowed = overlay || wake_latch, so the instant
-    // S2/F12 wakes the CPU (wake_latch) the Atari is halted FIRST — guaranteeing the
-    // two are mutually exclusive on SDRAM (exactly one runs at a time).  Tying HALT
-    // only to overlay left a window where wake_latch ran the CPU while the Atari was
-    // still live → both hammered SDRAM → emulation broke on menu entry.
-    .HALT                       (cpu_run_allowed),
+    // HALT is permanently deasserted. It maps to PAUSE_6502, which freezes ONLY the
+    // 6502 while ANTIC/POKEY/GTIA keep running — that half-pause during the OSD menu
+    // desynchronized games (missed VBIs/DLIs → corrupted background, garbled sprites
+    // on resume). The menu is now a pure overlay: the Atari runs live behind it, and
+    // keyboard/joystick inputs are masked from the core while the overlay is up.
+    .HALT                       (1'b0),
     // 0 = true 1x 6502 speed (CPU runs only on enable_179, locked to ANTIC/POKEY).
     // The speed-shift logic ADDS a CPU enable per set throttle bit, so 6'd31 was
     // 6 enables/machine-cycle => ~6x too fast (boot/loop 6x, SIO windows 6x narrow).
