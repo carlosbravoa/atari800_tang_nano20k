@@ -1442,6 +1442,7 @@ end
 reg [24:0] sysblink = 25'd0;
 always_ff @(posedge sys_clk) sysblink <= sysblink + 25'd1;
 wire sio_data_act = (sio_tx_stretch != 0) || (sio_rx_stretch != 0);
+
 assign leds_n = ~{ sysblink[24], (sio_cmd_stretch != 0), roms_loaded, sio_data_act };
 
 

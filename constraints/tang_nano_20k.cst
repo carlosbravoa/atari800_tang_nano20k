@@ -95,24 +95,32 @@ IO_LOC  "audio_r"     26;   // IOB6B — GPIO header
 IO_PORT "audio_l"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
 IO_PORT "audio_r"     PULL_MODE=NONE IO_TYPE=LVCMOS33;
 
-// ── Joystick 1 (DB9 Atari pinout, active low, GPIO expansion header) ──────────
-IO_LOC  "joy1_n[0]"   69;   // IOT50A — Up
-IO_LOC  "joy1_n[1]"   70;   // IOT44B — Down
-IO_LOC  "joy1_n[2]"   71;   // IOT44A — Left
-IO_LOC  "joy1_n[3]"   72;   // IOT40B — Right
-IO_LOC  "joy1_n[4]"   73;   // IOT40A — Fire
+// ── Joysticks (DB9 Atari pinout, active-low switches to GND, internal pull-ups) ──
+// PIN CHOICE IS LOAD-BEARING — read before changing (found 2026-06-11):
+// The originally used pins 69-76/79 are NOT free GPIO on the Tang Nano 20K: they are
+// the onboard BL616 MCU's UART (69/70) and HSPI (71-76) plus the WS2812 LED data (79).
+// The always-powered BL616 drives several of them → permanent phantom joystick input
+// (games auto-skipped intros/cutscenes for months). These replacement pins carry
+// LCD-only nets that terminate at the UNPOPULATED FPC connector — verified against
+// the Tang_Nano_20K_3921 schematic. CAVEAT: if an RGB LCD is ever attached to the
+// FPC connector, these conflict again. Wire DB9s at headers J5/J6.
+IO_LOC  "joy1_n[0]"   27;   // IOB8A  — LCD_B7 net, header J6 — Up
+IO_LOC  "joy1_n[1]"   28;   // IOB8B  — LCD_B6 net, header J6 — Down
+IO_LOC  "joy1_n[2]"   29;   // IOB14A — LCD_B5 net, header J6 — Left
+IO_LOC  "joy1_n[3]"   30;   // IOR14B — LCD_B4 net, header J6 — Right
+IO_LOC  "joy1_n[4]"   31;   // IOB18A — LCD_B3 net, header J6 — Fire
 IO_PORT "joy1_n[0]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy1_n[1]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy1_n[2]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy1_n[3]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy1_n[4]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 
-// ── Joystick 2 ────────────────────────────────────────────────────────────────
-IO_LOC  "joy2_n[0]"   74;   // IOT34B — Up
-IO_LOC  "joy2_n[1]"   75;   // IOT34A — Down
-IO_LOC  "joy2_n[2]"   76;   // IOT30B — Left
-IO_LOC  "joy2_n[3]"   77;   // IOT30A — Right
-IO_LOC  "joy2_n[4]"   79;   // IOT27B — Fire
+// ── Joystick 2 (same rules as joystick 1) ─────────────────────────────────────
+IO_LOC  "joy2_n[0]"   32;   // IOB18B — LCD_G7 net, header J6 — Up
+IO_LOC  "joy2_n[1]"   41;   // IOB43A — LCD_R4 net, header J5 — Down
+IO_LOC  "joy2_n[2]"   42;   // IOB42B — LCD_R3 net, header J5 — Left
+IO_LOC  "joy2_n[3]"   48;   // IOR49B — LCD_DE net, header J5 — Right
+IO_LOC  "joy2_n[4]"   77;   // IOT30A — LCD_CK net, header J6 — Fire
 IO_PORT "joy2_n[0]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy2_n[1]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
 IO_PORT "joy2_n[2]"   PULL_MODE=UP IO_TYPE=LVCMOS33;
