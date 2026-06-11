@@ -93,13 +93,33 @@ rpll_108m pll_core_inst (
 // clk_core = 216 ÷ 4 = 54 MHz (Atari machine speed 54/32 = 1.6875 MHz).
 // (The 43.2 MHz ÷5 was only a Stage-1 reliability test; timing was never the bug —
 // the deadlock was rv_rdata corruption + SDRAM contention, now fixed otherwise.)
+//
+// CRITICAL: both CLKDIVs must be released on the SAME clk_108m edge. pll_core_locked is
+// asynchronous; if each divider samples the release on a different edge, the clk_core↔
+// clk_mem phase flips for the whole power-on session, halving the SDRAM-crossing transfer
+// window (17.4 → 8.7 ns) and producing the per-boot "green ghost" lottery (stable pixel
+// corruption whose probability/severity depends on per-build routing). Synchronising the
+// release makes the phase deterministic and aligned — matching the generated-clock SDC
+// model so P&R actually closes the crossing.
+// Phase experiment results (2026-06-10): same-edge release = Atari boots (crossing meets
+// timing; this is the phase the generated-clock SDC models). +1-cycle offset on the core
+// divider = opposite phase, 8.7 ns crossing window → ROM load corrupted, no boot. So the
+// same-edge release below is REQUIRED; do not skew the two RESETNs.
+reg [1:0] clkdiv_rstn_sync = 2'b00;
+always @(posedge clk_108m or negedge pll_core_locked) begin
+    if (!pll_core_locked) clkdiv_rstn_sync <= 2'b00;
+    else                  clkdiv_rstn_sync <= {clkdiv_rstn_sync[0], 1'b1};
+end
+wire clkdiv_rstn_mem  = clkdiv_rstn_sync[1];
+wire clkdiv_rstn_core = clkdiv_rstn_sync[1];   // SAME edge as mem — required phase
+
 CLKDIV #(
     .DIV_MODE ("4"),
     .GSREN    ("false")
 ) clkdiv_core (
     .CLKOUT (clk_core),
     .HCLKIN (clk_108m),
-    .RESETN (pll_core_locked),
+    .RESETN (clkdiv_rstn_core),
     .CALIB  (1'b1)
 );
 
@@ -111,7 +131,7 @@ CLKDIV #(
 ) clkdiv_mem (
     .CLKOUT (clk_mem),
     .HCLKIN (clk_108m),
-    .RESETN (pll_core_locked),
+    .RESETN (clkdiv_rstn_mem),
     .CALIB  (1'b1)
 );
 
