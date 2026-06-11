@@ -1418,15 +1418,23 @@ wire dbg_stall_undec, dbg_stall_peri, dbg_stall_ram;
 // A serial bit is ~55 us (invisible); stretch any LOW (start/0 bit) to a long blink.
 // sio_rx_data_in = our DRIVE's transmit line (sys_clk domain, handler output)
 // sio_txd_sys    = Atari's transmit line, synchronized to sys_clk
-localparam [21:0] SIO_STRETCH = 22'h3FFFFF; // 2^22-1 @ 27 MHz ≈ 155 ms
-reg [21:0] sio_tx_stretch = 22'd0; // our drive -> Atari activity
-reg [21:0] sio_rx_stretch = 22'd0; // Atari -> drive activity
+// Stretch ≈ 19 ms: long enough to bridge the ~0.6 ms gaps between bytes inside a
+// sector (LED solid while a sector streams), short enough to go dark in the
+// inter-sector gaps — so the LED blinks in the same rhythm as POKEY's load noises.
+// (155 ms swamped the gaps and made the LED look stuck-on during loads.)
+localparam [21:0] SIO_STRETCH = 22'h07FFFF; // 2^19-1 @ 27 MHz ≈ 19 ms
+reg [21:0] sio_tx_stretch  = 22'd0; // our drive -> Atari activity
+reg [21:0] sio_rx_stretch  = 22'd0; // Atari -> drive activity
+reg [21:0] sio_cmd_stretch = 22'd0; // SIO command frame (active-low line)
 always_ff @(posedge sys_clk) begin
     if (!sio_rx_data_in)    sio_tx_stretch <= SIO_STRETCH;
     else if (sio_tx_stretch) sio_tx_stretch <= sio_tx_stretch - 1'b1;
 
     if (!sio_txd_sys)       sio_rx_stretch <= SIO_STRETCH;
     else if (sio_rx_stretch) sio_rx_stretch <= sio_rx_stretch - 1'b1;
+
+    if (!sio_command_sys)    sio_cmd_stretch <= SIO_STRETCH;
+    else if (sio_cmd_stretch) sio_cmd_stretch <= sio_cmd_stretch - 1'b1;
 end
 
 // SIO DIAGNOSTIC LED map (pins via leds_n[4:1] = pins17,18,19,20 = LED2,3,4,5):
@@ -1470,28 +1478,19 @@ always_ff @(posedge clk_core) begin
         if (u0_busy_now) u0_busy <= u0_busy + 20'd1;
     end
 end
-// ── DIAGNOSTIC LEDs (no monitor needed) ──────────────────────────────────────
-//   LED2 (leds_n[1]) = vshb     : ~1 Hz blink iff fb_reader raster emits VSYNC (raster ALIVE)
+// ── PRODUCTION LEDs ──────────────────────────────────────────────────────────
+// (active low; leds_n[4:1] → pins 17,18,19,20 → physical LED2,LED3,LED4,LED5)
+//   LED2 (leds_n[1]) = SIO data activity : flickers while disk bytes move (either
+//                      direction, ~155 ms stretch). During a load this stays busy;
+//                      if it goes dark mid-load while LED4 keeps flashing, the
+//                      handler is stuck.
 //   LED3 (leds_n[2]) = roms_loaded : ON once the Atari has booted
-//   LED4 (leds_n[3]) = fbr active  : ON if the reader is fetching from SDRAM
-//   LED5 (leds_n[4]) = sysblink    : ~0.8 Hz free-run heartbeat (FPGA alive baseline)
+//   LED4 (leds_n[3]) = SIO command frames : flashes once per drive request
+//   LED5 (leds_n[4]) = sysblink : ~0.8 Hz free-run heartbeat (FPGA alive baseline)
 reg [24:0] sysblink = 25'd0;
 always_ff @(posedge sys_clk) sysblink <= sysblink + 25'd1;
-reg        vs_d2 = 1'b0, vshb = 1'b0;
-reg [5:0]  vscnt = 6'd0;
-always_ff @(posedge clk_pix) begin
-    vs_d2 <= hdmi_vs;
-    if (hdmi_vs & ~vs_d2) begin
-        if (vscnt == 6'd29) begin vscnt <= 6'd0; vshb <= ~vshb; end
-        else                      vscnt <= vscnt + 6'd1;
-    end
-end
-reg [23:0] fbrcnt = 24'd0;
-always_ff @(posedge clk_core) begin
-    if (fbr_req)          fbrcnt <= 24'hFFFFFF;
-    else if (fbrcnt != 0) fbrcnt <= fbrcnt - 24'd1;
-end
-assign leds_n = ~{ sysblink[24], (fbrcnt != 0), roms_loaded, vshb };
+wire sio_data_act = (sio_tx_stretch != 0) || (sio_rx_stretch != 0);
+assign leds_n = ~{ sysblink[24], (sio_cmd_stretch != 0), roms_loaded, sio_data_act };
 
 
 endmodule
