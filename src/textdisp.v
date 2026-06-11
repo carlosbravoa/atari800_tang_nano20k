@@ -25,7 +25,7 @@ parameter [14:0] COLOR_LOGO    = 15'b00000_10101_00000;    // green
 
 // 72x14 pixels 1bpp logo
 localparam LOGO_X = 128-36;
-localparam LOGO_Y = 195;
+localparam LOGO_Y = 220;   // logo rows 220-233 (OSD window is 240 rows tall)
 
 //
 // Pixel output logic for characters and logo:

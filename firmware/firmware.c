@@ -18,24 +18,21 @@ void uart_keyboard_poll(void);
 #define OPTION_OSD_KEY_SELECT_RIGHT 2
 
 int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
-#define OPTION_KBD_USB   1
-#define OPTION_KBD_UART  2
-int option_keyboard_type = OPTION_KBD_UART; // Default to UART keyboard
 int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
-// bit 8 = USB-host-keyboard enable, bit 9 = arrow-keys-as-joystick mode.
+// bit 8 = USB-host-keyboard enable (permanently 0: keyboard is UART/CH9350 only),
+// bit 9 = arrow-keys-as-joystick mode.
 static inline void apply_input_options(void) {
-    reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000)
-                   | (option_arrow_joystick ? 0x200 : 0x000);
+    reg_virt_kbd_1 = (option_arrow_joystick ? 0x200 : 0x000);
 }
 
 char load_fname[512];
 
 FATFS fs;
 
-#define PAGESIZE 16
+#define PAGESIZE 24
 #define TOPLINE 2
 #define PWD_SIZE 256
 
@@ -253,12 +250,6 @@ int load_option()  {
                 goto load_option_close;
             }
         }
-        if (strcmp(key, "keyboard") == 0) {
-            option_keyboard_type = atoi(value);
-            if (option_keyboard_type != OPTION_KBD_USB && option_keyboard_type != OPTION_KBD_UART) {
-                option_keyboard_type = OPTION_KBD_UART;
-            }
-        }
         if (strcmp(key, "joystick") == 0) {
             option_arrow_joystick = (atoi(value) != 0);
         }
@@ -281,15 +272,6 @@ int save_option() {
         goto save_options_close;
     }
     if (option_osd_key == OPTION_OSD_KEY_SELECT_START)
-        f_puts("1\n", &f);
-    else
-        f_puts("2\n", &f);
-
-    if (f_puts("keyboard=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
-    if (option_keyboard_type == OPTION_KBD_USB)
         f_puts("1\n", &f);
     else
         f_puts("2\n", &f);
@@ -1114,23 +1096,15 @@ void menu_options() {
             print("SELECT&RIGHT");
 
         cursor(2, 14);
-        print("Keyboard:");
-        cursor(16, 14);
-        if (option_keyboard_type == OPTION_KBD_USB)
-            print("USB");
-        else
-            print("UART");
-
-        cursor(2, 15);
         print("Arrow keys:");
-        cursor(16, 15);
+        cursor(16, 14);
         print(option_arrow_joystick ? "JOYSTICK" : "NORMAL");
 
         delay(300);
 
         for (;;) {
             uart_keyboard_poll();
-            if (joy_choice(12, 4, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     return;
                 } else if (choice == 1) {
@@ -1146,20 +1120,6 @@ void menu_options() {
                     }
                     break;	// redraw UI
                 } else if (choice == 2) {
-                    if (option_keyboard_type == OPTION_KBD_USB)
-                        option_keyboard_type = OPTION_KBD_UART;
-                    else
-                        option_keyboard_type = OPTION_KBD_USB;
-                    
-                    apply_input_options();   // update hardware immediately
-
-                    status("Saving options...");
-                    if (save_option()) {
-                        message("Cannot save options to SD", 1);
-                        break;
-                    }
-                    break; // redraw UI
-                } else if (choice == 3) {
                     option_arrow_joystick = !option_arrow_joystick;
                     apply_input_options();
 
@@ -1363,6 +1323,8 @@ int main() {
             print("6) Options\n");
             cursor(2, 16);
             print("7) Return to Atari (F12)\n");
+            cursor(2, 17);
+            print("8) Unmount Disk\n");
 
             cursor(2, 26);
             print("Enter:Select   V:");
@@ -1373,7 +1335,7 @@ int main() {
             int choice = 0;
             for (;;) {
                 uart_keyboard_poll();
-                int r = joy_choice(10, 7, &choice, OSD_KEY_CODE);
+                int r = joy_choice(10, 8, &choice, OSD_KEY_CODE);
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);
@@ -1431,6 +1393,14 @@ int main() {
                 // Return to Atari: always just dismiss the OSD, disk or not.
                 booted = true;
                 overlay(0);
+            } else if (choice == 7) {
+                // Unmount Disk: close the ATR and drop SIO disk emulation.
+                if (atr_mounted) {
+                    f_close(&atr_file);
+                    atr_mounted = false;
+                }
+                strncpy(mounted_atr_name, "None", sizeof(mounted_atr_name));
+                delay(300);   // stay in the menu; redraw shows Mounted: None
             }
         } else {
             // Check the menu toggle key FIRST, before sio_poll — otherwise a mounted
@@ -1524,8 +1494,7 @@ void uart_keyboard_poll(void) {
                             uint8_t key4 = ch_buf[6];
                             
                             reg_virt_kbd_0 = modifier | (key1 << 8) | (key2 << 16) | (key3 << 24);
-                            reg_virt_kbd_1 = (option_keyboard_type == OPTION_KBD_USB ? 0x100 : 0x000)
-                                           | (option_arrow_joystick ? 0x200 : 0x000) | key4;
+                            reg_virt_kbd_1 = (option_arrow_joystick ? 0x200 : 0x000) | key4;
                             last_kbd_time = time_millis();
                         }
                     }
