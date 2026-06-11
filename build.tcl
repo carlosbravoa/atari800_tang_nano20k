@@ -146,5 +146,10 @@ set_option -use_cpu_as_gpio 1
 set_option -use_sspi_as_gpio 1
 set_option -multi_boot 1
 
+# Placement re-roll knob: P&R is deterministic, so if a build lands a bad placement
+# (negative clk_pix setup slack in the timing report), bump this 0→1→2 for a different
+# deterministic placement. NEVER flash a build whose report shows negative slack.
+set_option -place_option 1
+
 # Full build: synthesis + place & route + bitstream
 run all
