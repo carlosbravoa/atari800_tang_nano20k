@@ -1,6 +1,6 @@
 # Atari 800 — Tang Nano 20K Port
 
-> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. It took 2 weeks to get something reasonable working — and **SIO disk emulation now works**, so you can mount `.atr` images and boot DOS/games. Timings are still a touch slow (~6%), but it's a blast to play with.
+> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. **SIO disk emulation works** (mount `.atr` images and boot DOS/games) and the machine now runs at **exact NTSC speed** with a frame-buffered 720p60 HDMI output. It's a blast to play with.
 
 
 <img width="400" height="400" alt="Eureka! Atari running Montezuma from an ATR Disk" src="https://github.com/user-attachments/assets/20121280-905e-4c15-8795-352eec9abf01" />
@@ -39,14 +39,14 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 ## Features
 
 - **Atari 800 / 800XL / 65XE / 130XE** emulation (6502 CPU, ANTIC, GTIA, POKEY, PIA)
-- **HDMI video** — 720p/60 Hz, scaled from Atari native (hdl-util/hdmi library)
+- **HDMI video** — standard 720p/60 Hz from an SDRAM **frame buffer** (3× upscale, exact NTSC core speed, minimal latency single-buffer design)
 - **HDMI audio** — 48 kHz stereo PCM in HDMI 1.3 data islands (no extra hardware)
 - **GPIO audio** — sigma-delta PDM on GPIO pins (add RC filter for analogue)
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
-- **On-Screen Display (OSD)** — file browser, disk image selection, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**)
+- **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open)
 - **UART / serial keyboard (recommended)** — raw USB HID reports sent over serial frames from an external CH9350 board or Raspberry Pi Pico (no resistors, uses Pin 53)
-- **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (there are no DB9 connectors on the board — see [wiring](#atari-db9-joystick))
+- **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
 - **Direct USB HID keyboard (experimental)** — low-speed USB straight to GPIO pins (needs 15 kΩ pull-downs); **unreliable — use the UART/CH9350 keyboard instead**
@@ -67,9 +67,11 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 | Direct USB HID keyboard (to GPIO pins) | ⚠️ Experimental / unreliable — prefer UART |
 | DB9 joystick (wired to GPIO pins) | ✅ Working |
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
-| SIO disk emulation (.atr) | ✅ Working — mount `.atr` images, boot DOS/games |
+| SIO disk emulation (.atr) | ✅ Working — mount/unmount `.atr` images, boot DOS/games; SIO activity LEDs |
+| Live OSD overlay (game runs behind menu, inputs masked) | ✅ Working |
 | Video centering (frame + picture) | ✅ Working |
-| Core timing (`clk_core` 27 MHz, low-latency SDRAM) | ✅ Resolved — comfortable timing margin, no more corruption |
+| Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
+| Frame-buffered 720p60 HDMI (SDRAM single buffer) | ✅ Working — stable across rebuilds |
 | Cartridge images (.car / .rom) | 🔜 Planned |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
@@ -81,17 +83,15 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 > **Keyboard runs in hardware:** the CH9350/UART keyboard is decoded by a dedicated RTL module
 > (`uart_kbd_ch9350.sv`), independent of the softcore and the SDRAM bus.
 
-> **Video / clock:** The Atari core + SDRAM run at **27 MHz / `cycle_length=16`** using a
-> **low-latency (~5-cycle) SDRAM controller** (adapted from NESTang). The earlier 54 MHz design
-> existed only to give the *slow* ~20-cycle controller enough
-> cycles per access; with the fast controller, 27 MHz / `cycle_length=16` fits the bus window with
-> margin **and** gives the 6502 critical path huge timing slack — so the previous intermittent
-> corruption is gone. Atari speed is unchanged (`enable_179 = 27/16 = 1.6875 MHz`).
+> **Video / clock:** The Atari core runs at **28.6875 MHz / `cycle_length=16` = exact NTSC
+> machine speed**, with the SDRAM controller decoupled onto a synchronous 2× clock
+> (57.375 MHz). Video goes Atari → SDRAM **frame buffer** → free-running standard 720p60,
+> so any monitor locks cleanly. Burst reads from the frame buffer are paced at half command
+> rate (BL2) — the bus-settling fix that ended a long saga of per-build "green ghost" pixel
+> corruption.
 
-> **Known caveats (this baseline):** ① The Atari runs slightly slow (~6%): exact NTSC speed needs a
-> faster `enable_179`, which is now only gated by the HDMI scaler (a frame-buffer/genlock rework —
-> *no longer a timing limit*), tracked in `docs/performance_and_timing.md`. ② The status LEDs
-> presently carry diagnostic signals (see [Status LEDs](#status-leds)), not the normal status set.
+> **Known caveat:** with the single frame buffer (chosen for minimal latency) the reader and
+> writer race, so a slow-moving tear line can appear during heavy motion.
 
 ---
 
@@ -313,6 +313,12 @@ Standard Atari/Commodore DB9 joystick. No resistors needed — internal FPGA pul
 
 ### Wiring
 
+> **Pin change (2026-06):** the joysticks previously sat on pins 69–76/79, which are **not free
+> GPIO** on the Tang Nano 20K — they carry the onboard BL616 MCU's UART/HSPI lines and the
+> WS2812 LED data. The BL616 drove them, creating permanent phantom joystick input (games
+> auto-skipped intros/cutscenes). The pins below carry LCD-only nets (unpopulated FPC
+> connector) and are safe. Don't ever wire anything to pins 69–76/79.
+
 ```
 DB9 male plug (pin face, looking at solder side of plug)
  ┌───────────────────────┐
@@ -321,13 +327,13 @@ DB9 male plug (pin face, looking at solder side of plug)
  └───────────────────────┘
    │   │   │   │           FPGA pin       FPGA pin
    │   │   │   └── GND ─── GND header     GND header
-   │   │   └────── Left ── pin 71         pin 76
-   │   └────────── Down ── pin 70         pin 75
-   └────────────── Up ──── pin 69         pin 74
+   │   │   └────── Left ── pin 29         pin 42
+   │   └────────── Down ── pin 28         pin 41
+   └────────────── Up ──── pin 27         pin 32
 
-DB9 pin 3  Left  → joy1_n[2] pin 71 / joy2_n[2] pin 76
-DB9 pin 4  Right → joy1_n[3] pin 72 / joy2_n[3] pin 77
-DB9 pin 6  Fire  → joy1_n[4] pin 73 / joy2_n[4] pin 79
+DB9 pin 3  Left  → joy1_n[2] pin 29 / joy2_n[2] pin 42
+DB9 pin 4  Right → joy1_n[3] pin 30 / joy2_n[3] pin 48
+DB9 pin 6  Fire  → joy1_n[4] pin 31 / joy2_n[4] pin 77
 DB9 pin 8  GND   → GND on GPIO header
 ```
 
@@ -373,19 +379,14 @@ The Tang Nano 20K has 4 usable active-low LEDs on pins 17–20. Physical labels 
 differ — reason in **pins** (the RTL port is `leds_n[4:1]` → pins 17,18,19,20 → physical
 **LED2,LED3,LED4,LED5**).
 
-> **This baseline carries DIAGNOSTIC signals on the LEDs**, not the normal status set, while the
-> SIO disk revival is in progress (`tang_top.sv`):
->
-> | Pin | Physical LED | Signal | Meaning |
-> |-----|------|--------|---------|
-> | 17 | LED2 | `sio_command` | ON (active low) while the Atari asserts the SIO command line |
-> | 18 | LED3 | `sio_rx_data_in` | flashes when the emulated drive transmits to the Atari |
-> | 19 | LED4 | `sio_txd` | flashes when the Atari transmits to the drive |
-> | 20 | LED5 | heartbeat (~6 Hz blink) | FPGA running |
->
-> Normal good state: the ~6 Hz heartbeat (pin 20) blinks; the SIO LEDs flicker during disk
-> access. If the machine fails to boot with only the heartbeat blinking, the Atari core isn't
-> running (a timing/placement issue), not a firmware hang.
+| Pin | Physical LED | Meaning |
+|-----|------|---------|
+| 17 | LED2 | **SIO data activity** — blinks in rhythm with the disk-load sounds; if it goes dark mid-load while LED4 keeps flashing, the load is stuck |
+| 18 | LED3 | **Atari booted** (ROMs loaded) — solid ON in normal operation |
+| 19 | LED4 | **SIO command frames** — one flash per drive request |
+| 20 | LED5 | Heartbeat (~0.8 Hz) — FPGA alive |
+
+Normal good state: heartbeat blinking, LED3 solid, LED2/LED4 flickering during disk access.
 
 If the Atari does not boot to BASIC, check:
 - SD card is FAT32 formatted, fully inserted
@@ -409,13 +410,19 @@ Mounted: None
 5) Hard Reset
 6) Options
 7) Return to Atari (F12)
+8) Unmount Disk
 ```
 
 - **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
 - **Soft / Hard Reset** — warm or cold restart
-- **Options** — emulator options: OSD hot key, keyboard type, and **Arrow keys: NORMAL/JOYSTICK** (see below)
+- **Options** — emulator options: OSD hot key and **Arrow keys: NORMAL/JOYSTICK** (see below)
 - **Return to Atari** — close the OSD (also via S2 / F12), with or without a disk mounted
+- **Unmount Disk** — close the mounted `.atr` (back to `Mounted: None`)
+
+> While the menu is open, the Atari **keeps running live behind it** (you'll hear the game
+> continue); keyboard and joystick inputs are masked from the machine so menu navigation
+> doesn't play the game.
 
 ### Playing with the keyboard (arrow keys as joystick)
 
@@ -459,8 +466,8 @@ emulated drive responds as **D1:**.
 | SD CS | 81 | — | out |
 | USB D+ (HID keyboard) | 53 | IOR38B | inout |
 | USB D− (HID keyboard) | 49 | IOR49A | inout |
-| Joy1 Up/Dn/Lt/Rt/Fire | 69–73 | IOT50A…IOT40A | in |
-| Joy2 Up/Dn/Lt/Rt/Fire | 74–79 | IOT34B…IOT27B | in |
+| Joy1 Up/Dn/Lt/Rt/Fire | 27,28,29,30,31 | IOB8A…IOB18A (LCD-only nets) | in |
+| Joy2 Up/Dn/Lt/Rt/Fire | 32,41,42,48,77 | IOB18B…IOT30A (LCD-only nets) | in |
 
 ---
 
@@ -499,10 +506,9 @@ atari800_tang_nano20k_parallel/
 ## Known Limitations / Roadmap
 
 - **SIO disk emulation** — ✅ working; cartridge (`.car`/`.rom`) loading still planned
-- **Atari speed** — runs slightly slow (~6%); exact NTSC speed is now gated only by the HDMI
-  scaler (frame-buffer/genlock rework), not core timing — see `docs/performance_and_timing.md`
-- **core timing / corruption** — ✅ resolved: low-latency SDRAM controller → `clk_core` 27 MHz with
-  comfortable slack, no more graphical corruption
+- **Atari speed** — ✅ exact NTSC speed (28.6875 MHz core + SDRAM frame buffer → standard 720p60)
+- **core timing / corruption** — ✅ resolved: low-latency SDRAM controller, half-rate BL2 burst
+  reads (bus settling), synchronized clock-divider start-up, hardened timing constraints
 - **Joystick paddles** — analogue pot inputs not implemented
 - **Cartridge images** — `.car` / `.rom` cartridge loading not yet implemented
 - **Machine is NTSC** (`PAL=0`); runtime PAL/NTSC switch planned
@@ -518,7 +524,7 @@ atari800_tang_nano20k_parallel/
 - **IO subsystem** — adapted from [nand2mario/nestang](https://github.com/nand2mario/nestang)
 - **Low-latency SDRAM controller** — adapted from **nand2mario**'s NESTang Tang Nano 20K controller
   ([sdram-tang-nano-20k](https://github.com/nand2mario/sdram-tang-nano-20k)). Our `sdram_nestang.v`
-  is that controller with a 32-bit masked-write path added. Huge thanks — this is what made the
-  27 MHz / corruption-free core possible.
+  is that controller with a 32-bit masked-write path and half-rate BL2 burst reads added.
+  Huge thanks — this is what made the low-latency, corruption-free core possible.
 
 This Tang Nano 20K port: see upstream projects for their respective licence terms.
