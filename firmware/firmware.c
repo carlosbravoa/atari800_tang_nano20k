@@ -1206,43 +1206,37 @@ static void cold_boot_atari(void) {
     reg_romload_ctrl = 0;
 }
 
-// Disk submenu. Returns 0 = nothing, 1 = disk mounted (*sel_idx names it, *slot says
-// which drive), 2 = disk unmounted (*slot says which drive).
-int menu_disk(int *sel_idx, int *slot) {
+// Per-drive object menu (entered by selecting "Dn: <name>" on the main menu).
+// Returns 0 = nothing, 1 = disk attached (*sel_idx names it), 2 = detached.
+int menu_drive(int slot, char *cur_name, int *sel_idx) {
     int choice = 0;
     while (1) {
         clear();
-        cursor(8, 10);
-        print("--- Disk ---");
+        cursor(2, 9);
+        printf("D%d: %s", slot + 1, cur_name);
+        cursor(2, 11);
+        print("1) Attach disk...");
         cursor(2, 12);
-        print("1) Mount D1: (ATR)");
+        print("2) Detach");
         cursor(2, 13);
-        print("2) Mount D2: (ATR)");
-        cursor(2, 14);
-        print("3) Unmount D1:");
-        cursor(2, 15);
-        print("4) Unmount D2:");
-        cursor(2, 16);
         print("<< Back");
         delay(300);
         for (;;) {
             uart_keyboard_poll();
             sio_poll();
-            if (joy_choice(12, 5, &choice, OSD_KEY_CODE) == 1) {
-                if (choice == 0 || choice == 1) {
-                    *slot = choice;
+            if (joy_choice(11, 3, &choice, OSD_KEY_CODE) == 1) {
+                if (choice == 0) {
                     delay(300);
-                    int r = menu_loadrom(sel_idx, 0, *slot);
-                    if (r == 0) return 1;   // mounted
-                    break;                  // backed out — redraw submenu
-                } else if (choice == 2 || choice == 3) {
-                    *slot = choice - 2;
-                    if (atr_mounted[*slot]) {
-                        f_close(&atr_file[*slot]);
-                        atr_mounted[*slot] = false;
+                    int r = menu_loadrom(sel_idx, 0, slot);
+                    if (r == 0) return 1;   // attached
+                    break;                  // backed out — redraw
+                } else if (choice == 1) {
+                    if (atr_mounted[slot]) {
+                        f_close(&atr_file[slot]);
+                        atr_mounted[slot] = false;
                         return 2;
                     }
-                    status("That drive is empty");
+                    status("Drive is empty");
                     delay(500);
                     break;
                 } else {
@@ -1256,34 +1250,35 @@ int menu_disk(int *sel_idx, int *slot) {
     }
 }
 
-// Cartridge submenu. Returns 0 = nothing, 2 = cart loaded (*sel_idx names it,
-// caller cold-boots), 3 = cart removed (caller cold-boots).
-int menu_cartridge(int *sel_idx) {
+// Cartridge object menu (entered by selecting "Cart: <name>" on the main menu).
+// Returns 0 = nothing, 2 = cart attached (*sel_idx names it, caller cold-boots),
+// 3 = cart detached (caller cold-boots).
+int menu_cartridge(char *cur_name, int *sel_idx) {
     int choice = 0;
     while (1) {
         clear();
-        cursor(7, 10);
-        print("--- Cartridge ---");
+        cursor(2, 9);
+        printf("Cart: %s", cur_name);
+        cursor(2, 11);
+        print("1) Attach cartridge...");
         cursor(2, 12);
-        print("1) Load Cartridge (CAR/ROM)");
+        print("2) Detach");
         cursor(2, 13);
-        print("2) Remove Cartridge");
-        cursor(2, 14);
         print("<< Back");
         delay(300);
         for (;;) {
             uart_keyboard_poll();
             sio_poll();
-            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(11, 3, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     delay(300);
                     int r = menu_loadrom(sel_idx, 1, 0);
-                    if (r == 2) return 2;   // loaded — caller cold-boots into it
-                    break;                  // backed out — redraw submenu
+                    if (r == 2) return 2;   // attached — caller cold-boots into it
+                    break;                  // backed out — redraw
                 } else if (choice == 1) {
                     if (reg_cart_mode != 0) {
                         reg_cart_mode = 0;
-                        return 3;           // removed — caller cold-boots
+                        return 3;           // detached — caller cold-boots
                     }
                     status("No cartridge inserted");
                     delay(500);
@@ -1530,29 +1525,24 @@ int main() {
             cursor(2, 6);
             print("=== Tang Atari 800 ===");
 
-            cursor(2, 7);
-            printf("D1: %s", mounted_atr_name[0]);
             cursor(2, 8);
-            printf("D2: %s", mounted_atr_name[1]);
+            printf("1) D1: %s", mounted_atr_name[0]);
             cursor(2, 9);
-            printf("Cart: %s", mounted_cart_name);
-
+            printf("2) D2: %s", mounted_atr_name[1]);
             cursor(2, 10);
-            print("1) Disk...\n");
+            printf("3) Cart: %s", mounted_cart_name);
             cursor(2, 11);
-            print("2) Cartridge...\n");
+            print("4) Boot to OS (No BASIC)\n");
             cursor(2, 12);
-            print("3) Boot to OS (No BASIC)\n");
+            print("5) Boot to BASIC\n");
             cursor(2, 13);
-            print("4) Boot to BASIC\n");
+            print("6) Soft Reset\n");
             cursor(2, 14);
-            print("5) Soft Reset\n");
+            print("7) Hard Reset\n");
             cursor(2, 15);
-            print("6) Hard Reset\n");
+            print("8) Options\n");
             cursor(2, 16);
-            print("7) Options\n");
-            cursor(2, 17);
-            print("8) Return to Atari (F12)\n");
+            print("9) Return to Atari (F12)\n");
 
             cursor(2, 26);
             print("Enter:Select   V:");
@@ -1564,7 +1554,7 @@ int main() {
             for (;;) {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
-                int r = joy_choice(10, 8, &choice, OSD_KEY_CODE);
+                int r = joy_choice(8, 9, &choice, OSD_KEY_CODE);
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);
@@ -1577,20 +1567,21 @@ int main() {
                 }
             }
 
-            if (choice == 0) {
-                int selected_idx, dslot = 0;
+            if (choice == 0 || choice == 1) {
+                int selected_idx;
+                int dslot = choice;
                 delay(300);
-                int r = menu_disk(&selected_idx, &dslot);
+                int r = menu_drive(dslot, mounted_atr_name[dslot], &selected_idx);
                 if (r == 1) {
                     strncpy(mounted_atr_name[dslot], file_names[selected_idx], 16);
                     mounted_atr_name[dslot][15] = '\0';
                 } else if (r == 2) {
                     strncpy(mounted_atr_name[dslot], "None", 16);
                 }
-            } else if (choice == 1) {
+            } else if (choice == 2) {
                 int selected_idx;
                 delay(300);
-                int r = menu_cartridge(&selected_idx);
+                int r = menu_cartridge(mounted_cart_name, &selected_idx);
                 if (r == 2) {
                     // Cartridge loaded into SDRAM + reg_cart_mode set: cold-boot into it
                     strncpy(mounted_cart_name, file_names[selected_idx], sizeof(mounted_cart_name));
@@ -1604,7 +1595,7 @@ int main() {
                     booted = true;
                     overlay(0);
                 }
-            } else if (choice == 2) {
+            } else if (choice == 3) {
                 reg_virt_kbd_0 = 0x00410000; // Hold OPTION (F8)
                 load_system_roms();
                 sio_init();
@@ -1612,13 +1603,13 @@ int main() {
                 overlay(0);
                 sio_delay(400);              // Wait for boot process to read OPTION
                 reg_virt_kbd_0 = 0x00000000; // Release OPTION
-            } else if (choice == 3) {
+            } else if (choice == 4) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
                 load_system_roms();
                 sio_init();
                 booted = true;
                 overlay(0);
-            } else if (choice == 4) {
+            } else if (choice == 5) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
                 *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // COLDST = 0 (Warm start)
                 reg_romload_ctrl = 1;
@@ -1626,15 +1617,15 @@ int main() {
                 reg_romload_ctrl = 0;
                 booted = true;
                 overlay(0);
-            } else if (choice == 5) {
+            } else if (choice == 6) {
                 // Hard Reset
                 cold_boot_atari();
                 booted = true;
                 overlay(0);
-            } else if (choice == 6) {
+            } else if (choice == 7) {
                 delay(300);
                 menu_options();
-            } else if (choice == 7) {
+            } else if (choice == 8) {
                 // Return to Atari: always just dismiss the OSD, disk or not.
                 booted = true;
                 overlay(0);
