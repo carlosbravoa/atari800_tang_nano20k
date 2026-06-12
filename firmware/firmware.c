@@ -38,7 +38,10 @@ FATFS fs;
 
 char pwd[PWD_SIZE];		// total path length 255
 // one page of file names to display
-char file_names[PAGESIZE][16];
+#define FNAME_W 28   // displayable name width (OSD row minus margins), incl. NUL
+char file_names[PAGESIZE][FNAME_W];  // display name (long name, truncated to fit)
+char file_alt[PAGESIZE][13];         // 8.3 short name — ALWAYS use this to open/navigate
+                                     // (the display name may be truncated → not openable)
 char file_dir[PAGESIZE];
 int file_sizes[PAGESIZE];
 int file_len;		// number of files on this page
@@ -343,7 +346,11 @@ int load_dir(char *dir, int start, int len, int *count) {
 
         if (is_dir || is_atr) {
             if (cnt >= start && file_len < len) {
-                strncpy(file_names[file_len], fno.fname, 256);
+                strncpy(file_names[file_len], fno.fname, FNAME_W);
+                file_names[file_len][FNAME_W-1] = '\0';
+                // altname is empty when the name already fits 8.3 (fname IS the SFN)
+                strncpy(file_alt[file_len], fno.altname[0] ? fno.altname : fno.fname, 13);
+                file_alt[file_len][12] = '\0';
                 file_dir[file_len] = is_dir;
                 file_sizes[file_len] = fno.fsize;
                 file_len++;
@@ -610,7 +617,7 @@ int menu_loadrom(int *choice) {
                         } else {								// enter sub dir
                             if (strcmp(pwd, "/") != 0)
                                 strncat(pwd, "/", PWD_SIZE);
-                            strncat(pwd, file_names[active], PWD_SIZE);
+                            strncat(pwd, file_alt[active], PWD_SIZE);
                         }
                         active = 0;
                         page = 0;
@@ -631,10 +638,11 @@ int menu_loadrom(int *choice) {
                         if (strcmp(pwd, "/") != 0) {
                             strncat(load_fname, "/", sizeof(load_fname));
                         }
-                        strncat(load_fname, file_names[active], sizeof(load_fname));
+                        strncat(load_fname, file_alt[active], sizeof(load_fname));
 
-                        // Cartridge? (.car/.rom) — load it and tell the caller to cold-boot
-                        char *selext = strrchr(file_names[active], '.');
+                        // Cartridge? (.car/.rom) — check the 8.3 name (the display name
+                        // may have a truncated extension)
+                        char *selext = strrchr(file_alt[active], '.');
                         if (selext && (strcasecmp(selext, ".car") == 0 ||
                                        strcasecmp(selext, ".rom") == 0)) {
                             if (load_cartridge(load_fname) == 0)
@@ -1457,7 +1465,8 @@ int main() {
                 delay(300);
                 int load_ok = menu_loadrom(&selected_idx);
                 if (load_ok == 0) {
-                    strncpy(mounted_atr_name, file_names[selected_idx], 256);
+                    strncpy(mounted_atr_name, file_names[selected_idx], sizeof(mounted_atr_name));
+                    mounted_atr_name[sizeof(mounted_atr_name)-1] = '\0';
                 } else if (load_ok == 2) {
                     // Cartridge loaded into SDRAM + reg_cart_mode set: cold-boot into it
                     strncpy(mounted_cart_name, file_names[selected_idx], sizeof(mounted_cart_name));

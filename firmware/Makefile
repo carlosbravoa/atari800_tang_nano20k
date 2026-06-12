@@ -13,7 +13,7 @@ LFLAGS = -mabi=ilp32 -march=rv32i -Wl,--build-id=none,-Bstatic,-T,baremetal.ld,-
 LIBS = -lgcc
 
 SRCS := start.S firmware.c picorv32.c spi_sd.c spiflash.c \
-	fatfs/diskio.c fatfs/ff.c
+	fatfs/diskio.c fatfs/ff.c fatfs/ffunicode.c
 OBJS := $(SRCS:.c=.o)
 OBJS := $(OBJS:.S=.o)
 HDRS := $(wildcard *.h)
