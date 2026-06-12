@@ -97,6 +97,7 @@ module iosys_picorv32 #(
     output wire [7:0]  virt_kbd_key2_out,
     output wire [7:0]  virt_kbd_key3_out,
     output wire [7:0]  virt_kbd_key4_out,
+    output wire [7:0]  cart_mode_out,      // emulated cartridge mapper select (0 = none)
     output wire        usb_host_enable_out,
     output wire        joystick_mode_out,    // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 
@@ -154,19 +155,19 @@ reg [31:0] ram_rdata;
 // Firmware EXECUTES from BSRAM so its instruction fetches never touch SDRAM —
 // this is the whole point (ends CPU↔ANTIC SDRAM contention).
 wire        lowregion_sel = mem_valid && mem_addr[31:23] == 0;
-wire        bram_sel = lowregion_sel && (mem_addr[22:15] == 8'd0);  // < 32 KB
-wire        ram_sel  = lowregion_sel && (mem_addr[22:15] != 8'd0);  // SDRAM (Atari mem)
+wire        bram_sel = lowregion_sel && (mem_addr[22:14] < 9'd3);   // < 48 KB
+wire        ram_sel  = lowregion_sel && (mem_addr[22:14] >= 9'd3);  // SDRAM (Atari mem)
 
-// ── Firmware BSRAM boot RAM (32 KB, byte-laned, $readmemh-initialised) ────────
+// ── Firmware BSRAM boot RAM (48 KB, byte-laned, $readmemh-initialised) ────────
 wire [31:0] bram_rdata;
 wire        bram_ready;
 fw_bram #(
-    .AWORDS(8192),
-    .AW(13)
+    .AWORDS(12288),
+    .AW(14)
 ) fw_bram_inst (
     .clk   (clk),
     .sel   (bram_sel),
-    .waddr (mem_addr[14:2]),     // 13-bit word address within 32 KB
+    .waddr (mem_addr[15:2]),     // 14-bit word address within 48 KB
     .wdata (mem_wdata),
     .wstrb (bram_sel ? mem_wstrb : 4'b0000),
     .rdata (bram_rdata),
@@ -214,6 +215,7 @@ wire        spiflash_reg_ctrl_sel = mem_valid && (mem_addr == 32'h0200_0078);
 
 wire        virt_kbd_reg0_sel = mem_valid && (mem_addr == 32'h0200_00a0);
 wire        virt_kbd_reg1_sel = mem_valid && (mem_addr == 32'h0200_00a4);
+wire        cart_reg_sel      = mem_valid && (mem_addr == 32'h0200_00a8);
 
 assign sio_reg_sel = mem_valid && (mem_addr[31:5] == 27'h0100_004);
 assign sio_reg_addr = mem_addr[6:2];
@@ -236,7 +238,7 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
-            sio_cap_idx_sel || sio_cap_data_sel;
+            cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -252,7 +254,7 @@ wire any_sel_dbg = bram_sel || ram_sel || textdisp_reg_char_sel || simpleuart_re
             romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel ||
             time_reg_sel || cycle_reg_sel || id_reg_sel ||
             spiflash_reg_byte_sel || spiflash_reg_word_sel || spiflash_reg_ctrl_sel ||
-            sio_reg_sel || virt_kbd_reg0_sel || virt_kbd_reg1_sel;
+            sio_reg_sel || virt_kbd_reg0_sel || virt_kbd_reg1_sel || cart_reg_sel;
 reg        dbg_stall_undec = 1'b0;
 reg        dbg_stall_peri  = 1'b0;
 reg        dbg_stall_ram   = 1'b0;
@@ -292,6 +294,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         sio_reg_sel ? {16'h0000, sio_reg_rdata} :
         virt_kbd_reg0_sel ? {virt_kbd_key3, virt_kbd_key2, virt_kbd_key1, virt_kbd_mod} :
         virt_kbd_reg1_sel ? {22'b0, joystick_mode, usb_host_enable, virt_kbd_key4} :
+        cart_reg_sel ? {24'b0, cart_mode_reg} :
         32'h 0000_0000;
 
 picorv32 #(
@@ -468,6 +471,7 @@ reg [7:0] virt_kbd_key3 = 8'h00;
 reg [7:0] virt_kbd_key4 = 8'h00;
 reg       usb_host_enable = 1'b1;
 reg       joystick_mode = 1'b0;
+reg [7:0] cart_mode_reg = 8'h00;   // CartLogic mapper code; 0 = no cartridge
 
 always @(posedge clk) begin
     if (~resetn) begin
@@ -478,6 +482,7 @@ always @(posedge clk) begin
         virt_kbd_key4 <= 8'h00;
         usb_host_enable <= 1'b1;
         joystick_mode <= 1'b0;
+        cart_mode_reg <= 8'h00;
     end else begin
         if (virt_kbd_reg0_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_mod  <= mem_wdata[7:0];
@@ -490,6 +495,7 @@ always @(posedge clk) begin
             if (mem_wstrb[1]) usb_host_enable <= mem_wdata[8];
             if (mem_wstrb[1]) joystick_mode   <= mem_wdata[9];
         end
+        if (cart_reg_sel && mem_wstrb[0]) cart_mode_reg <= mem_wdata[7:0];
     end
 end
 
@@ -513,6 +519,7 @@ assign virt_kbd_key3_out = virt_kbd_key3;
 assign virt_kbd_key4_out = virt_kbd_key4;
 assign usb_host_enable_out = usb_host_enable;
 assign joystick_mode_out   = joystick_mode;
+assign cart_mode_out       = cart_mode_reg;
 
 assign dbg_stall_undec_out = dbg_stall_undec;
 assign dbg_stall_peri_out  = dbg_stall_peri;

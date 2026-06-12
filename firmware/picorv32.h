@@ -51,6 +51,7 @@ int atoi(const char *str);
 #define reg_sio_cap_data   (*(volatile uint32_t*)0x0200006c)  // read: selected SIO capture word
 #define reg_virt_kbd_0     (*(volatile uint32_t*)0x020000a0)
 #define reg_virt_kbd_1     (*(volatile uint32_t*)0x020000a4)
+#define reg_cart_mode      (*(volatile uint32_t*)0x020000a8)
 
 // Standard library for PicoRV32 RV32I softcore
 

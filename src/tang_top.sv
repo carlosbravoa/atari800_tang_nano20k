@@ -427,9 +427,19 @@ wire        sdram_ctrl_read_en  = (current_owner == OWN_RV)  ? (~|rv_wstrb) :
 wire        sdram_ctrl_write_en = (current_owner == OWN_RV)  ? (|rv_wstrb)  :
                                   (current_owner == OWN_FBW) ? 1'b1         :
                                   (current_owner == OWN_FBR) ? 1'b0         : core_sdram_write_en;
+// Cartridge address remap: the core places emulated-cart accesses at SDRAM offset
+// 8 MB+ (addr[24:22] = 3'b010, fine on MiSTer's 32 MB part). Our embedded SDRAM is
+// exactly 8 MB and gw2ar_sdram ignores addr[24:23], so without remapping carts would
+// alias onto Atari RAM at 0x000000. Remap them into the free 1 MB window at
+// 0x600000-0x6FFFFF (RAM ends 0x020000 with RAM_SELECT=128K; BASIC/OS/FB start at
+// 0x700000). Carts larger than 1 MB are rejected by the firmware loader.
+wire        core_addr_is_cart   = (core_sdram_addr[24:22] == 3'b010);
+wire [24:0] core_sdram_addr_eff = core_addr_is_cart ? {5'b00110, core_sdram_addr[19:0]}
+                                                    : core_sdram_addr;
+
 wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV)  ? rv_physical_addr :
                                   (current_owner == OWN_FBW) ? fbw_addr         :
-                                  (current_owner == OWN_FBR) ? fbr_addr         : core_sdram_addr;
+                                  (current_owner == OWN_FBR) ? fbr_addr         : core_sdram_addr_eff;
 wire [31:0] sdram_ctrl_wdata    = (current_owner == OWN_RV)  ? rv_wdata  :
                                   (current_owner == OWN_FBW) ? fbw_wdata : {4{core_sdram_data_from_core[7:0]}};
 wire [3:0]  sdram_ctrl_wmask    = (current_owner == OWN_RV)  ? rv_wstrb :
@@ -645,6 +655,14 @@ wire [7:0] virt_kbd_key1;
 wire [7:0] virt_kbd_key2;
 wire [7:0] virt_kbd_key3;
 wire [7:0] virt_kbd_key4;
+wire [7:0] cart_mode_sys;       // iosys (sys_clk) cartridge mapper select
+// CDC to clk_core: quasi-static (firmware only changes it while the Atari core is
+// held in reset around a cold boot), 2-FF per bit is sufficient.
+reg [7:0] cart_mode_m = 8'h00, cart_mode_core = 8'h00;
+always_ff @(posedge clk_core) begin
+    cart_mode_m    <= cart_mode_sys;
+    cart_mode_core <= cart_mode_m;
+end
 
 // ── Hardware CH9350 keyboard decoder (SDRAM-decoupled Stage 1) ────────────────
 // Taps the same UART RX (pin 51 / usb_dp) as the firmware, decodes CH9350 frames
@@ -866,6 +884,7 @@ iosys_picorv32 #(
     .virt_kbd_key2_out(virt_kbd_key2),
     .virt_kbd_key3_out(virt_kbd_key3),
     .virt_kbd_key4_out(virt_kbd_key4),
+    .cart_mode_out(cart_mode_sys),
     .usb_host_enable_out(usb_host_enable),
     .joystick_mode_out(joystick_mode),
     .joy_poll_dbg(joy_poll_dbg),
@@ -1152,7 +1171,7 @@ atari800core_simple_sdram #(
     // 6 enables/machine-cycle => ~6x too fast (boot/loop 6x, SIO windows 6x narrow).
     // The core's "standard speed is cycle_length-1" comment is misleading here.
     .THROTTLE_COUNT_6502        (6'd0),
-    .emulated_cartridge_select  (8'd0),
+    .emulated_cartridge_select  (cart_mode_core),
     .emulated_cartridge2_select (8'd0),
     .EMU_FLASH_REQUEST          (),
     .EMU_FLASH_SLAVE            (),
