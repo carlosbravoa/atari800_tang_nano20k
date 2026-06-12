@@ -1,6 +1,6 @@
 # Atari 800 — Tang Nano 20K Port
 
-> Don't take this project too seriously (yet). It is a vibe-coding experiment with no shame. **SIO disk emulation works** (mount `.atr` images and boot DOS/games) and the machine now runs at **exact NTSC speed** with a frame-buffered 720p60 HDMI output. It's a blast to play with.
+> This project started as a vibe-coding experiment with no shame. But now we have a full Atari800XL/130XE running with full NTSC Atari speed, perfect HDMI 720p, keyboard, joystick, ATR disks and cartridge emulation, all on this really small device. It's a blast to play with. It took 3,5 weeks and a lot of effort to get the coding agents focused on the right challenge/issue. Enjoy it (because I am)!
 
 
 <img width="400" height="400" alt="Eureka! Atari running Montezuma from an ATR Disk" src="https://github.com/user-attachments/assets/20121280-905e-4c15-8795-352eec9abf01" />
