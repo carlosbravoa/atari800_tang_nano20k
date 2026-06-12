@@ -88,6 +88,7 @@ function automatic [6:0] hid2atari;
         8'h2F: hid2atari = 7'd14;  // [ → Atari Up (same key on Atari keyboard)
         8'h30: hid2atari = 7'd15;  // ] → Atari Down
         8'h31: hid2atari = 7'd7;   // \ → Atari Right
+        8'h32: hid2atari = 7'd7;   // ISO Non-US #/~ (key next to ISO Enter, often |\) → same as ANSI \ → Atari * key
         8'h33: hid2atari = 7'd2;   // ; (semicolon)
         8'h34: hid2atari = 7'd6;   // ' → Atari Left
         8'h36: hid2atari = 7'd32;  // , (comma)
@@ -129,7 +130,18 @@ wire [63:0] atari_keyboard =
 
 // Modifiers
 wire shift_pressed   = key_modifiers[1] | key_modifiers[5]; // LShift | RShift
-wire control_pressed = key_modifiers[0] | key_modifiers[4]; // LCtrl  | RCtrl
+
+// Arrow keys imply CTRL: on the Atari the cursor keys ARE -/=/+/*-with-CTRL, so a
+// PC arrow key should move the cursor directly instead of typing the bare key.
+// Safe by construction: this module sees keys only AFTER the joystick-mode arrow
+// suppression and the OSD input mask, so the implied CTRL never fires during
+// stick play or menu navigation. Real CTRL still works identically. The [ ] \ '
+// raw-key mappings to the same Atari codes are unaffected (HID arrows only).
+wire arrow_held = (key1 >= 8'h4F && key1 <= 8'h52) |
+                  (key2 >= 8'h4F && key2 <= 8'h52) |
+                  (key3 >= 8'h4F && key3 <= 8'h52) |
+                  (key4 >= 8'h4F && key4 <= 8'h52);
+wire control_pressed = key_modifiers[0] | key_modifiers[4] | arrow_held; // LCtrl | RCtrl | arrows
 
 // Break: Grave/Tilde (0x35) or Num Lock (0x53)
 wire break_pressed =
