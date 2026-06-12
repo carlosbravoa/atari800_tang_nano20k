@@ -31,8 +31,8 @@ The absolute essentials — everything below this section is detail.
    ```
 4. Plug in **HDMI** and the **SD card**, then **power on** → it auto-boots to **BASIC**.
 5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick on port 1** alone can drive it
-   (no keyboard needed). To boot a disk: OSD → *Disk* → *Mount Disk* → pick → *Hard Reset*.
-   To run a cartridge: OSD → *Cartridge* → *Load Cartridge* → pick (boots immediately).
+   (no keyboard needed). To boot a disk: OSD → *D1:* → *Attach disk* → pick → *Hard Reset*.
+   To run a cartridge: OSD → *Cart:* → *Attach cartridge* → pick (boots immediately).
 
 That's a working machine. For a keyboard, the simplest is a **CH9350 USB-host board, one wire to
 Pin 53** (see [Keyboard](#keyboard-input)) — with the optional **arrow-keys-as-joystick** mode,
@@ -151,8 +151,8 @@ Get to a BASIC prompt in a few minutes:
    - Navigate with a **DB9 joystick on port 1** (up/down + fire) *or* a keyboard — either works on its own.
    - For typing/games, attach a **UART/CH9350 keyboard** (one wire to Pin 53 — see [Keyboard](#keyboard-input)).
 
-**To boot a disk:** open the OSD → **1) Disk** → **Mount Disk** → pick your `.atr` → **6) Hard Reset**.
-**To run a cartridge:** open the OSD → **2) Cartridge** → **Load Cartridge** → pick — it boots immediately.
+**To boot a disk:** open the OSD → **1) D1:** → **Attach disk...** → pick your `.atr` → **7) Hard Reset**.
+**To run a cartridge:** open the OSD → **3) Cart:** → **Attach cartridge...** → pick — it boots immediately.
 
 > **Input wiring note:** the board has no DB9 or USB connectors — the joystick and keyboard
 > attach to **GPIO header pins** (see the wiring sections below). A DB9 joystick alone is enough
@@ -384,22 +384,21 @@ The Atari auto-boots first. Press **S2** (or **F12**) to open/close the menu:
 ```
 === Tang Atari 800 ===
 
-Mounted: None
-
-1) Disk...
-2) Cartridge...
-3) Boot to OS (No BASIC)
-4) Boot to BASIC
-5) Soft Reset
-6) Hard Reset
-7) Options
-8) Return to Atari (F12)
+1) D1: Montezuma.atr
+2) D2: None
+3) Cart: None
+4) Boot to OS (No BASIC)
+5) Boot to BASIC
+6) Soft Reset
+7) Hard Reset
+8) Options
+9) Return to Atari (F12)
 ```
-- **Disk...** — submenu: **Mount D1: / Mount D2:** (browser shows `.atr` + folders;
-  mounting returns to the menu with the `D1:`/`D2:` lines updated) and **Unmount D1:/D2:**
-- **Cartridge...** — submenu: **Load Cartridge (CAR/ROM)** (browser shows `.car`/`.rom` +
-  folders; the machine **cold-boots straight into the cart**) and **Remove Cartridge**
-  (cold-boots back to BASIC)
+- **D1: / D2: / Cart:** — each shows its current attachment inline and opens a small
+  object menu when selected: **Attach...** (file browser, filtered to `.atr` for drives,
+  `.car`/`.rom` for the cart) / **Detach** / **<< Back**. Attaching a cartridge
+  **cold-boots straight into it**; detaching it cold-boots back to BASIC. Disks
+  attach/detach live
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
 - **Soft / Hard Reset** — warm or cold restart (F9 is a soft-reset hotkey in-game)
 - **Options** — OSD hot key and **Arrow keys: NORMAL/JOYSTICK** (see below)
@@ -421,8 +420,8 @@ In **OSD → Options**, toggle **`Arrow keys: NORMAL → JOYSTICK`**. While set 
 
 1. Copy your `.atr` disk images anywhere on the SD card (root or subfolders).
 2. Power on (Atari boots to BASIC), then press **S2** / **F12** to open the OSD.
-3. Choose **1) Disk** → **Mount Disk**, browse to your `.atr`, press **Fire**/**Enter** to mount it.
-4. Choose **6) Hard Reset** (cold boot) — the Atari now boots from the mounted disk (e.g. into DOS).
+3. Choose **1) D1:** → **Attach disk...**, browse to your `.atr`, press **Fire**/**Enter** to mount it.
+4. Choose **7) Hard Reset** (cold boot) — the Atari now boots from the mounted disk (e.g. into DOS).
 
 The mounted images show on the `D1:`/`D2:` lines. Most DOS disks and bootable games work;
 the emulated drives respond as **D1: and D2:** — use D2: for data disks or disk 2 of
