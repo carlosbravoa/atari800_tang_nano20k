@@ -430,11 +430,13 @@ wire        sdram_ctrl_write_en = (current_owner == OWN_RV)  ? (|rv_wstrb)  :
 // Cartridge address remap: the core places emulated-cart accesses at SDRAM offset
 // 8 MB+ (addr[24:22] = 3'b010, fine on MiSTer's 32 MB part). Our embedded SDRAM is
 // exactly 8 MB and gw2ar_sdram ignores addr[24:23], so without remapping carts would
-// alias onto Atari RAM at 0x000000. Remap them into the free 1 MB window at
-// 0x600000-0x6FFFFF (RAM ends 0x020000 with RAM_SELECT=128K; BASIC/OS/FB start at
-// 0x700000). Carts larger than 1 MB are rejected by the firmware loader.
+// alias onto Atari RAM at 0x000000. Remap them into the free 2 MB window at
+// 0x400000-0x5FFFFF (RAM ends 0x020000 with RAM_SELECT=128K; the core's freezer —
+// the only other tenant of this region — is disabled; BASIC/OS/FB live at 0x700000+).
+// Supports carts up to 2 MB (MegaCart 2MB); larger (4 MB Flash MegaCart, The!Cart)
+// cannot fit the 8 MB part and are rejected by the firmware loader.
 wire        core_addr_is_cart   = (core_sdram_addr[24:22] == 3'b010);
-wire [24:0] core_sdram_addr_eff = core_addr_is_cart ? {5'b00110, core_sdram_addr[19:0]}
+wire [24:0] core_sdram_addr_eff = core_addr_is_cart ? {4'b0010, core_sdram_addr[20:0]}
                                                     : core_sdram_addr;
 
 wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV)  ? rv_physical_addr :

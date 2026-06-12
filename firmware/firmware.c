@@ -295,7 +295,7 @@ save_options_close:
 // *count is set to number of all valid entries and `file_len` is
 // set to valid entries on this page.
 // return: 0 if successful
-int load_dir(char *dir, int start, int len, int *count) {
+int load_dir(char *dir, int start, int len, int *count, int carts) {
     DEBUG("load_dir: %s, start=%d, len=%d\n", dir, start, len);
     int cnt = 0;
     DIR d;
@@ -311,12 +311,13 @@ int load_dir(char *dir, int start, int len, int *count) {
     int is_root = dir[1] == '\0';
     if (start == 0 && len > 0) {
         if (is_root) {
-            strncpy(file_names[0], "<< Return to main menu", 256);
+            strncpy(file_names[0], "<< Back", FNAME_W);
             file_dir[0] = 0;
         } else {
-            strncpy(file_names[0], "..", 256);
+            strncpy(file_names[0], "..", FNAME_W);
             file_dir[0] = 1;
         }
+        file_alt[0][0] = '\0';
         file_len++;
     }
     cnt++;
@@ -331,13 +332,14 @@ int load_dir(char *dir, int start, int len, int *count) {
             continue;
         
         int is_dir = (fno.fattrib & AM_DIR) != 0;
-        int is_atr = 0;
+        int is_atr = 0;   // "selectable file" for the current browser context
         if (!is_dir) {
             char *ext = strrchr(fno.fname, '.');
-            if (ext && (strcasecmp(ext, ".atr") == 0 ||
-                        strcasecmp(ext, ".car") == 0 ||
-                        strcasecmp(ext, ".rom") == 0)) {
-                is_atr = 1;   // browsable/loadable file (.atr disk or .car/.rom cartridge)
+            if (ext) {
+                if (carts)
+                    is_atr = (strcasecmp(ext, ".car") == 0 || strcasecmp(ext, ".rom") == 0);
+                else
+                    is_atr = (strcasecmp(ext, ".atr") == 0);
             }
         }
 
@@ -369,18 +371,24 @@ int load_dir(char *dir, int start, int len, int *count) {
 // accesses into the free 1 MB window at physical 0x600000 (= same address in the
 // firmware's view), so we just f_read the image straight into SDRAM there, set
 // the mapper code in reg_cart_mode, and cold-boot.
-#define CART_SDRAM_BASE 0x00600000u
-#define CART_MAX_SIZE   0x00100000u
+#define CART_SDRAM_BASE 0x00400000u
+#define CART_MAX_SIZE   0x00200000u
 
 // CAR header type -> core CartLogic mode (see rtl/common/a8core/cart_logic.vhd).
 // Pairs of {CAR type, mode}; unknown types are rejected with an error message.
 static const uint8_t car_type_map[][2] = {
     {1,0x01},  {2,0x21},  {8,0x0D},  {9,0x0B},  {10,0x0A}, {11,0x08},
-    {12,0x30}, {13,0x31}, {14,0x32}, {17,0x0C}, {21,0x14}, {22,0x0E},
-    {23,0x33}, {24,0x34}, {25,0x35}, {26,0x28}, {27,0x29}, {28,0x2A},
-    {29,0x2B}, {30,0x2C}, {31,0x2D}, {32,0x2E}, {40,0x23}, {41,0x02},
-    {42,0x03}, {43,0x09}, {44,0x05}, {46,0x12}, {54,0x24}, {55,0x25},
-    {56,0x26}, {57,0x16}, {58,0x17}, {59,0x15}, {60,0x13}, {75,0x10},
+    {12,0x30}, {13,0x31}, {14,0x32}, {15,0x04}, {17,0x0C}, {21,0x14},
+    {22,0x0E}, {23,0x33}, {24,0x34}, {25,0x35}, {26,0x28}, {27,0x29},
+    {28,0x2A}, {29,0x2B}, {30,0x2C}, {31,0x2D}, {32,0x2E},
+    {33,0x38}, {34,0x39}, {35,0x3A}, {36,0x3B}, {37,0x3C}, {38,0x3D}, // switchable XEGS
+    {39,0x40},                                                        // Phoenix 8K
+    {40,0x23}, {41,0x02}, {42,0x03}, {43,0x09}, {44,0x05}, {45,0x06},
+    {46,0x12}, {50,0x45}, {51,0x46}, {52,0x47},                       // Turbosoft, Ultracart
+    {54,0x24}, {55,0x25}, {56,0x26}, {57,0x16}, {58,0x17}, {59,0x15},
+    {60,0x13}, {64,0x2F},                                             // MegaCart 2MB
+    {69,0x48}, {70,0x49},                                             // aDawliah 32/64K
+    {75,0x10},
 };
 
 // returns 0 on success (reg_cart_mode set, data in SDRAM), nonzero on error
@@ -413,7 +421,14 @@ int load_cartridge(char *filepath) {
         if (mode == 0) {
             f_close(&f);
             uart_printf("cart: unsupported CAR type %d\n", (int)car_type);
-            message("Unsupported CAR type\nsee UART for type id", 1);
+            char m[40];
+            strcpy(m, "Unsupported CAR type ");
+            char *e = m + strlen(m);
+            if (car_type >= 100) *e++ = '0' + (car_type / 100) % 10;
+            if (car_type >= 10)  *e++ = '0' + (car_type / 10) % 10;
+            *e++ = '0' + car_type % 10;
+            *e = '\0';
+            message(m, 1);
             return -3;
         }
         data_size = fsize - 16;
@@ -432,7 +447,7 @@ int load_cartridge(char *filepath) {
     }
     if (data_size > CART_MAX_SIZE) {
         f_close(&f);
-        message("Cartridge too large (>1MB)", 1);
+        message("Cartridge too large (>2MB)\ndoes not fit 8MB SDRAM", 1);
         return -5;
     }
 
@@ -566,14 +581,14 @@ int atr_write_sector(uint32_t sector_num, const uint8_t *buf, int len) {
 }
 
 // return 0: user chose a ROM (*choice), 1: no choice made, -1: error
-int menu_loadrom(int *choice) {
+int menu_loadrom(int *choice, int carts) {
     int page = 0, pages, total;
     int active = 0;
     pwd[0] = '/';
     pwd[1] = '\0';
     while (1) {
         clear();
-        int r = load_dir(pwd, page*PAGESIZE, PAGESIZE, &total);
+        int r = load_dir(pwd, page*PAGESIZE, PAGESIZE, &total, carts);
         if (r == 0) {
             pages = (total+PAGESIZE-1) / PAGESIZE;
             status("Page ");
@@ -640,17 +655,13 @@ int menu_loadrom(int *choice) {
                         }
                         strncat(load_fname, file_alt[active], sizeof(load_fname));
 
-                        // Cartridge? (.car/.rom) — check the 8.3 name (the display name
-                        // may have a truncated extension)
-                        char *selext = strrchr(file_alt[active], '.');
-                        if (selext && (strcasecmp(selext, ".car") == 0 ||
-                                       strcasecmp(selext, ".rom") == 0)) {
+                        if (carts) {
                             if (load_cartridge(load_fname) == 0)
                                 return 2;   // cart in SDRAM + reg_cart_mode set
                             break;          // error shown; stay in the browser
                         }
 
-                        // Otherwise mount as an ATR disk image
+                        // Disk context: mount as an ATR disk image
                         int res = mount_atr(load_fname);
                         if (res != 0) {
                             char errmsg[64];
@@ -1183,6 +1194,103 @@ void sio_poll(void) {
     }
 }
 
+// Cold-boot the Atari (COLDST=1 + core reset pulse). Caller flips booted/overlay.
+static void cold_boot_atari(void) {
+    reg_virt_kbd_0 = 0x00000000;
+    sio_init();
+    *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
+    reg_romload_ctrl = 1;
+    delay(20);
+    reg_romload_ctrl = 0;
+}
+
+// Disk submenu. Returns 0 = nothing, 1 = disk mounted (*sel_idx names it),
+// 2 = disk unmounted.
+int menu_disk(int *sel_idx) {
+    int choice = 0;
+    while (1) {
+        clear();
+        cursor(8, 10);
+        print("--- Disk ---");
+        cursor(2, 12);
+        print("1) Mount Disk (ATR)");
+        cursor(2, 13);
+        print("2) Unmount Disk");
+        cursor(2, 14);
+        print("<< Back");
+        delay(300);
+        for (;;) {
+            uart_keyboard_poll();
+            sio_poll();
+            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
+                if (choice == 0) {
+                    delay(300);
+                    int r = menu_loadrom(sel_idx, 0);
+                    if (r == 0) return 1;   // mounted
+                    break;                  // backed out — redraw submenu
+                } else if (choice == 1) {
+                    if (atr_mounted) {
+                        f_close(&atr_file);
+                        atr_mounted = false;
+                        return 2;
+                    }
+                    status("No disk mounted");
+                    delay(500);
+                    break;
+                } else {
+                    return 0;               // << Back
+                }
+            }
+            int j1, j2;
+            joy_get(&j1, &j2);
+            if ((j1 & 0x200) || (j1 & 0x8)) { delay(300); return 0; }
+        }
+    }
+}
+
+// Cartridge submenu. Returns 0 = nothing, 2 = cart loaded (*sel_idx names it,
+// caller cold-boots), 3 = cart removed (caller cold-boots).
+int menu_cartridge(int *sel_idx) {
+    int choice = 0;
+    while (1) {
+        clear();
+        cursor(7, 10);
+        print("--- Cartridge ---");
+        cursor(2, 12);
+        print("1) Load Cartridge (CAR/ROM)");
+        cursor(2, 13);
+        print("2) Remove Cartridge");
+        cursor(2, 14);
+        print("<< Back");
+        delay(300);
+        for (;;) {
+            uart_keyboard_poll();
+            sio_poll();
+            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
+                if (choice == 0) {
+                    delay(300);
+                    int r = menu_loadrom(sel_idx, 1);
+                    if (r == 2) return 2;   // loaded — caller cold-boots into it
+                    break;                  // backed out — redraw submenu
+                } else if (choice == 1) {
+                    if (reg_cart_mode != 0) {
+                        reg_cart_mode = 0;
+                        return 3;           // removed — caller cold-boots
+                    }
+                    status("No cartridge inserted");
+                    delay(500);
+                    break;
+                } else {
+                    return 0;
+                }
+            }
+            int j1, j2;
+            joy_get(&j1, &j2);
+            if ((j1 & 0x200) || (j1 & 0x8)) { delay(300); return 0; }
+        }
+    }
+}
+
 void menu_options() {
     int choice = 0;
     while (1) {
@@ -1420,23 +1528,21 @@ int main() {
             printf("Cart: %s", mounted_cart_name);
 
             cursor(2, 10);
-            print("1) Select ATR Disk Image\n");
+            print("1) Disk...\n");
             cursor(2, 11);
-            print("2) Boot to OS (No BASIC)\n");
+            print("2) Cartridge...\n");
             cursor(2, 12);
-            print("3) Boot to BASIC\n");
+            print("3) Boot to OS (No BASIC)\n");
             cursor(2, 13);
-            print("4) Soft Reset\n");
+            print("4) Boot to BASIC\n");
             cursor(2, 14);
-            print("5) Hard Reset\n");
+            print("5) Soft Reset\n");
             cursor(2, 15);
-            print("6) Options\n");
+            print("6) Hard Reset\n");
             cursor(2, 16);
-            print("7) Return to Atari (F12)\n");
+            print("7) Options\n");
             cursor(2, 17);
-            print("8) Unmount Disk\n");
-            cursor(2, 18);
-            print("9) Remove Cartridge\n");
+            print("8) Return to Atari (F12)\n");
 
             cursor(2, 26);
             print("Enter:Select   V:");
@@ -1448,7 +1554,7 @@ int main() {
             for (;;) {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
-                int r = joy_choice(10, 9, &choice, OSD_KEY_CODE);
+                int r = joy_choice(10, 8, &choice, OSD_KEY_CODE);
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);
@@ -1464,24 +1570,31 @@ int main() {
             if (choice == 0) {
                 int selected_idx;
                 delay(300);
-                int load_ok = menu_loadrom(&selected_idx);
-                if (load_ok == 0) {
+                int r = menu_disk(&selected_idx);
+                if (r == 1) {
                     strncpy(mounted_atr_name, file_names[selected_idx], sizeof(mounted_atr_name));
                     mounted_atr_name[sizeof(mounted_atr_name)-1] = '\0';
-                } else if (load_ok == 2) {
+                } else if (r == 2) {
+                    strncpy(mounted_atr_name, "None", sizeof(mounted_atr_name));
+                }
+            } else if (choice == 1) {
+                int selected_idx;
+                delay(300);
+                int r = menu_cartridge(&selected_idx);
+                if (r == 2) {
                     // Cartridge loaded into SDRAM + reg_cart_mode set: cold-boot into it
                     strncpy(mounted_cart_name, file_names[selected_idx], sizeof(mounted_cart_name));
                     mounted_cart_name[sizeof(mounted_cart_name)-1] = '\0';
-                    reg_virt_kbd_0 = 0x00000000;
-                    sio_init();
-                    *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
-                    reg_romload_ctrl = 1;
-                    delay(20);
-                    reg_romload_ctrl = 0;
+                    cold_boot_atari();
+                    booted = true;
+                    overlay(0);
+                } else if (r == 3) {
+                    strncpy(mounted_cart_name, "None", sizeof(mounted_cart_name));
+                    cold_boot_atari();
                     booted = true;
                     overlay(0);
                 }
-            } else if (choice == 1) {
+            } else if (choice == 2) {
                 reg_virt_kbd_0 = 0x00410000; // Hold OPTION (F8)
                 load_system_roms();
                 sio_init();
@@ -1489,13 +1602,13 @@ int main() {
                 overlay(0);
                 sio_delay(400);              // Wait for boot process to read OPTION
                 reg_virt_kbd_0 = 0x00000000; // Release OPTION
-            } else if (choice == 2) {
+            } else if (choice == 3) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
                 load_system_roms();
                 sio_init();
                 booted = true;
                 overlay(0);
-            } else if (choice == 3) {
+            } else if (choice == 4) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
                 *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // COLDST = 0 (Warm start)
                 reg_romload_ctrl = 1;
@@ -1503,47 +1616,18 @@ int main() {
                 reg_romload_ctrl = 0;
                 booted = true;
                 overlay(0);
-            } else if (choice == 4) {
-                reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
-                sio_init();                  // Clear SIO FIFOs and reset divisor (real-life power cycle effect)
-                *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
-                reg_romload_ctrl = 1;
-                delay(20);
-                reg_romload_ctrl = 0;
+            } else if (choice == 5) {
+                // Hard Reset
+                cold_boot_atari();
                 booted = true;
                 overlay(0);
-            } else if (choice == 5) {
+            } else if (choice == 6) {
                 delay(300);
                 menu_options();
-            } else if (choice == 6) {
+            } else if (choice == 7) {
                 // Return to Atari: always just dismiss the OSD, disk or not.
                 booted = true;
                 overlay(0);
-            } else if (choice == 7) {
-                // Unmount Disk: close the ATR and drop SIO disk emulation.
-                if (atr_mounted) {
-                    f_close(&atr_file);
-                    atr_mounted = false;
-                }
-                strncpy(mounted_atr_name, "None", sizeof(mounted_atr_name));
-                delay(300);   // stay in the menu; redraw shows Mounted: None
-            } else if (choice == 8) {
-                // Remove Cartridge: clear the mapper and cold-boot (back to BASIC/DOS)
-                if (reg_cart_mode != 0) {
-                    reg_cart_mode = 0;
-                    strncpy(mounted_cart_name, "None", sizeof(mounted_cart_name));
-                    reg_virt_kbd_0 = 0x00000000;
-                    sio_init();
-                    *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1
-                    reg_romload_ctrl = 1;
-                    delay(20);
-                    reg_romload_ctrl = 0;
-                    booted = true;
-                    overlay(0);
-                } else {
-                    status("No cartridge inserted");
-                    delay(500);
-                }
             }
         } else {
             // Check the menu toggle key FIRST, before sio_poll — otherwise a mounted
