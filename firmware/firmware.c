@@ -1641,7 +1641,7 @@ int main() {
                 continue;   // enter the menu now; skip SIO this iteration
             }
             // F9 = soft reset hotkey (same warm start as the menu's Soft Reset)
-            int f9 = (joy1 & 0x100);
+            int f9 = (joy1 & 0x4);
             if (f9 && !f9_prev) {
                 reg_virt_kbd_0 = 0x00000000;
                 *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // COLDST = 0 (warm start)

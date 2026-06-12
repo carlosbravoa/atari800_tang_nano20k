@@ -762,13 +762,13 @@ wire [11:0] rv_joy1 = {
     joy_right,                         // 11: R
     joy_left,                          // 10: L
     osd_toggle,                        //  9: X (S2 button)
-    key_f9,                            //  8: A (F9 = soft-reset hotkey)
-    1'b0,                              //  7: RT
-    1'b0,                              //  6: LT
+    1'b0,                              //  8: A (free; joy_choice treats it as confirm)
+    joy_right,                         //  7: RT — right arrow/stick = page forward in menus
+    joy_left,                          //  6: LT — left arrow/stick = page back in menus
     joy_down,                          //  5: DN
     joy_up,                            //  4: UP
     key_f12,                           //  3: START
-    1'b0,                              //  2: SELECT
+    key_f9,                            //  2: SELECT slot — F9 soft-reset hotkey
     key_esc,                           //  1: Y
     joy_fire                           //  0: B
 };
