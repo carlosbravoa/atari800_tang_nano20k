@@ -22,17 +22,21 @@ The absolute essentials — everything below this section is detail.
 
 1. A **Sipeed Tang Nano 20K**.
 2. A **FAT32 micro-SD** with `ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) in the root
-   (**you supply these ROMs**). Drop any `.atr` disk images on it too.
-3. **Flash the bitstream** (firmware is baked in — nothing else to flash):
+   (**you supply these ROMs**). Drop your `.atr` disks and `.car`/`.rom` cartridges on it too.
+3. **Flash the bitstream** (firmware is baked in — nothing else to flash). Grab the zip from
+   the [latest release](https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest)
+   (or build it yourself, see [Build](#build)):
    ```bash
-   openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
+   openFPGALoader -b tangnano20k -f atari800_tn20k.fs
    ```
 4. Plug in **HDMI** and the **SD card**, then **power on** → it auto-boots to **BASIC**.
-5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick connected to the hardware pins of Joystick port 1** alone can drive it
-   (no keyboard needed). To boot a disk: OSD → *Select ATR Disk Image* → pick → *Hard Reset*.
+5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick on port 1** alone can drive it
+   (no keyboard needed). To boot a disk: OSD → *Disk* → *Mount Disk* → pick → *Hard Reset*.
+   To run a cartridge: OSD → *Cartridge* → *Load Cartridge* → pick (boots immediately).
 
 That's a working machine. For a keyboard, the simplest is a **CH9350 USB-host board, one wire to
-Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used instead of a joystick, configurable via OSD menu.**
+Pin 53** (see [Keyboard](#keyboard-input)) — with the optional **arrow-keys-as-joystick** mode,
+the keyboard alone covers everything.
 
 ---
 
@@ -45,12 +49,12 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open)
-- **UART / serial keyboard (recommended)** — raw USB HID reports sent over serial frames from an external CH9350 board or Raspberry Pi Pico (no resistors, uses Pin 53)
+- **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F12 = OSD menu**
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
 - **Cartridge loading** — `.car` (49 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 2 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
-- **Direct USB HID keyboard (experimental)** — low-speed USB straight to GPIO pins (needs 15 kΩ pull-downs); **unreliable — use the UART/CH9350 keyboard instead**
+- **Long filenames** on the SD card (FatFs LFN); file browser with folders, 24 entries/page, instant Left/Right paging
 
 ---
 
@@ -64,8 +68,9 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 | GPIO sigma-delta audio | ✅ Working |
 | SD card ROM loader | ✅ Working |
 | OSD menu (keyboard and/or DB9 joystick, S2/F12 toggle) | ✅ Working — rock-solid |
-| UART / serial keyboard (CH9350 / Pi Pico) — **recommended** | ✅ Working (hardware decoder) |
-| Direct USB HID keyboard (to GPIO pins) | ⚠️ Experimental / unreliable — prefer UART |
+| UART / serial keyboard (CH9350 / Pi Pico) | ✅ Working (hardware decoder, both frame variants) |
+| Long filenames (FatFs LFN) + folder browsing | ✅ Working |
+| F9 soft-reset hotkey | ✅ Working |
 | DB9 joystick (wired to GPIO pins) | ✅ Working |
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
 | SIO disk emulation (.atr) | ✅ Working — mount/unmount `.atr` images, boot DOS/games; SIO activity LEDs |
@@ -116,7 +121,9 @@ Format a MicroSD card as **FAT32**. Place these files in the root directory:
 ```
 /
 ├── ATARIXL.ROM   ← Atari XL/XE OS ROM, exactly 16384 bytes
-└── BASIC.ROM     ← Atari BASIC ROM, exactly 8192 bytes
+├── BASIC.ROM     ← Atari BASIC ROM, exactly 8192 bytes
+├── games/        ← your .atr disks and .car/.rom cartridges, any folders,
+└── ...              long filenames fine
 ```
 
 > File names are matched case-insensitively (`ATARIXL.ROM`/`atarixl.rom`, `BASIC.ROM`/`basic.rom`).
@@ -133,9 +140,9 @@ Get to a BASIC prompt in a few minutes:
 
 1. **SD card** — format FAT32, copy `ATARIXL.ROM` (16384 B) and `BASIC.ROM` (8192 B) to the root
    (supply your own — see [SD Card Setup](#sd-card-setup)). Add any `.atr` disk images you like.
-2. **Flash** the bitstream:
+2. **Flash** the bitstream (from the [latest release](https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest) zip, or your own build):
    ```bash
-   openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
+   openFPGALoader -b tangnano20k -f atari800_tn20k.fs
    ```
    The firmware is baked in — **no separate firmware flash**.
 3. **Connect HDMI** to a monitor, and the SD card.
@@ -144,7 +151,8 @@ Get to a BASIC prompt in a few minutes:
    - Navigate with a **DB9 joystick on port 1** (up/down + fire) *or* a keyboard — either works on its own.
    - For typing/games, attach a **UART/CH9350 keyboard** (one wire to Pin 53 — see [Keyboard](#keyboard-input)).
 
-**To boot a disk:** open the OSD → **1) Select ATR Disk Image** → pick your `.atr` → **5) Hard Reset**.
+**To boot a disk:** open the OSD → **1) Disk** → **Mount Disk** → pick your `.atr` → **6) Hard Reset**.
+**To run a cartridge:** open the OSD → **2) Cartridge** → **Load Cartridge** → pick — it boots immediately.
 
 > **Input wiring note:** the board has no DB9 or USB connectors — the joystick and keyboard
 > attach to **GPIO header pins** (see the wiring sections below). A DB9 joystick alone is enough
@@ -200,7 +208,7 @@ By default, the OSD menu can be operated completely using your **DB9 Joystick 1*
 - **Move Cursor Up/Down:** Move **Joystick 1 Up/Down**.
 - **Change Page:** In long file lists, **Left/Right** moves between pages; pressing **Down** past the last entry or **Up** past the first also flips to the next/previous page.
 - **Confirm / Load File:** Press the **Joystick 1 Fire** button.
-- **Go Back:** Select `..` or `<< Return to main menu` inside the file browser.
+- **Go Back:** Select `..` or `<< Back` inside the file browser; submenus also have `<< Back`.
 
 This allows booting games and mounting disks completely without any keyboard attached.
 
@@ -208,11 +216,11 @@ This allows booting games and mounting disks completely without any keyboard att
 
 ## Keyboard Input
 
-For typing or keyboard-controlled games. **The recommended path is the CH9350 / Pi Pico UART
-board (option 1)** — one wire, no resistors, decoded in hardware. (Note: a DB9 joystick alone
-already drives the whole OSD, so a keyboard is optional for browsing/mounting disks.)
+For typing or keyboard-controlled games: a **CH9350 / Pi Pico UART board** — one wire, no
+resistors, decoded in hardware. (A DB9 joystick alone already drives the whole OSD, so a
+keyboard is optional for browsing/mounting disks.)
 
-### 1. CH9350 / Raspberry Pi Pico UART board (recommended)
+### CH9350 / Raspberry Pi Pico UART board
 A cheap external micro-module acts as the USB host for your keyboard and streams standard
 **CH9350 UART serial frames** (115200 baud, 8N1) of raw USB HID reports into the FPGA — decoded
 by a dedicated hardware module. **One data wire to Pin 53**, no resistors. Setup details below.
@@ -256,35 +264,7 @@ The Pi Pico acts as a programmable drop-in replacement for the CH9350.
 
 
 
-## USB HID Keyboard (Requires resistors)
-
-Connect a USB-A female connector and add **15 kΩ pull-down resistors** from D− and D+ to GND.
-
-### Wiring
-
-```
-USB-A female socket (looking into socket)
- ┌──────────────────────────┐
- │   1    2    3    4       │
- │  [5V] [D-] [D+] [GND]   │
- └──────────────────────────┘
-    │     │    │    │
-    │     │    │    └─────── GND (GPIO header)
-    │     │    │
-    │     │    ├──── 15 kΩ ── GND
-    │     │    └──────────── FPGA pin 53  (D+, IOR38B)
-    │     │
-    │     ├──── 15 kΩ ── GND
-    │     └──────────── FPGA pin 49  (D−, IOR49A)
-    │
-    └───────────────── VBUS 5 V (powers the keyboard)
-```
-
-> The 15 kΩ pull-downs are **mandatory**. Without them the USB host cannot detect device
-> connection. A low-speed device has a 1.5 kΩ pull-up on D−; the host detects it when
-> this pull-up overcomes the 15 kΩ pull-down.
-
-### Key mapping (USB HID)
+## Key Mapping (USB HID keyboard)
 
 | USB key | Atari key / function |
 |---------|----------------------|
@@ -305,6 +285,8 @@ USB-A female socket (looking into socket)
 | Left/Right Ctrl | Control |
 | Right Alt | Inverse Video |
 | Caps Lock | Caps Lock |
+| **F9** | **Soft reset** (warm start, in-game) |
+| **F12** | **OSD menu** open/close |
 
 ---
 
@@ -413,18 +395,15 @@ Mounted: None
 7) Options
 8) Return to Atari (F12)
 ```
-(items 1 and 2 open **Disk** and **Cartridge** submenus: Mount/Unmount Disk, Load/Remove Cartridge)
-
-- **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
+- **Disk...** — submenu: **Mount Disk (ATR)** (browser shows `.atr` + folders; mounting
+  returns to the menu with the `Mounted:` line updated) and **Unmount Disk**
+- **Cartridge...** — submenu: **Load Cartridge (CAR/ROM)** (browser shows `.car`/`.rom` +
+  folders; the machine **cold-boots straight into the cart**) and **Remove Cartridge**
+  (cold-boots back to BASIC)
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
-- **Soft / Hard Reset** — warm or cold restart
-- **Options** — emulator options: OSD hot key and **Arrow keys: NORMAL/JOYSTICK** (see below)
-- **Return to Atari** — close the OSD (also via S2 / F12), with or without a disk mounted
-- **Unmount Disk** — close the mounted `.atr` (back to `Mounted: None`)
-- **Remove Cartridge** — clear the emulated cartridge and cold-boot back to BASIC
-
-To run a cartridge: put `.car`/`.rom` files on the SD card, **1) Select ATR Disk Image** →
-pick the cartridge file — the machine cold-boots straight into it.
+- **Soft / Hard Reset** — warm or cold restart (F9 is a soft-reset hotkey in-game)
+- **Options** — OSD hot key and **Arrow keys: NORMAL/JOYSTICK** (see below)
+- **Return to Atari** — close the OSD (also via S2 / F12)
 
 > While the menu is open, the Atari **keeps running live behind it** (you'll hear the game
 > continue); keyboard and joystick inputs are masked from the machine so menu navigation
@@ -442,8 +421,8 @@ In **OSD → Options**, toggle **`Arrow keys: NORMAL → JOYSTICK`**. While set 
 
 1. Copy your `.atr` disk images anywhere on the SD card (root or subfolders).
 2. Power on (Atari boots to BASIC), then press **S2** / **F12** to open the OSD.
-3. Choose **1) Select ATR Disk Image**, browse to your `.atr`, press **Fire**/**Enter** to mount it.
-4. Choose **5) Hard Reset** (cold boot) — the Atari now boots from the mounted disk (e.g. into DOS).
+3. Choose **1) Disk** → **Mount Disk**, browse to your `.atr`, press **Fire**/**Enter** to mount it.
+4. Choose **6) Hard Reset** (cold boot) — the Atari now boots from the mounted disk (e.g. into DOS).
 
 The mounted image shows on the `Mounted:` line. Most DOS disks and bootable games work; the
 emulated drive responds as **D1:**.
@@ -470,8 +449,8 @@ emulated drive responds as **D1:**.
 | SD MOSI | 82 | — | out |
 | SD MISO | 84 | — | in |
 | SD CS | 81 | — | out |
-| USB D+ (HID keyboard) | 53 | IOR38B | inout |
-| USB D− (HID keyboard) | 49 | IOR49A | inout |
+| Keyboard UART RX (CH9350/Pico TX) | 53 | IOR38B | in |
+| (reserved — legacy USB D−, unused) | 49 | IOR49A | — |
 | Joy1 Up/Dn/Lt/Rt/Fire | 27,28,29,30,31 | IOB8A…IOB18A (LCD-only nets) | in |
 | Joy2 Up/Dn/Lt/Rt/Fire | 32,41,42,48,77 | IOB18B…IOT30A (LCD-only nets) | in |
 
@@ -487,19 +466,21 @@ atari800_tang_nano20k_parallel/
 ├── firmware/
 │   ├── firmware.c             # PicoRV32 firmware (OSD, ROM loader, keyboard)
 │   ├── bin2bram.py            # firmware.bin → BSRAM init hex (4 byte lanes)
-│   ├── baremetal.ld           # linker: single 64 KB BSRAM region from 0
+│   ├── baremetal.ld           # linker: 48 KB BSRAM region + stack-headroom guard
 │   └── Makefile
 ├── rtl/                       # Upstream Atari core VHDL
 │   └── common/a8core/         # 6502, ANTIC, GTIA, POKEY, PIA, SIO
 └── src/                       # Tang Nano-specific SystemVerilog / Verilog
-    ├── tang_top.sv            # Top-level module
-    ├── gw2ar_sdram.sv         # Custom GW2AR-18 embedded SDRAM controller
+    ├── tang_top.sv            # Top-level module (arbiter, clocks, input masking)
+    ├── gw2ar_sdram.sv         # SDRAM handshake adapter (clk_core <-> clk_mem)
+    ├── sdram_nestang.v        # Low-latency SDRAM controller (NESTang-derived)
+    ├── fb_writer.sv           # Atari video → SDRAM frame buffer (RGB332)
+    ├── fb_reader.sv           # Frame buffer → 720p60 raster (3× upscale)
     ├── iosys_picorv32.v       # PicoRV32 IO subsystem (OSD, SD); firmware in BSRAM
-    ├── fw_bram.v              # 64 KB byte-laned BSRAM firmware boot RAM
+    ├── fw_bram.v              # 48 KB byte-laned BSRAM firmware boot RAM
     ├── fw_lane{0..3}.hex      # firmware BSRAM init (generated by bin2bram.py)
     ├── hdmi_audio_out.sv      # HDMI wrapper (hdl-util/hdmi library)
-    ├── scale720p.sv           # Atari → 720p scaler (genlocked to 54 MHz)
-    ├── usb_to_atari800.sv     # USB HID → Atari keyboard matrix
+    ├── usb_to_atari800.sv     # HID codes → Atari keyboard matrix / console keys
     ├── uart_kbd_ch9350.sv     # Hardware CH9350/UART keyboard decoder
     ├── simplespimaster.v      # SPI master (SD card)
     ├── simpleuart.v           # UART (UART keyboard RX + debug TX)
@@ -511,12 +492,14 @@ atari800_tang_nano20k_parallel/
 
 ## Known Limitations / Roadmap
 
-- **SIO disk emulation** — ✅ working; cartridge (`.car`/`.rom`) loading still planned
+- **SIO disk emulation** — ✅ working (D1:, read + write)
 - **Atari speed** — ✅ exact NTSC speed (28.6875 MHz core + SDRAM frame buffer → standard 720p60)
 - **core timing / corruption** — ✅ resolved: low-latency SDRAM controller, half-rate BL2 burst
   reads (bus settling), synchronized clock-divider start-up, hardened timing constraints
 - **Joystick paddles** — analogue pot inputs not implemented
-- **Cartridge images** — ✅ `.car`/`.rom` loading working (8K/16K hardware-verified; report any .CAR type id the loader rejects)
+- **Cartridge images** — ✅ `.car`/`.rom` working, banked mappers hardware-verified; 49 CAR
+  types up to 2 MB (4 MB mappers like The!Cart cannot fit the 8 MB SDRAM). Rejected types
+  show their id on screen — report them if the core should support one
 - **Machine is NTSC** (`PAL=0`); runtime PAL/NTSC switch planned
 
 ---
