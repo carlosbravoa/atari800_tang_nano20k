@@ -1402,6 +1402,7 @@ int main() {
     }
 
     bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
+    int f9_prev = 0;             // F9 soft-reset hotkey edge detector
     char mounted_atr_name[16] = "None";
     char mounted_cart_name[16] = "None";
     if (booted) overlay(0);      // hide OSD immediately on auto-boot
@@ -1555,6 +1556,17 @@ int main() {
                 delay(300);
                 continue;   // enter the menu now; skip SIO this iteration
             }
+            // F9 = soft reset hotkey (same warm start as the menu's Soft Reset)
+            int f9 = (joy1 & 0x100);
+            if (f9 && !f9_prev) {
+                reg_virt_kbd_0 = 0x00000000;
+                *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // COLDST = 0 (warm start)
+                reg_romload_ctrl = 1;
+                delay(20);
+                reg_romload_ctrl = 0;
+                delay(300);
+            }
+            f9_prev = f9;
 
             // Background polling loop — service SIO (bounded per call).
             sio_poll();

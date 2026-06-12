@@ -721,6 +721,7 @@ wire key_right = (combined_key1 == 8'h4F) || (combined_key2 == 8'h4F) || (combin
 wire key_enter = (combined_key1 == 8'h28) || (combined_key2 == 8'h28) || (combined_key3 == 8'h28) || (combined_key4 == 8'h28); // Enter
 wire key_esc   = (combined_key1 == 8'h29) || (combined_key2 == 8'h29) || (combined_key3 == 8'h29) || (combined_key4 == 8'h29); // Escape
 wire key_f12   = (combined_key1 == 8'h45) || (combined_key2 == 8'h45) || (combined_key3 == 8'h45) || (combined_key4 == 8'h45); // F12
+wire key_f9    = (combined_key1 == 8'h42) || (combined_key2 == 8'h42) || (combined_key3 == 8'h42) || (combined_key4 == 8'h42); // F9 (soft reset hotkey)
 
 // ── Arrow-keys-as-Joystick mode (OSD-toggled via joystick_mode) ──────────────
 // Left-Alt = fire. When on, the arrow keys + Left-Alt drive Joystick 1 (OR'd
@@ -759,7 +760,7 @@ wire [11:0] rv_joy1 = {
     joy_right,                         // 11: R
     joy_left,                          // 10: L
     osd_toggle,                        //  9: X (S2 button)
-    1'b0,                              //  8: A
+    key_f9,                            //  8: A (F9 = soft-reset hotkey)
     1'b0,                              //  7: RT
     1'b0,                              //  6: LT
     joy_down,                          //  5: DN
