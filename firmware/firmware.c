@@ -47,9 +47,10 @@ int file_sizes[PAGESIZE];
 int file_len;		// number of files on this page
 
 // ATR Disk Emulator state
-FIL atr_file;
-bool atr_mounted = false;
-uint16_t atr_sector_size = 128;
+#define ATR_DRIVES 2            // D1: (0x31) and D2: (0x32)
+FIL atr_file[ATR_DRIVES];
+bool atr_mounted[ATR_DRIVES] = {false, false};
+uint16_t atr_sector_size[ATR_DRIVES] = {128, 128};
 
 static uint8_t sio_sector_buf[256];
 static uint8_t sio_cmd_buf[5];
@@ -464,16 +465,16 @@ int load_cartridge(char *filepath) {
     return 0;
 }
 
-int mount_atr(char *filepath) {
-    if (atr_mounted) {
-        f_close(&atr_file);
-        atr_mounted = false;
+int mount_atr(char *filepath, int slot) {
+    if (atr_mounted[slot]) {
+        f_close(&atr_file[slot]);
+        atr_mounted[slot] = false;
     }
     
-    int r = f_open(&atr_file, filepath, FA_READ | FA_WRITE);
+    int r = f_open(&atr_file[slot], filepath, FA_READ | FA_WRITE);
     if (r != FR_OK) {
         // Try read-only if write access fails
-        r = f_open(&atr_file, filepath, FA_READ);
+        r = f_open(&atr_file[slot], filepath, FA_READ);
         if (r != FR_OK) {
             uart_printf("Failed to open ATR file %s, error %d\n", filepath, r);
             return r;
@@ -486,10 +487,10 @@ int mount_atr(char *filepath) {
     // Read ATR 16-byte header
     uint8_t header[16];
     unsigned int br;
-    r = f_read(&atr_file, header, 16, &br);
+    r = f_read(&atr_file[slot], header, 16, &br);
     if (r != FR_OK || br != 16) {
         uart_printf("Failed to read ATR header, error %d\n", r);
-        f_close(&atr_file);
+        f_close(&atr_file[slot]);
         return -1;
     }
     
@@ -497,28 +498,28 @@ int mount_atr(char *filepath) {
     uint16_t magic = header[0] | (header[1] << 8);
     if (magic != 0x0296) {
         uart_printf("Invalid ATR magic: %04x\n", magic);
-        f_close(&atr_file);
+        f_close(&atr_file[slot]);
         return -2;
     }
     
-    atr_sector_size = header[4] | (header[5] << 8);
-    if (atr_sector_size != 128 && atr_sector_size != 256) {
-        uart_printf("Unsupported sector size: %d\n", atr_sector_size);
-        f_close(&atr_file);
+    atr_sector_size[slot] = header[4] | (header[5] << 8);
+    if (atr_sector_size[slot] != 128 && atr_sector_size[slot] != 256) {
+        uart_printf("Unsupported sector size: %d\n", atr_sector_size[slot]);
+        f_close(&atr_file[slot]);
         return -3;
     }
     
-    uart_printf("Mounted ATR: %s, sector size: %d\n", filepath, atr_sector_size);
-    atr_mounted = true;
+    uart_printf("Mounted ATR D%d: %s, sector size: %d\n", slot+1, filepath, atr_sector_size[slot]);
+    atr_mounted[slot] = true;
     return 0;
 }
 
-int atr_read_sector(uint32_t sector_num, uint8_t *buf, int *sector_len) {
-    if (!atr_mounted) return -1;
+int atr_read_sector(int slot, uint32_t sector_num, uint8_t *buf, int *sector_len) {
+    if (!atr_mounted[slot]) return -1;
     
     uint32_t offset = 0;
     int len = 128;
-    if (atr_sector_size == 128) {
+    if (atr_sector_size[slot] == 128) {
         offset = 16 + (sector_num - 1) * 128;
         len = 128;
     } else { // 256 bytes
@@ -533,14 +534,14 @@ int atr_read_sector(uint32_t sector_num, uint8_t *buf, int *sector_len) {
     
     *sector_len = len;
     
-    int r = f_lseek(&atr_file, offset);
+    int r = f_lseek(&atr_file[slot], offset);
     if (r != FR_OK) {
         uart_printf("Read sector seek failed for sector %d (offset %d)\n", sector_num, offset);
         return r;
     }
     
     unsigned int br;
-    r = f_read(&atr_file, buf, len, &br);
+    r = f_read(&atr_file[slot], buf, len, &br);
     if (r != FR_OK || br != len) {
         uart_printf("Read sector read failed for sector %d, got %d bytes\n", sector_num, br);
         return -2;
@@ -549,11 +550,11 @@ int atr_read_sector(uint32_t sector_num, uint8_t *buf, int *sector_len) {
     return 0;
 }
 
-int atr_write_sector(uint32_t sector_num, const uint8_t *buf, int len) {
-    if (!atr_mounted) return -1;
+int atr_write_sector(int slot, uint32_t sector_num, const uint8_t *buf, int len) {
+    if (!atr_mounted[slot]) return -1;
     
     uint32_t offset = 0;
-    if (atr_sector_size == 128) {
+    if (atr_sector_size[slot] == 128) {
         offset = 16 + (sector_num - 1) * 128;
     } else { // 256 bytes
         if (sector_num <= 3) {
@@ -563,25 +564,25 @@ int atr_write_sector(uint32_t sector_num, const uint8_t *buf, int len) {
         }
     }
     
-    int r = f_lseek(&atr_file, offset);
+    int r = f_lseek(&atr_file[slot], offset);
     if (r != FR_OK) {
         uart_printf("Write sector seek failed for sector %d (offset %d)\n", sector_num, offset);
         return r;
     }
     
     unsigned int bw;
-    r = f_write(&atr_file, buf, len, &bw);
+    r = f_write(&atr_file[slot], buf, len, &bw);
     if (r != FR_OK || bw != len) {
         uart_printf("Write sector write failed for sector %d, wrote %d bytes\n", sector_num, bw);
         return -2;
     }
     
-    f_sync(&atr_file);
+    f_sync(&atr_file[slot]);
     return 0;
 }
 
 // return 0: user chose a ROM (*choice), 1: no choice made, -1: error
-int menu_loadrom(int *choice, int carts) {
+int menu_loadrom(int *choice, int carts, int slot) {
     int page = 0, pages, total;
     int active = 0;
     pwd[0] = '/';
@@ -661,8 +662,8 @@ int menu_loadrom(int *choice, int carts) {
                             break;          // error shown; stay in the browser
                         }
 
-                        // Disk context: mount as an ATR disk image
-                        int res = mount_atr(load_fname);
+                        // Disk context: mount as an ATR disk image into the chosen drive
+                        int res = mount_atr(load_fname, slot);
                         if (res != 0) {
                             char errmsg[64];
                             // Show path (up to 28 chars) and error code
@@ -954,10 +955,11 @@ void sio_process_command(void) {
         return;
     }
     
-    // Only respond to D1: (Device ID 0x31)
-    if (device != 0x31) {
+    // Respond to D1:/D2: (Device IDs 0x31/0x32)
+    if (device != 0x31 && device != 0x32) {
         return;
     }
+    int slot = device - 0x31;
     
     uint16_t sector = aux1 | (aux2 << 8);
     dbg_last_sio_cmd = cmd;
@@ -982,7 +984,7 @@ void sio_process_command(void) {
             // 2. Prepare status block (4 bytes)
             uint8_t status_block[4];
             status_block[0] = 0x10; // Drive active (bit 4)
-            if (atr_sector_size == 256) {
+            if (atr_sector_size[slot] == 256) {
                 status_block[0] |= 0x20; // Double density (bit 5)
             }
             
@@ -1026,7 +1028,7 @@ void sio_process_command(void) {
             sio_wait_tx_empty();
             
             // 2. Perform the slow read from the SD card (takes several milliseconds)
-            int r = atr_read_sector(sector, sector_buf, &sector_len);
+            int r = atr_read_sector(slot, sector, sector_buf, &sector_len);
             if (r == 0) {
                 // Calculate checksum of sector data (Atari end-around carry)
                 uint8_t sum = sio_checksum(sector_buf, sector_len);
@@ -1064,7 +1066,7 @@ void sio_process_command(void) {
             uart_printf("SIO WRITE SECTOR %d\n", sector);
             dbg_sio_write_count++;
             uint8_t *sector_buf = sio_sector_buf;
-            int sector_len = (atr_sector_size == 128 || sector <= 3) ? 128 : 256;
+            int sector_len = (atr_sector_size[slot] == 128 || sector <= 3) ? 128 : 256;
             
             // Send ACK (with command-to-ACK SIO delay)
             delay_us(250);
@@ -1074,7 +1076,7 @@ void sio_process_command(void) {
             // Read data frame from computer
             int r = sio_rx_data_frame(sector_buf, sector_len);
             if (r == 0) {
-                int wr = atr_write_sector(sector, sector_buf, sector_len);
+                int wr = atr_write_sector(slot, sector, sector_buf, sector_len);
                 if (wr == 0) {
                     // Send ACK for data frame (with data-to-ACK SIO delay)
                     delay_us(250);
@@ -1116,7 +1118,7 @@ void sio_process_command(void) {
 //   cmd_count == 0:    data-phase byte (handled inside sio_process_command)
 // We reset if too much time passes without completing a frame (line glitch recovery).
 void sio_poll(void) {
-    if (!atr_mounted) return;
+    if (!atr_mounted[0] && !atr_mounted[1]) return;
 
     uint32_t diag = reg_sio_diag;
     if (((diag >> 13) & 1) == 0) {
@@ -1171,7 +1173,7 @@ void sio_poll(void) {
             uint8_t calc_sum = sio_checksum(sio_cmd_buf, 4);
             if (calc_sum != f->checksum) {
                 f->processed = 2; // Checksum error
-            } else if (f->device != 0x31) {
+            } else if (f->device != 0x31 && f->device != 0x32) {
                 f->processed = 0; // Ignored (not D1)
             } else {
                 f->processed = 1; // Processed
@@ -1204,37 +1206,43 @@ static void cold_boot_atari(void) {
     reg_romload_ctrl = 0;
 }
 
-// Disk submenu. Returns 0 = nothing, 1 = disk mounted (*sel_idx names it),
-// 2 = disk unmounted.
-int menu_disk(int *sel_idx) {
+// Disk submenu. Returns 0 = nothing, 1 = disk mounted (*sel_idx names it, *slot says
+// which drive), 2 = disk unmounted (*slot says which drive).
+int menu_disk(int *sel_idx, int *slot) {
     int choice = 0;
     while (1) {
         clear();
         cursor(8, 10);
         print("--- Disk ---");
         cursor(2, 12);
-        print("1) Mount Disk (ATR)");
+        print("1) Mount D1: (ATR)");
         cursor(2, 13);
-        print("2) Unmount Disk");
+        print("2) Mount D2: (ATR)");
         cursor(2, 14);
+        print("3) Unmount D1:");
+        cursor(2, 15);
+        print("4) Unmount D2:");
+        cursor(2, 16);
         print("<< Back");
         delay(300);
         for (;;) {
             uart_keyboard_poll();
             sio_poll();
-            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
-                if (choice == 0) {
+            if (joy_choice(12, 5, &choice, OSD_KEY_CODE) == 1) {
+                if (choice == 0 || choice == 1) {
+                    *slot = choice;
                     delay(300);
-                    int r = menu_loadrom(sel_idx, 0);
+                    int r = menu_loadrom(sel_idx, 0, *slot);
                     if (r == 0) return 1;   // mounted
                     break;                  // backed out — redraw submenu
-                } else if (choice == 1) {
-                    if (atr_mounted) {
-                        f_close(&atr_file);
-                        atr_mounted = false;
+                } else if (choice == 2 || choice == 3) {
+                    *slot = choice - 2;
+                    if (atr_mounted[*slot]) {
+                        f_close(&atr_file[*slot]);
+                        atr_mounted[*slot] = false;
                         return 2;
                     }
-                    status("No disk mounted");
+                    status("That drive is empty");
                     delay(500);
                     break;
                 } else {
@@ -1269,7 +1277,7 @@ int menu_cartridge(int *sel_idx) {
             if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     delay(300);
-                    int r = menu_loadrom(sel_idx, 1);
+                    int r = menu_loadrom(sel_idx, 1, 0);
                     if (r == 2) return 2;   // loaded — caller cold-boots into it
                     break;                  // backed out — redraw submenu
                 } else if (choice == 1) {
@@ -1511,7 +1519,7 @@ int main() {
 
     bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
     int f9_prev = 0;             // F9 soft-reset hotkey edge detector
-    char mounted_atr_name[16] = "None";
+    char mounted_atr_name[ATR_DRIVES][16] = {"None", "None"};
     char mounted_cart_name[16] = "None";
     if (booted) overlay(0);      // hide OSD immediately on auto-boot
 
@@ -1522,8 +1530,10 @@ int main() {
             cursor(2, 6);
             print("=== Tang Atari 800 ===");
 
+            cursor(2, 7);
+            printf("D1: %s", mounted_atr_name[0]);
             cursor(2, 8);
-            printf("Mounted: %s", mounted_atr_name);
+            printf("D2: %s", mounted_atr_name[1]);
             cursor(2, 9);
             printf("Cart: %s", mounted_cart_name);
 
@@ -1568,14 +1578,14 @@ int main() {
             }
 
             if (choice == 0) {
-                int selected_idx;
+                int selected_idx, dslot = 0;
                 delay(300);
-                int r = menu_disk(&selected_idx);
+                int r = menu_disk(&selected_idx, &dslot);
                 if (r == 1) {
-                    strncpy(mounted_atr_name, file_names[selected_idx], sizeof(mounted_atr_name));
-                    mounted_atr_name[sizeof(mounted_atr_name)-1] = '\0';
+                    strncpy(mounted_atr_name[dslot], file_names[selected_idx], 16);
+                    mounted_atr_name[dslot][15] = '\0';
                 } else if (r == 2) {
-                    strncpy(mounted_atr_name, "None", sizeof(mounted_atr_name));
+                    strncpy(mounted_atr_name[dslot], "None", 16);
                 }
             } else if (choice == 1) {
                 int selected_idx;
