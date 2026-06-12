@@ -277,7 +277,8 @@ The Pi Pico acts as a programmable drop-in replacement for the CH9350.
 | F8 | Option (console key) |
 | Escape | Escape |
 | Backspace | Delete |
-| Arrow keys | Atari cursor keys |
+| Arrow keys | Atari cursor keys (move directly — CTRL is implied) |
+| ISO #/~ key (next to ISO Enter) | `*` |
 | `[ ]` | Cursor up / down |
 | `\ '` | Cursor right / left |
 | Grave / Num Lock | Break |
