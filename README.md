@@ -52,7 +52,7 @@ the keyboard alone covers everything.
 - **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F12 = OSD menu**
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
-- **SIO disk emulation** — mount `.atr` disk images from the SD card
+- **SIO disk emulation, two drives** — mount `.atr` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
 - **Cartridge loading** — `.car` (49 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 2 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
 - **Long filenames** on the SD card (FatFs LFN); file browser with folders, 24 entries/page, instant Left/Right paging
 
@@ -73,7 +73,7 @@ the keyboard alone covers everything.
 | F9 soft-reset hotkey | ✅ Working |
 | DB9 joystick (wired to GPIO pins) | ✅ Working |
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
-| SIO disk emulation (.atr) | ✅ Working — mount/unmount `.atr` images, boot DOS/games; SIO activity LEDs |
+| SIO disk emulation (.atr), **D1: + D2:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs |
 | Live OSD overlay (game runs behind menu, inputs masked) | ✅ Working |
 | Video centering (frame + picture) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
@@ -395,8 +395,8 @@ Mounted: None
 7) Options
 8) Return to Atari (F12)
 ```
-- **Disk...** — submenu: **Mount Disk (ATR)** (browser shows `.atr` + folders; mounting
-  returns to the menu with the `Mounted:` line updated) and **Unmount Disk**
+- **Disk...** — submenu: **Mount D1: / Mount D2:** (browser shows `.atr` + folders;
+  mounting returns to the menu with the `D1:`/`D2:` lines updated) and **Unmount D1:/D2:**
 - **Cartridge...** — submenu: **Load Cartridge (CAR/ROM)** (browser shows `.car`/`.rom` +
   folders; the machine **cold-boots straight into the cart**) and **Remove Cartridge**
   (cold-boots back to BASIC)
@@ -424,8 +424,9 @@ In **OSD → Options**, toggle **`Arrow keys: NORMAL → JOYSTICK`**. While set 
 3. Choose **1) Disk** → **Mount Disk**, browse to your `.atr`, press **Fire**/**Enter** to mount it.
 4. Choose **6) Hard Reset** (cold boot) — the Atari now boots from the mounted disk (e.g. into DOS).
 
-The mounted image shows on the `Mounted:` line. Most DOS disks and bootable games work; the
-emulated drive responds as **D1:**.
+The mounted images show on the `D1:`/`D2:` lines. Most DOS disks and bootable games work;
+the emulated drives respond as **D1: and D2:** — use D2: for data disks or disk 2 of
+multi-disk games, or swap D1: live when a game asks for the next disk.
 
 ---
 
