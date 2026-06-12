@@ -49,6 +49,7 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
+- **Cartridge loading** — `.car` (36 mapper types: XEGS, AtariMax, OSS, SDX, Williams, MegaCart, SIC…, up to 1 MB) and raw `.rom` (2/4/8/16K) from the SD card; select in the browser and it cold-boots into the cart
 - **Direct USB HID keyboard (experimental)** — low-speed USB straight to GPIO pins (needs 15 kΩ pull-downs); **unreliable — use the UART/CH9350 keyboard instead**
 
 ---
@@ -72,7 +73,7 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 | Video centering (frame + picture) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
 | Frame-buffered 720p60 HDMI (SDRAM single buffer) | ✅ Working — stable across rebuilds |
-| Cartridge images (.car / .rom) | 🔜 Planned |
+| Cartridge images (.car / .rom) | ✅ Working — 8K/16K verified on hardware; banked mappers wired (XEGS/AtariMax/OSS/…) |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
 > access, keyboard) executes from on-chip **BSRAM**, not SDRAM. This removes its instruction
@@ -411,6 +412,7 @@ Mounted: None
 6) Options
 7) Return to Atari (F12)
 8) Unmount Disk
+9) Remove Cartridge
 ```
 
 - **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
@@ -419,6 +421,10 @@ Mounted: None
 - **Options** — emulator options: OSD hot key and **Arrow keys: NORMAL/JOYSTICK** (see below)
 - **Return to Atari** — close the OSD (also via S2 / F12), with or without a disk mounted
 - **Unmount Disk** — close the mounted `.atr` (back to `Mounted: None`)
+- **Remove Cartridge** — clear the emulated cartridge and cold-boot back to BASIC
+
+To run a cartridge: put `.car`/`.rom` files on the SD card, **1) Select ATR Disk Image** →
+pick the cartridge file — the machine cold-boots straight into it.
 
 > While the menu is open, the Atari **keeps running live behind it** (you'll hear the game
 > continue); keyboard and joystick inputs are masked from the machine so menu navigation
@@ -510,7 +516,7 @@ atari800_tang_nano20k_parallel/
 - **core timing / corruption** — ✅ resolved: low-latency SDRAM controller, half-rate BL2 burst
   reads (bus settling), synchronized clock-divider start-up, hardened timing constraints
 - **Joystick paddles** — analogue pot inputs not implemented
-- **Cartridge images** — `.car` / `.rom` cartridge loading not yet implemented
+- **Cartridge images** — ✅ `.car`/`.rom` loading working (8K/16K hardware-verified; report any .CAR type id the loader rejects)
 - **Machine is NTSC** (`PAL=0`); runtime PAL/NTSC switch planned
 
 ---
