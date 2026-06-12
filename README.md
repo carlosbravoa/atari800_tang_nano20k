@@ -49,7 +49,7 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation** — mount `.atr` disk images from the SD card
-- **Cartridge loading** — `.car` (36 mapper types: XEGS, AtariMax, OSS, SDX, Williams, MegaCart, SIC…, up to 1 MB) and raw `.rom` (2/4/8/16K) from the SD card; select in the browser and it cold-boots into the cart
+- **Cartridge loading** — `.car` (49 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 2 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
 - **Direct USB HID keyboard (experimental)** — low-speed USB straight to GPIO pins (needs 15 kΩ pull-downs); **unreliable — use the UART/CH9350 keyboard instead**
 
 ---
@@ -73,7 +73,7 @@ Pin 53** (see [Keyboard](#keyboard-input)) — **The keyboard can also be used i
 | Video centering (frame + picture) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
 | Frame-buffered 720p60 HDMI (SDRAM single buffer) | ✅ Working — stable across rebuilds |
-| Cartridge images (.car / .rom) | ✅ Working — 8K/16K verified on hardware; banked mappers wired (XEGS/AtariMax/OSS/…) |
+| Cartridge images (.car / .rom) | ✅ Working — 8K/16K and banked .car verified on hardware; 49 mapper types, up to 2 MB |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
 > access, keyboard) executes from on-chip **BSRAM**, not SDRAM. This removes its instruction
@@ -404,16 +404,16 @@ The Atari auto-boots first. Press **S2** (or **F12**) to open/close the menu:
 
 Mounted: None
 
-1) Select ATR Disk Image
-2) Boot to OS (No BASIC)
-3) Boot to BASIC
-4) Soft Reset
-5) Hard Reset
-6) Options
-7) Return to Atari (F12)
-8) Unmount Disk
-9) Remove Cartridge
+1) Disk...
+2) Cartridge...
+3) Boot to OS (No BASIC)
+4) Boot to BASIC
+5) Soft Reset
+6) Hard Reset
+7) Options
+8) Return to Atari (F12)
 ```
+(items 1 and 2 open **Disk** and **Cartridge** submenus: Mount/Unmount Disk, Load/Remove Cartridge)
 
 - **Select ATR Disk Image** — browse SD card for `.atr` files, select to mount
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
