@@ -87,25 +87,16 @@ cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C en
 cable_enable     = true;
 
 // -----------------------------------------------------------------------------
-//  ATARI XE STYLING (lid top): "Fuji" logo relief + ventilation slot grid
+//  VENTILATION (lid top): a single row of 45-degree slots
 // -----------------------------------------------------------------------------
-logo_enable = true;
-logo_w      = 23.0;   // logo bounding width  (X)
-logo_h      = 16.0;   // logo bounding height (Y)
-logo_cx     = 0;      // centre X (0 = auto: centred on the lid)
-logo_cy     = 19.0;   // centre Y
-logo_depth  = 0.9;    // relief depth/height
-logo_raised = false;  // false = debossed (prints clean lid-face-down);
-                      // true  = embossed (print lid face-up / multi-material)
-
-vent_enable = true;
-vent_x0     = 11.0;   // ventilation field: X range on the lid
-vent_x1     = 48.6;
-vent_y0     = 36.0;   // Y range (rear half, behind the logo)
-vent_y1     = 60.0;
-vent_slot_w = 2.2;    // slot width (Y)
-vent_pitch  = 4.4;    // row-to-row spacing (Y)
-vent_gap    = 6.0;    // central solid spine between the two slot columns (X)
+vent_enable   = true;
+vent_yc       = 0;      // row centre Y (0 = auto: centred on the lid)
+vent_x0       = 12.0;   // row extent along X
+vent_x1       = 47.6;
+vent_slot_len = 11.0;   // length of each (diagonal) slot
+vent_slot_w   = 2.4;    // slot width
+vent_pitch    = 6.0;    // centre-to-centre spacing along X
+vent_angle    = 45;     // slot angle (degrees)
 
 // -----------------------------------------------------------------------------
 //  DB9 JOYSTICK PORTS  (panel-mount female D-sub, one per side wall)
@@ -220,62 +211,20 @@ module corner_lugs(h) {
         for (p = lug_pts) translate([p[0], p[1], 0]) cylinder(h = h, r = lug_r);
 }
 
-// Atari "Fuji" logo as a 2D shape, centred horizontally, baseline at y=0.
-// Straight central bar + two annular side prongs that flare outward, tied
-// together by a base bar. resize()-d to logo_w x logo_h where it is used.
-module fuji_2d() {
-    d   = 11;            // arc centre below the baseline (larger = more vertical)
-    H   = 15;            // nominal height
-    Ri  = d;             // inner radius (prong feet sit on the baseline)
-    Ro  = d + H;         // outer radius (centre prong tip)
-    off = 15;            // side-prong lean from vertical (deg)
-    hw  = 6.0;           // side-prong angular half-width (deg)
-    cw  = 3.0;           // central bar width
-    intersection() {
-        union() {
-            // central straight bar
-            translate([-cw/2, 0]) square([cw, H]);
-            // two flaring side prongs (annulus sectors about a point below)
-            for (s = [-1, 1]) {
-                ac = 90 + s*off;
-                intersection() {
-                    difference() {
-                        translate([0, -d]) circle(Ro);
-                        translate([0, -d]) circle(Ri);
-                    }
-                    polygon([[0, -d],
-                             [Ro*1.5*cos(ac - hw), -d + Ro*1.5*sin(ac - hw)],
-                             [Ro*1.5*cos(ac + hw), -d + Ro*1.5*sin(ac + hw)]]);
-                }
-            }
-            // base bar tying all three prongs together
-            translate([0, 1.1]) square([2*Ro*cos(90 - off - hw) + 1, 2.2],
-                                        center = true);
-        }
-        // clip everything to the baseline (y >= 0)
-        translate([-Ro*1.5, 0]) square([Ro*3, H*1.3]);
-    }
-}
-
-// Place the logo centred at (cx,cy); positive dz = emboss, modelled flat for
-// subtraction/union by the caller via linear_extrude.
-module fuji_solid(h) {
-    cx = (logo_cx == 0) ? out_x/2 : logo_cx;
-    translate([cx, logo_cy, 0])
-        linear_extrude(height = h)
-            resize([logo_w, logo_h], auto = true)
-                translate([0, 0.4]) fuji_2d();
-}
-
-// Ventilation slot grid for the lid (rounded-end slots in two columns).
+// Single row of 45-degree ventilation slots across the lid top.
 module vent_slots(depth) {
-    spine_l = (vent_x0 + vent_x1)/2 - vent_gap/2;   // left column right edge
-    spine_r = (vent_x0 + vent_x1)/2 + vent_gap/2;   // right column left edge
-    r = vent_slot_w/2;
-    for (yy = [vent_y0 : vent_pitch : vent_y1])
-        for (seg = [[vent_x0, spine_l], [spine_r, vent_x1]])
-            hull() for (xx = [seg[0] + r, seg[1] - r])
-                translate([xx, yy, -1]) cylinder(h = depth + 2, r = r);
+    yc   = (vent_yc == 0) ? out_y * 0.45 : vent_yc;
+    r    = vent_slot_w/2;
+    half = vent_slot_len/2 - r;
+    xext = vent_slot_len*abs(cos(vent_angle)) + vent_slot_w;  // X footprint/slot
+    x0   = vent_x0 + xext/2;
+    x1   = vent_x1 - xext/2;
+    n    = floor((x1 - x0) / vent_pitch);
+    for (i = [0 : n])
+        translate([x0 + i*vent_pitch, yc, -1])
+            linear_extrude(depth + 2)
+                rotate(vent_angle)
+                    hull() for (s = [-half, half]) translate([s, 0]) circle(r);
 }
 
 // A flat shelf the board rests on: an outer frame minus an inner window,
@@ -401,15 +350,9 @@ module lid() {
             corner_lugs(lid_th);                                // screw lugs
             translate([wall + lip_clear, wall + lip_clear, -lip_depth])
                 cube([inner_x - 2*lip_clear, inner_y - 2*lip_clear, lip_depth]);
-            // embossed (raised) Atari logo on the top face
-            if (logo_enable && logo_raised)
-                translate([0, 0, lid_th - 0.01]) fuji_solid(logo_depth);
         }
-        // ventilation slot grid (through the plate)
+        // ventilation slots (through the plate)
         if (vent_enable) vent_slots(lid_th);
-        // debossed (recessed) Atari logo in the top face
-        if (logo_enable && !logo_raised)
-            translate([0, 0, lid_th - logo_depth]) fuji_solid(logo_depth + 1);
         // hollow the lip so it is a thin rim (saves plastic, clears parts)
         translate([wall + lip_clear + 2, wall + lip_clear + 2, -lip_depth - 1])
             cube([inner_x - 2*lip_clear - 4, inner_y - 2*lip_clear - 4,
