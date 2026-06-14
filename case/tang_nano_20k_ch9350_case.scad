@@ -78,12 +78,31 @@ led_win_y   = 2.0;   // start (Tang Y)
 led_win_wid = 18.5;  // width along Y
 led_enable  = true;
 
-// Rear cable-exit slot (for DB9 joystick wires + the keyboard data wire that
-// plug onto the GPIO header pins). Open notch in the top of the back wall.
-cable_slot_w     = 30.0;
-cable_slot_depth = 14.0;   // how far down from the wall top the notch goes
-cable_slot_frac  = 0.30;   // centre along the back wall (0=HDMI end, 1=USB-C end)
+// Rear cable-exit slot (handy for the GND/5V/Pin-53 wires, or external wiring).
+// Open notch in the top of the back wall.
+cable_slot_w     = 18.0;
+cable_slot_depth = 12.0;   // how far down from the wall top the notch goes
+cable_slot_frac  = 0.15;   // centre along the back wall (0=HDMI end, 1=USB-C end)
 cable_enable     = true;
+
+// -----------------------------------------------------------------------------
+//  DB9 JOYSTICK PORTS  (panel-mount female D-sub, one per side wall)
+//  Joy1 -> left short wall (-X, HDMI end), Joy2 -> right short wall (+X).
+//  Each cutout = a D-shaped aperture + two M3 screw holes (24.99 mm pitch).
+//  Wire the socket solder cups internally to the GPIO joystick pins
+//  (see the main README "Atari DB9 Joystick" wiring table).
+// -----------------------------------------------------------------------------
+db9_enable      = true;
+db9_zone        = 38.0;   // depth (Y) of the rear bay that holds the DB9s + CH9350
+db9_apt_w       = 16.8;   // D aperture: wide dimension (along the screw axis / Y)
+db9_apt_w2      = 14.6;   // D aperture: narrow side (the chamfered "D")
+db9_apt_h       = 9.8;    // D aperture height (along Z)
+db9_screw_pitch = 24.99;  // mounting-hole centre-to-centre (D-sub standard)
+db9_screw_d     = 3.2;    // mounting-hole diameter (M3 / #4-40 clearance)
+db9_y_off       = 0;      // nudge both ports along the wall (Y)
+db9_z_frac      = 0.55;   // vertical centre of the ports as a fraction of height
+db9_body_depth  = 14.0;   // how far the connector body protrudes inward (preview
+                          // + CH9350 clearance reference; not printed)
 
 // -----------------------------------------------------------------------------
 //  CASE BODY
@@ -110,9 +129,12 @@ lip_clear = 0.35;   // clearance so the lid lip slides in
 // -----------------------------------------------------------------------------
 //  DERIVED GEOMETRY
 // -----------------------------------------------------------------------------
-// Interior cavity (boards laid out: Tang along the front, CH9350 behind it)
-inner_x = tn_len + 2*clear;                       // along X
-inner_y = tn_wid + gap_y + ch_wid + 2*clear;      // along Y
+// Interior cavity. Tang sits along the front (its ends pinned to the -X/+X
+// walls for HDMI / USB-C). Behind it is the rear bay holding the CH9350 and,
+// when enabled, the two DB9 ports on the side walls.
+inner_x = tn_len + 2*clear;                       // along X (pinned to board)
+inner_y = db9_enable ? (tn_wid + 2*clear + db9_zone)
+                     : (tn_wid + gap_y + ch_wid + 2*clear);
 inner_h = standoff + tn_thick + headroom;         // floor-top .. wall-top
 
 out_x = inner_x + 2*wall;
@@ -126,10 +148,18 @@ tn_y0 = wall + clear;
 tn_z0 = floor_th + standoff;                 // PCB underside height
 tn_top = tn_z0 + tn_thick;                   // PCB top height
 
-ch_x0 = out_x - wall - clear - ch_len - 4;   // near the +X / USB-C end
-ch_y0 = tn_y0 + tn_wid + gap_y;              // behind the Tang board
+// CH9350: centred against the back wall when DB9s are on (so the side DB9
+// connector bodies clear it); otherwise tucked behind the Tang near +X.
+ch_x0 = db9_enable ? (out_x - ch_len)/2
+                   : (out_x - wall - clear - ch_len - 4);
+ch_y0 = db9_enable ? (out_y - wall - clear - ch_wid)
+                   : (tn_y0 + tn_wid + gap_y);
 ch_z0 = floor_th + standoff;
 ch_top = ch_z0 + ch_thick;
+
+// DB9 port placement: centred along the rear bay (Y), on both side walls.
+db9_y = (tn_y0 + tn_wid + (wall + inner_y)) / 2 + db9_y_off;  // mid rear bay
+db9_z = base_h * db9_z_frac;
 
 // =============================================================================
 //  HELPER MODULES
@@ -170,6 +200,19 @@ module locate_rib(x0, y0, bx, by, z_bottom, z_top, side, len_frac=1) {
             cube([t, by, z_top - z_bottom]);
 }
 
+// D-sub DB9 cutout, built along +X (depth d), centred at local Y=0, Z=0:
+// a D-shaped aperture (wide top, narrow bottom) + two screw holes on the
+// horizontal centreline at the standard 24.99 mm pitch.
+module db9_shape(d) {
+    hull() {
+        translate([0, -db9_apt_w/2,   db9_apt_h/2 - 1]) cube([d, db9_apt_w, 1]);
+        translate([0, -db9_apt_w2/2, -db9_apt_h/2])     cube([d, db9_apt_w2, 1]);
+    }
+    for (s = [-1, 1])
+        translate([0, s*db9_screw_pitch/2, 0]) rotate([0, 90, 0])
+            cylinder(h = d, d = db9_screw_d);
+}
+
 // =============================================================================
 //  CUTOUTS  (subtracted from the base walls)
 // =============================================================================
@@ -203,6 +246,12 @@ module wall_cutouts() {
                    base_h - cable_slot_depth])
             cube([cable_slot_w, wall + 2, cable_slot_depth + 1]);
     }
+
+    // --- DB9 joystick ports : one on each short side wall, in the rear bay ---
+    if (db9_enable) {
+        translate([-1,             db9_y, db9_z]) db9_shape(wall + 2);  // Joy1 (-X)
+        translate([out_x - wall - 1, db9_y, db9_z]) db9_shape(wall + 2);  // Joy2 (+X)
+    }
 }
 
 // =============================================================================
@@ -224,6 +273,7 @@ module base() {
             locate_rib(tn_x0, tn_y0, tn_len, tn_wid, tn_z0, tn_top + rib_h, "ymax");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymin");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmin");
+            locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmax");
         }
         wall_cutouts();
     }
@@ -270,7 +320,9 @@ module lid() {
 //  Print this first to confirm board fit & connector alignment.
 // =============================================================================
 module fitcheck() {
-    fc_h = floor_th + standoff + tn_thick + 3;   // just above the PCB top
+    // tall enough to include the DB9 ports when they are enabled
+    fc_h = db9_enable ? (db9_z + db9_apt_h/2 + db9_screw_d/2 + 3)
+                      : (floor_th + standoff + tn_thick + 3);
     intersection() {
         base();
         translate([-1, -1, -1]) cube([out_x + 2, out_y + 2, fc_h + 1]);
@@ -287,6 +339,11 @@ module assembly() {
         translate([tn_x0, tn_y0, tn_z0]) cube([tn_len, tn_wid, tn_thick]);
     color([0.2, 0.2, 0.7, 0.85])
         translate([ch_x0, ch_y0, ch_z0]) cube([ch_len, ch_wid, ch_thick]);
+    // ghost DB9 connector bodies (shows inward protrusion / CH9350 clearance)
+    if (db9_enable)
+        color([0.3, 0.3, 0.3, 0.7]) for (sx = [wall, out_x - wall - db9_body_depth])
+            translate([sx, db9_y - 15.5, db9_z - 6.5])
+                cube([db9_body_depth, 31, 13]);
     // lid floating above
     color([0.6, 0.6, 0.6, 0.55])
         translate([0, 0, base_h + 14]) lid();

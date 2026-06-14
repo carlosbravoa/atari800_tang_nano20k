@@ -9,6 +9,8 @@ GPIO pins).
 |---|---|
 | ![assembly](img/assembly.png) | ![base](img/base.png) |
 | Exploded preview (lid floating) | Base tray |
+| ![db9](img/db9_side.png) | |
+| Side wall: DB9 joystick port (front) + HDMI below | |
 
 ## What's here
 
@@ -53,18 +55,39 @@ Both boards lie flat in one tray:
   power** and the **microSD slot** exit the right short wall; **S1/S2** are
   reached through holes in the lid; the 4 status **LEDs** show through a window
   in the lid.
-- **CH9350** sits behind it; its **USB-A** port (where you plug the keyboard)
-  exits the back wall.
-- A **cable-exit notch** in the back wall lets the DB9 joystick wires and the
-  Pin-53 keyboard data wire run out to the GPIO header pins / external
-  connectors.
+- **CH9350** sits in the rear bay, centred against the back wall; its **USB-A**
+  port (where you plug the keyboard) exits the back wall.
+- **DB9 joystick ports** — one panel-mount female D-sub on each short side wall
+  (left = Joystick 1 / HDMI end, right = Joystick 2 / USB-C end), in the rear
+  bay. Each is a D-shaped aperture plus two 24.99 mm-pitch screw holes. The
+  connector bodies protrude inward into the rear bay; the CH9350 is centred so
+  they clear it.
+- A small **cable-exit notch** in the back wall corner is handy for the
+  GND / 5 V / Pin-53 wires (or any external wiring).
 
 Boards rest on a 4 mm perimeter shelf (clears the underside microSD slot and
 solder joints) and are located by thin ribs; the lid presses down on top. No
-screws — the lid lip is a friction fit (no mounting holes are needed, and the
-Tang Nano 20K has none anyway).
+screws hold the lid — the lip is a friction fit (no board mounting holes are
+needed, and the Tang Nano 20K has none anyway).
 
-Outer size with defaults: **≈ 60 × 48 × 27 mm**.
+Outer size with defaults: **≈ 60 × 66 × 27 mm** (≈ 60 × 48 × 27 mm with the DB9
+ports turned off — set `db9_enable = false`).
+
+### DB9 joystick ports — wiring & parts
+
+You supply **two panel-mount female DB9 connectors** (solder-cup type) and four
+M3 (or #4-40) screws + nuts. Mount each socket from the inside, screw it to the
+side wall, and wire its pins to the GPIO header per the main
+[README joystick table](../README.md#atari-db9-joystick):
+
+```
+DB9 pin 1 Up    DB9 pin 3 Left   DB9 pin 4 Right   DB9 pin 6 Fire   DB9 pin 8 GND
+Joy1 -> pins 27 / 28 / 29 / 30 / 31     Joy2 -> pins 32 / 41 / 42 / 48 / 77
+```
+
+All active-low; no resistors (internal FPGA pull-ups). Don't wire pin 7 (+5 V).
+Don't print DB9 ports you won't populate — set `db9_enable = false` for the
+smaller keyboard-only case.
 
 ## Key parameters to tune
 
@@ -80,6 +103,11 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | `led_win_*` | LED window | resize/move over your LED row |
 | `cable_slot_*` | rear wire-exit notch | widen / reposition for your wiring |
 | `lip_clear` | lid-to-base fit | increase if the lid is too tight to close |
+| `db9_enable` | DB9 joystick ports on/off | `false` = compact keyboard-only case |
+| `db9_zone` | rear-bay depth | grow if your connector bodies are deep |
+| `db9_apt_w/_w2/_h` | DB9 D-aperture size | match your connector shell |
+| `db9_screw_pitch`, `db9_screw_d` | DB9 mount holes | 24.99 mm is standard; set screw dia |
+| `db9_z_frac`, `db9_y_off` | DB9 position on the wall | centre the ports to taste |
 
 ## Printing
 
