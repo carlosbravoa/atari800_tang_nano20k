@@ -87,32 +87,40 @@ cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C en
 cable_enable     = true;
 
 // -----------------------------------------------------------------------------
-//  VENTILATION (lid top): a field of long slots near the rear, 65XE-style,
-//  with one corner cut on a diagonal (the smooth triangle on the real machine).
+//  LID STYLING (top view, rear -> front):
+//    diagonal vent band  /  "ATARI 800" brand strip  /  Fuji logo + LED window
 // -----------------------------------------------------------------------------
-vent_enable = true;
-vent_x0     = 12.0;   // field extent across the width (X)
-vent_x1     = 47.6;
-vent_y0     = 25.0;   // field front edge (Y)  -- kept clear of the LED window
-vent_y1     = 60.0;   // field rear edge  (Y)  -- "next to the top"
-vent_slot_w = 2.3;    // slot width
-vent_pitch  = 4.0;    // centre-to-centre spacing across X
-vent_diag   = 16.0;   // size of the diagonal smooth corner (0 = square field)
+// Ventilation: a full-width band of 45-degree slots across the rear/top.
+vent_enable   = true;
+vent_margin   = 7.0;    // inset from the side edges (X)
+vent_rear_gap = 6.0;    // gap from the rear edge (Y)
+vent_band_h   = 14.0;   // band height (Y)
+vent_slot_w   = 2.0;    // slot width
+vent_pitch    = 3.6;    // perpendicular spacing between slots
+vent_angle    = 45;     // slot angle (degrees)
 
-// -----------------------------------------------------------------------------
-//  65XE STYLING: sloped/beveled front-top edge + recessed brand strip
-// -----------------------------------------------------------------------------
-front_bevel  = 4.5;   // 45-degree chamfer leg on the front-top edge (0 = none)
-front_inset  = 9.0;   // keep the bevel clear of the front corner screw lugs
+// Brand strip (recessed panel + debossed text) just below the vents.
+brand_enable = true;
+brand_text   = "ATARI 800";
+brand_cx     = 0;       // 0 = auto-centre on the lid
+brand_cy     = 40.0;
+brand_w      = 48.0;
+brand_h      = 10.0;
+brand_depth  = 0.8;
+brand_txt_sz = 6.0;
 
-brand_enable = true;  // recessed label strip on the lid front
-brand_text   = "TANG NANO 20K";   // USE YOUR OWN TEXT - avoid trademarks
-brand_cx     = 23.0;  // strip centre X
-brand_cy     = 15.5;  // strip centre Y
-brand_w      = 33.0;  // strip width
-brand_h      = 8.0;   // strip height
-brand_depth  = 0.7;   // recess depth
-brand_txt_sz = 3.4;   // text size
+// Fuji logo (lower centre/left).
+logo_enable = true;
+logo_w      = 19.0;
+logo_h      = 15.0;
+logo_cx     = 21.0;     // 0 = auto-centre
+logo_cy     = 15.0;
+logo_depth  = 0.8;
+logo_raised = false;    // false = debossed (prints clean lid-face-down)
+
+// Sloped/beveled front-top edge.
+front_bevel = 4.5;      // 45-degree chamfer leg on the front-top edge (0 = none)
+front_inset = 9.0;      // keep the bevel clear of the front corner screw lugs
 
 // -----------------------------------------------------------------------------
 //  DB9 JOYSTICK PORTS  (panel-mount female D-sub, one per side wall)
@@ -227,24 +235,58 @@ module corner_lugs(h) {
         for (p = lug_pts) translate([p[0], p[1], 0]) cylinder(h = h, r = lug_r);
 }
 
-// Field of long ventilation slots (run front-back along Y), packed across X,
-// clipped by a field mask whose rear-left corner is chamfered on the diagonal.
+// Full-width band of parallel 45-degree ventilation slots across the rear/top,
+// clipped to the band rectangle.
 module vent_slots(depth) {
-    r = vent_slot_w/2;
+    vy1 = out_y - vent_rear_gap;
+    vy0 = vy1 - vent_band_h;
+    vx0 = vent_margin;
+    vx1 = out_x - vent_margin;
+    r   = vent_slot_w/2;
+    dx  = vent_pitch / sin(vent_angle);          // horizontal step for slot pitch
+    L   = (vx1 - vx0) + vent_band_h + 10;        // slot length (clipped to band)
+    yc  = (vy0 + vy1)/2;
     intersection() {
         union()
-            for (xi = [vent_x0 + r : vent_pitch : vent_x1 - r])
-                translate([xi, 0, -1])
+            for (x = [vx0 - vent_band_h : dx : vx1 + vent_band_h])
+                translate([x, yc, -1])
                     linear_extrude(depth + 2)
-                        hull() for (yy = [vent_y0 + r, vent_y1 - r])
-                            translate([0, yy]) circle(r);
-        translate([0, 0, -2]) linear_extrude(depth + 4)
-            polygon([[vent_x0,             vent_y0],
-                     [vent_x1,             vent_y0],
-                     [vent_x1,             vent_y1],
-                     [vent_x0 + vent_diag, vent_y1],
-                     [vent_x0,             vent_y1 - vent_diag]]);
+                        rotate(vent_angle)
+                            hull() for (s = [-L/2, L/2]) translate([s, 0]) circle(r);
+        translate([vx0, vy0, -2]) cube([vx1 - vx0, vy1 - vy0, depth + 4]);
     }
+}
+
+// Atari "Fuji" logo (straight centre bar + two flaring side prongs on a base),
+// resize()-d to logo_w x logo_h where it is used.
+module fuji_2d() {
+    d = 11; H = 15; Ri = d; Ro = d + H; off = 15; hw = 6.0; cw = 3.0;
+    intersection() {
+        union() {
+            translate([-cw/2, 0]) square([cw, H]);
+            for (s = [-1, 1]) {
+                ac = 90 + s*off;
+                intersection() {
+                    difference() {
+                        translate([0, -d]) circle(Ro);
+                        translate([0, -d]) circle(Ri);
+                    }
+                    polygon([[0, -d],
+                             [Ro*1.5*cos(ac - hw), -d + Ro*1.5*sin(ac - hw)],
+                             [Ro*1.5*cos(ac + hw), -d + Ro*1.5*sin(ac + hw)]]);
+                }
+            }
+            translate([0, 1.1]) square([2*Ro*cos(90 - off - hw) + 1, 2.2], center = true);
+        }
+        translate([-Ro*1.5, 0]) square([Ro*3, H*1.3]);
+    }
+}
+module fuji_solid(h) {
+    cx = (logo_cx == 0) ? out_x/2 : logo_cx;
+    translate([cx, logo_cy, 0])
+        linear_extrude(height = h)
+            resize([logo_w, logo_h], auto = true)
+                translate([0, 0.4]) fuji_2d();
 }
 
 // 45-degree chamfer along the front-top edge of the CLOSED case (absolute Z),
@@ -261,11 +303,12 @@ module front_bevel_cut() {
 // Recessed brand strip (rounded panel + debossed text) cut into the lid top.
 module brand_cut() {
     if (brand_enable) {
-        translate([brand_cx, brand_cy, lid_th - brand_depth])
+        bx = (brand_cx == 0) ? out_x/2 : brand_cx;
+        translate([bx, brand_cy, lid_th - brand_depth])
             linear_extrude(brand_depth + 1)
                 offset(r = 1.2) square([brand_w - 2.4, brand_h - 2.4], center = true);
         if (brand_text != "")
-            translate([brand_cx, brand_cy, lid_th - brand_depth - 0.4])
+            translate([bx, brand_cy, lid_th - brand_depth - 0.4])
                 linear_extrude(brand_depth + 1.4)
                     text(brand_text, size = brand_txt_sz, font = "Liberation Sans:style=Bold",
                          halign = "center", valign = "center");
@@ -396,12 +439,18 @@ module lid() {
             corner_lugs(lid_th);                                // screw lugs
             translate([wall + lip_clear, wall + lip_clear, -lip_depth])
                 cube([inner_x - 2*lip_clear, inner_y - 2*lip_clear, lip_depth]);
+            // embossed (raised) Fuji logo on the top face
+            if (logo_enable && logo_raised)
+                translate([0, 0, lid_th - 0.01]) fuji_solid(logo_depth);
         }
         // ventilation slots (through the plate)
         if (vent_enable) vent_slots(lid_th);
         // 65XE front bevel + recessed brand strip
         translate([0, 0, -base_h]) front_bevel_cut();
         brand_cut();
+        // debossed (recessed) Fuji logo in the top face
+        if (logo_enable && !logo_raised)
+            translate([0, 0, lid_th - logo_depth]) fuji_solid(logo_depth + 1);
         // hollow the lip so it is a thin rim (saves plastic, clears parts)
         translate([wall + lip_clear + 2, wall + lip_clear + 2, -lip_depth - 1])
             cube([inner_x - 2*lip_clear - 4, inner_y - 2*lip_clear - 4,

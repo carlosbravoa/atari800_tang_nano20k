@@ -14,7 +14,7 @@ GPIO pins).
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
 | Side elevation: DB9 port (rear) + HDMI & microSD (front) | Side 3/4: DB9 port detail |
 | ![section](img/section.png) | ![styled](img/lid_styled.png) |
-| Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | Lid: single row of 45° ventilation slots |
+| Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | Lid: 65XE-style top (vent band / brand strip / Fuji / LED) |
 | ![closed](img/closed.png) | |
 | Closed case | |
 
@@ -126,13 +126,14 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | `screw_pilot_d` | base pilot-hole dia | 2.6 mm = M3 self-tap; widen for inserts |
 | `screw_clear_d`, `screw_head_d/_h` | lid hole + counterbore | match your screw heads |
 | `lug_r`, `lug_off` | lug size / how far it sits out | shrink to reduce footprint |
-| `vent_enable` | top ventilation field | turn the slot field on/off |
-| `vent_x0/x1`, `vent_y0/y1` | field extent (X width, Y front/rear) | size + position the field |
-| `vent_slot_w`, `vent_pitch` | slot width / spacing | tune the look |
-| `vent_diag` | size of the diagonal smooth corner | 0 = square field; larger = bigger 65XE-style chamfer |
+| `vent_enable` | rear diagonal vent band | turn the slot band on/off |
+| `vent_margin`, `vent_rear_gap`, `vent_band_h` | band inset / rear gap / height | size + position the band |
+| `vent_slot_w`, `vent_pitch`, `vent_angle` | slot width / spacing / angle | tune the look (default 45°) |
+| `brand_enable`, `brand_text` | recessed brand strip + text | the label wording |
+| `brand_cx/_cy`, `brand_w/_h`, `brand_depth`, `brand_txt_sz` | strip position / size / depth / text size | tune the label (`brand_cx=0` auto-centres) |
+| `logo_enable`, `logo_raised` | Fuji logo | `raised` embosses (else debossed) |
+| `logo_w/_h`, `logo_cx/_cy`, `logo_depth` | logo size / position / depth | move + scale (`logo_cx=0` auto-centres) |
 | `front_bevel`, `front_inset` | sloped front-top chamfer / keep-out from lugs | 0 = square front edge |
-| `brand_enable`, `brand_text` | recessed front label strip + text | **use your own text — avoid trademarks** |
-| `brand_cx/_cy`, `brand_w/_h`, `brand_depth`, `brand_txt_sz` | strip position / size / depth / text size | tune the label |
 
 ## Printing
 
@@ -161,17 +162,16 @@ Preview parts (no STL): `part="assembly"` (exploded, `show_lid=false` drops the
 lid), `part="section"` (cutaway through the Tang, lid closed), `part="closed"`
 (finished case). Open the `.scad` in the OpenSCAD GUI to tweak interactively.
 
-The lid top has a **65XE-style field of long ventilation slots** near the rear,
-with one corner cut on a diagonal (the smooth triangle on the real machine).
-They are through-cut, so they print clean lid-face-down. Resize/relocate with
-the `vent_*` parameters (`vent_diag = 0` for a plain square field).
+The lid top mimics the **Atari 65XE** layout (rear → front): a **diagonal vent
+band**, an **"ATARI 800" brand strip**, a **Fuji logo**, and the **LED window**,
+with a **sloped (chamfered) front-top edge**. The vents are through-cut and the
+brand/logo are debossed, so it all prints clean lid-face-down. Tune with the
+`vent_*`, `brand_*`, `logo_*` and `front_bevel` parameters.
 
-Two more 65XE nods: a **sloped (chamfered) front-top edge** (`front_bevel`) and
-a **recessed brand strip** on the front (`brand_*`) with debossed text. The text
-defaults to `TANG NANO 20K` — **set `brand_text` to your own wording and avoid
-the Atari trademark/Fuji**. Both features are debossed/through and print clean
-with the lid face-down. (The `front_bevel` is intentionally modest so it clears
-the front LED window; increase it if you move the window.)
+> **Trademark note:** "ATARI", "ATARI 800" and the Fuji logo are Atari's
+> trademarks. This styling is for a **personal build**. Don't sell or
+> redistribute the model or prints. To make it shareable, set
+> `brand_text` to neutral wording and `logo_enable = false`.
 
 ## Notes & ideas
 
