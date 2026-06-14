@@ -87,16 +87,17 @@ cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C en
 cable_enable     = true;
 
 // -----------------------------------------------------------------------------
-//  VENTILATION (lid top): a single row of 45-degree slots
+//  VENTILATION (lid top): a field of long slots near the rear, 65XE-style,
+//  with one corner cut on a diagonal (the smooth triangle on the real machine).
 // -----------------------------------------------------------------------------
-vent_enable   = true;
-vent_yc       = 0;      // row centre Y (0 = auto: centred on the lid)
-vent_x0       = 12.0;   // row extent along X
-vent_x1       = 47.6;
-vent_slot_len = 11.0;   // length of each (diagonal) slot
-vent_slot_w   = 2.4;    // slot width
-vent_pitch    = 6.0;    // centre-to-centre spacing along X
-vent_angle    = 45;     // slot angle (degrees)
+vent_enable = true;
+vent_x0     = 12.0;   // field extent across the width (X)
+vent_x1     = 47.6;
+vent_y0     = 25.0;   // field front edge (Y)  -- kept clear of the LED window
+vent_y1     = 60.0;   // field rear edge  (Y)  -- "next to the top"
+vent_slot_w = 2.3;    // slot width
+vent_pitch  = 4.0;    // centre-to-centre spacing across X
+vent_diag   = 16.0;   // size of the diagonal smooth corner (0 = square field)
 
 // -----------------------------------------------------------------------------
 //  DB9 JOYSTICK PORTS  (panel-mount female D-sub, one per side wall)
@@ -211,20 +212,24 @@ module corner_lugs(h) {
         for (p = lug_pts) translate([p[0], p[1], 0]) cylinder(h = h, r = lug_r);
 }
 
-// Single row of 45-degree ventilation slots across the lid top.
+// Field of long ventilation slots (run front-back along Y), packed across X,
+// clipped by a field mask whose rear-left corner is chamfered on the diagonal.
 module vent_slots(depth) {
-    yc   = (vent_yc == 0) ? out_y * 0.45 : vent_yc;
-    r    = vent_slot_w/2;
-    half = vent_slot_len/2 - r;
-    xext = vent_slot_len*abs(cos(vent_angle)) + vent_slot_w;  // X footprint/slot
-    x0   = vent_x0 + xext/2;
-    x1   = vent_x1 - xext/2;
-    n    = floor((x1 - x0) / vent_pitch);
-    for (i = [0 : n])
-        translate([x0 + i*vent_pitch, yc, -1])
-            linear_extrude(depth + 2)
-                rotate(vent_angle)
-                    hull() for (s = [-half, half]) translate([s, 0]) circle(r);
+    r = vent_slot_w/2;
+    intersection() {
+        union()
+            for (xi = [vent_x0 + r : vent_pitch : vent_x1 - r])
+                translate([xi, 0, -1])
+                    linear_extrude(depth + 2)
+                        hull() for (yy = [vent_y0 + r, vent_y1 - r])
+                            translate([0, yy]) circle(r);
+        translate([0, 0, -2]) linear_extrude(depth + 4)
+            polygon([[vent_x0,             vent_y0],
+                     [vent_x1,             vent_y0],
+                     [vent_x1,             vent_y1],
+                     [vent_x0 + vent_diag, vent_y1],
+                     [vent_x0,             vent_y1 - vent_diag]]);
+    }
 }
 
 // A flat shelf the board rests on: an outer frame minus an inner window,

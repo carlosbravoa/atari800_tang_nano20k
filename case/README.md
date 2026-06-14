@@ -126,9 +126,10 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | `screw_pilot_d` | base pilot-hole dia | 2.6 mm = M3 self-tap; widen for inserts |
 | `screw_clear_d`, `screw_head_d/_h` | lid hole + counterbore | match your screw heads |
 | `lug_r`, `lug_off` | lug size / how far it sits out | shrink to reduce footprint |
-| `vent_enable` | top ventilation slots | turn the slot row on/off |
-| `vent_yc`, `vent_x0/x1` | row position / extent | move + size the row (`vent_yc=0` auto-centres) |
-| `vent_slot_len`, `vent_slot_w`, `vent_pitch`, `vent_angle` | slot length / width / spacing / angle | tune the look (default 45°) |
+| `vent_enable` | top ventilation field | turn the slot field on/off |
+| `vent_x0/x1`, `vent_y0/y1` | field extent (X width, Y front/rear) | size + position the field |
+| `vent_slot_w`, `vent_pitch` | slot width / spacing | tune the look |
+| `vent_diag` | size of the diagonal smooth corner | 0 = square field; larger = bigger 65XE-style chamfer |
 
 ## Printing
 
@@ -157,9 +158,10 @@ Preview parts (no STL): `part="assembly"` (exploded, `show_lid=false` drops the
 lid), `part="section"` (cutaway through the Tang, lid closed), `part="closed"`
 (finished case). Open the `.scad` in the OpenSCAD GUI to tweak interactively.
 
-The lid top has a single row of **45° ventilation slots** (through-cut, so they
-print clean lid-face-down). Resize/rotate/relocate them with the `vent_*`
-parameters.
+The lid top has a **65XE-style field of long ventilation slots** near the rear,
+with one corner cut on a diagonal (the smooth triangle on the real machine).
+They are through-cut, so they print clean lid-face-down. Resize/relocate with
+the `vent_*` parameters (`vent_diag = 0` for a plain square field).
 
 ## Notes & ideas
 
