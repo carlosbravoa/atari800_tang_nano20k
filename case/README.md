@@ -130,6 +130,9 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | `vent_x0/x1`, `vent_y0/y1` | field extent (X width, Y front/rear) | size + position the field |
 | `vent_slot_w`, `vent_pitch` | slot width / spacing | tune the look |
 | `vent_diag` | size of the diagonal smooth corner | 0 = square field; larger = bigger 65XE-style chamfer |
+| `front_bevel`, `front_inset` | sloped front-top chamfer / keep-out from lugs | 0 = square front edge |
+| `brand_enable`, `brand_text` | recessed front label strip + text | **use your own text — avoid trademarks** |
+| `brand_cx/_cy`, `brand_w/_h`, `brand_depth`, `brand_txt_sz` | strip position / size / depth / text size | tune the label |
 
 ## Printing
 
@@ -162,6 +165,13 @@ The lid top has a **65XE-style field of long ventilation slots** near the rear,
 with one corner cut on a diagonal (the smooth triangle on the real machine).
 They are through-cut, so they print clean lid-face-down. Resize/relocate with
 the `vent_*` parameters (`vent_diag = 0` for a plain square field).
+
+Two more 65XE nods: a **sloped (chamfered) front-top edge** (`front_bevel`) and
+a **recessed brand strip** on the front (`brand_*`) with debossed text. The text
+defaults to `TANG NANO 20K` — **set `brand_text` to your own wording and avoid
+the Atari trademark/Fuji**. Both features are debossed/through and print clean
+with the lid face-down. (The `front_bevel` is intentionally modest so it clears
+the front LED window; increase it if you move the window.)
 
 ## Notes & ideas
 
