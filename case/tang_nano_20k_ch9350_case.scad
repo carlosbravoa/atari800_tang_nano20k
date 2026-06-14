@@ -22,7 +22,7 @@
 //     openscad -D 'part="assembly"' ...                 (preview only)
 // =============================================================================
 
-part = "assembly";   // "base" | "lid" | "fitcheck" | "assembly" | "section"
+part = "assembly";   // base | lid | fitcheck | assembly | section | closed
 show_lid = true;     // assembly preview: set false to drop the floating lid
 
 $fn = 56;
@@ -85,6 +85,27 @@ cable_slot_w     = 18.0;
 cable_slot_depth = 12.0;   // how far down from the wall top the notch goes
 cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C end)
 cable_enable     = true;
+
+// -----------------------------------------------------------------------------
+//  ATARI XE STYLING (lid top): "Fuji" logo relief + ventilation slot grid
+// -----------------------------------------------------------------------------
+logo_enable = true;
+logo_w      = 23.0;   // logo bounding width  (X)
+logo_h      = 16.0;   // logo bounding height (Y)
+logo_cx     = 0;      // centre X (0 = auto: centred on the lid)
+logo_cy     = 19.0;   // centre Y
+logo_depth  = 0.9;    // relief depth/height
+logo_raised = false;  // false = debossed (prints clean lid-face-down);
+                      // true  = embossed (print lid face-up / multi-material)
+
+vent_enable = true;
+vent_x0     = 11.0;   // ventilation field: X range on the lid
+vent_x1     = 48.6;
+vent_y0     = 36.0;   // Y range (rear half, behind the logo)
+vent_y1     = 60.0;
+vent_slot_w = 2.2;    // slot width (Y)
+vent_pitch  = 4.4;    // row-to-row spacing (Y)
+vent_gap    = 6.0;    // central solid spine between the two slot columns (X)
 
 // -----------------------------------------------------------------------------
 //  DB9 JOYSTICK PORTS  (panel-mount female D-sub, one per side wall)
@@ -197,6 +218,64 @@ module rrect_prism(sx, sy, sz, r) {
 module corner_lugs(h) {
     if (screw_enable)
         for (p = lug_pts) translate([p[0], p[1], 0]) cylinder(h = h, r = lug_r);
+}
+
+// Atari "Fuji" logo as a 2D shape, centred horizontally, baseline at y=0.
+// Straight central bar + two annular side prongs that flare outward, tied
+// together by a base bar. resize()-d to logo_w x logo_h where it is used.
+module fuji_2d() {
+    d   = 11;            // arc centre below the baseline (larger = more vertical)
+    H   = 15;            // nominal height
+    Ri  = d;             // inner radius (prong feet sit on the baseline)
+    Ro  = d + H;         // outer radius (centre prong tip)
+    off = 15;            // side-prong lean from vertical (deg)
+    hw  = 6.0;           // side-prong angular half-width (deg)
+    cw  = 3.0;           // central bar width
+    intersection() {
+        union() {
+            // central straight bar
+            translate([-cw/2, 0]) square([cw, H]);
+            // two flaring side prongs (annulus sectors about a point below)
+            for (s = [-1, 1]) {
+                ac = 90 + s*off;
+                intersection() {
+                    difference() {
+                        translate([0, -d]) circle(Ro);
+                        translate([0, -d]) circle(Ri);
+                    }
+                    polygon([[0, -d],
+                             [Ro*1.5*cos(ac - hw), -d + Ro*1.5*sin(ac - hw)],
+                             [Ro*1.5*cos(ac + hw), -d + Ro*1.5*sin(ac + hw)]]);
+                }
+            }
+            // base bar tying all three prongs together
+            translate([0, 1.1]) square([2*Ro*cos(90 - off - hw) + 1, 2.2],
+                                        center = true);
+        }
+        // clip everything to the baseline (y >= 0)
+        translate([-Ro*1.5, 0]) square([Ro*3, H*1.3]);
+    }
+}
+
+// Place the logo centred at (cx,cy); positive dz = emboss, modelled flat for
+// subtraction/union by the caller via linear_extrude.
+module fuji_solid(h) {
+    cx = (logo_cx == 0) ? out_x/2 : logo_cx;
+    translate([cx, logo_cy, 0])
+        linear_extrude(height = h)
+            resize([logo_w, logo_h], auto = true)
+                translate([0, 0.4]) fuji_2d();
+}
+
+// Ventilation slot grid for the lid (rounded-end slots in two columns).
+module vent_slots(depth) {
+    spine_l = (vent_x0 + vent_x1)/2 - vent_gap/2;   // left column right edge
+    spine_r = (vent_x0 + vent_x1)/2 + vent_gap/2;   // right column left edge
+    r = vent_slot_w/2;
+    for (yy = [vent_y0 : vent_pitch : vent_y1])
+        for (seg = [[vent_x0, spine_l], [spine_r, vent_x1]])
+            hull() for (xx = [seg[0] + r, seg[1] - r])
+                translate([xx, yy, -1]) cylinder(h = depth + 2, r = r);
 }
 
 // A flat shelf the board rests on: an outer frame minus an inner window,
@@ -322,7 +401,15 @@ module lid() {
             corner_lugs(lid_th);                                // screw lugs
             translate([wall + lip_clear, wall + lip_clear, -lip_depth])
                 cube([inner_x - 2*lip_clear, inner_y - 2*lip_clear, lip_depth]);
+            // embossed (raised) Atari logo on the top face
+            if (logo_enable && logo_raised)
+                translate([0, 0, lid_th - 0.01]) fuji_solid(logo_depth);
         }
+        // ventilation slot grid (through the plate)
+        if (vent_enable) vent_slots(lid_th);
+        // debossed (recessed) Atari logo in the top face
+        if (logo_enable && !logo_raised)
+            translate([0, 0, lid_th - logo_depth]) fuji_solid(logo_depth + 1);
         // hollow the lip so it is a thin rim (saves plastic, clears parts)
         translate([wall + lip_clear + 2, wall + lip_clear + 2, -lip_depth - 1])
             cube([inner_x - 2*lip_clear - 4, inner_y - 2*lip_clear - 4,
@@ -419,4 +506,6 @@ if (part == "base")          base();
 else if (part == "lid")      lid();
 else if (part == "fitcheck") fitcheck();
 else if (part == "section")  section();
+else if (part == "closed") { color("DarkSlateGray") base();
+                             color([0.7,0.7,0.7]) translate([0,0,base_h]) lid(); }
 else                         assembly();

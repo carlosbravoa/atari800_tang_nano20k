@@ -13,8 +13,10 @@ GPIO pins).
 | Base tray | Rear 3/4: USB-A + cable notch (back wall), DB9 on each side |
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
 | Side elevation: DB9 port (rear) + HDMI & microSD (front) | Side 3/4: DB9 port detail |
-| ![section](img/section.png) | |
-| Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | |
+| ![section](img/section.png) | ![styled](img/lid_styled.png) |
+| Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | Atari XE styling: vent grid + Fuji logo relief (shown raised) |
+| ![closed](img/closed.png) | |
+| Closed case | |
 
 ## What's here
 
@@ -124,6 +126,11 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | `screw_pilot_d` | base pilot-hole dia | 2.6 mm = M3 self-tap; widen for inserts |
 | `screw_clear_d`, `screw_head_d/_h` | lid hole + counterbore | match your screw heads |
 | `lug_r`, `lug_off` | lug size / how far it sits out | shrink to reduce footprint |
+| `logo_enable`, `logo_raised` | Atari Fuji relief | `raised` embosses (see note); default debossed |
+| `logo_w/_h`, `logo_cx/_cy`, `logo_depth` | logo size / position / depth | move + scale the badge |
+| `vent_enable` | top ventilation grid | turn the slot grid on/off |
+| `vent_x0/x1`, `vent_y0/y1` | vent field extents | resize the grid |
+| `vent_slot_w`, `vent_pitch`, `vent_gap` | slot width / spacing / centre spine | tune the look |
 
 ## Printing
 
@@ -149,8 +156,18 @@ openscad -D 'part="fitcheck"' -o stl/fitcheck.stl tang_nano_20k_ch9350_case.scad
 ```
 
 Preview parts (no STL): `part="assembly"` (exploded, `show_lid=false` drops the
-lid), `part="section"` (cutaway through the Tang with the lid closed). Open the
-`.scad` in the OpenSCAD GUI to tweak any parameter interactively.
+lid), `part="section"` (cutaway through the Tang, lid closed), `part="closed"`
+(finished case). Open the `.scad` in the OpenSCAD GUI to tweak interactively.
+
+### Atari XE styling — logo: debossed vs raised
+
+The lid has a top **ventilation slot grid** and an **Atari "Fuji" logo relief**.
+The lid prints **top-face-down** (no supports), so the logo defaults to
+**debossed** (recessed) — which prints clean in that orientation. The preview
+images show it **raised** (`logo_raised = true`) just so it's clearly visible;
+only set `logo_raised = true` if you print the lid face-up or do a
+filament-swap/multi-material top, otherwise the raised relief would print into
+the bed.
 
 ## Notes & ideas
 
