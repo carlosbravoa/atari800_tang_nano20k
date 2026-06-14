@@ -7,10 +7,12 @@ GPIO pins).
 
 | | |
 |---|---|
-| ![assembly](img/assembly.png) | ![base](img/base.png) |
-| Exploded preview (lid floating) | Base tray |
-| ![db9](img/db9_side.png) | |
-| Side wall: DB9 joystick port (front) + HDMI below | |
+| ![assembly](img/assembly.png) | ![top](img/top_plan.png) |
+| Exploded preview (lid floating) | Top-down plan (lid off): Tang front, CH9350 centred back, DB9 bodies on the sides |
+| ![base](img/base.png) | ![back](img/back.png) |
+| Base tray | Rear 3/4: USB-A + cable notch (back wall), DB9 on each side |
+| ![side](img/side_left.png) | ![db9](img/db9_side.png) |
+| Side elevation: DB9 port (rear) + HDMI & microSD (front) | Side 3/4: DB9 port detail |
 
 ## What's here
 

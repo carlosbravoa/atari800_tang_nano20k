@@ -23,6 +23,7 @@
 // =============================================================================
 
 part = "assembly";   // "base" | "lid" | "fitcheck" | "assembly"
+show_lid = true;     // assembly preview: set false to drop the floating lid
 
 $fn = 56;
 
@@ -118,6 +119,8 @@ headroom  = 18.0;   // clear height ABOVE the Tang PCB top: room for soldered
 
 clear     = 0.4;    // XY fit clearance around each board
 gap_y     = 3.0;    // gap between the Tang board and the CH9350 board
+conn_drop = 1.0;    // edge connectors sit ABOVE the PCB; opening starts this
+                    // far below the PCB top and extends up by its height
 
 ledge_w   = 2.0;    // width of the perimeter shelf the boards rest on
 rib_h     = 2.5;    // height of locating ribs above the board top
@@ -217,14 +220,14 @@ module db9_shape(d) {
 //  CUTOUTS  (subtracted from the base walls)
 // =============================================================================
 module wall_cutouts() {
-    // --- Tang HDMI : -X wall, centred on Tang width ---
+    // --- Tang HDMI : -X wall, centred on Tang width (opening above PCB) ---
     hdmi_cy = tn_y0 + tn_wid/2 + hdmi_y_off;
-    translate([-1, hdmi_cy - hdmi_w/2, tn_top - hdmi_h + 1.0])
+    translate([-1, hdmi_cy - hdmi_w/2, tn_top - conn_drop])
         cube([wall + 2, hdmi_w, hdmi_h]);
 
-    // --- Tang USB-C : +X wall ---
+    // --- Tang USB-C : +X wall (opening above PCB) ---
     usbc_cy = tn_y0 + tn_wid/2 + usbc_y_off;
-    translate([out_x - wall - 1, usbc_cy - usbc_w/2, tn_top - usbc_h + 1.0])
+    translate([out_x - wall - 1, usbc_cy - usbc_w/2, tn_top - conn_drop])
         cube([wall + 2, usbc_w, usbc_h]);
 
     // --- Tang microSD : +X wall, at board underside ---
@@ -234,9 +237,9 @@ module wall_cutouts() {
             cube([wall + 2, sd_w, sd_h + 1]);
     }
 
-    // --- CH9350 USB-A : +Y (back) wall ---
+    // --- CH9350 USB-A : +Y (back) wall (opening above PCB) ---
     usba_cx = ch_x0 + ch_len/2;
-    translate([usba_cx - usba_w/2, out_y - wall - 1, ch_top + usba_z_off - usba_h + 1.0])
+    translate([usba_cx - usba_w/2, out_y - wall - 1, ch_top + usba_z_off - conn_drop])
         cube([usba_w, wall + 2, usba_h]);
 
     // --- Rear cable-exit notch : open slot in the top of the +Y wall ---
@@ -345,8 +348,9 @@ module assembly() {
             translate([sx, db9_y - 15.5, db9_z - 6.5])
                 cube([db9_body_depth, 31, 13]);
     // lid floating above
-    color([0.6, 0.6, 0.6, 0.55])
-        translate([0, 0, base_h + 14]) lid();
+    if (show_lid)
+        color([0.6, 0.6, 0.6, 0.55])
+            translate([0, 0, base_h + 14]) lid();
 }
 
 // -----------------------------------------------------------------------------
