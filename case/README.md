@@ -13,6 +13,8 @@ GPIO pins).
 | Base tray | Rear 3/4: USB-A + cable notch (back wall), DB9 on each side |
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
 | Side elevation: DB9 port (rear) + HDMI & microSD (front) | Side 3/4: DB9 port detail |
+| ![section](img/section.png) | |
+| Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | |
 
 ## What's here
 
@@ -68,12 +70,20 @@ Both boards lie flat in one tray:
   GND / 5 V / Pin-53 wires (or any external wiring).
 
 Boards rest on a 4 mm perimeter shelf (clears the underside microSD slot and
-solder joints) and are located by thin ribs; the lid presses down on top. No
-screws hold the lid — the lip is a friction fit (no board mounting holes are
-needed, and the Tang Nano 20K has none anyway).
+solder joints) and are located by thin ribs (no board mounting holes are
+needed, and the Tang Nano 20K has none anyway). See the **cutaway** above for
+how the PCB, standoff gap, headroom and lid stack up.
 
-Outer size with defaults: **≈ 60 × 66 × 27 mm** (≈ 60 × 48 × 27 mm with the DB9
-ports turned off — set `db9_enable = false`).
+The lid **screws down** with **4 × M3 self-tapping screws** into four external
+corner lugs (the interior is too packed for internal posts). The base lugs have
+pilot holes; the lid lugs have counterbored clearance holes so the heads sit
+flush. A perimeter lip also locates the lid. Screws ~12–16 mm long; or use
+machine screws into heat-set inserts (open up `screw_pilot_d` to the insert
+bore). Set `screw_enable = false` to drop the lugs and use the lip as a plain
+friction fit.
+
+Outer size with defaults: **box ≈ 60 × 66 × 27 mm**, **≈ 72 × 78 mm including
+the corner lugs** (turn DB9 off with `db9_enable = false` for a ~60 × 48 box).
 
 ### DB9 joystick ports — wiring & parts
 
@@ -110,6 +120,10 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | `db9_apt_w/_w2/_h` | DB9 D-aperture size | match your connector shell |
 | `db9_screw_pitch`, `db9_screw_d` | DB9 mount holes | 24.99 mm is standard; set screw dia |
 | `db9_z_frac`, `db9_y_off` | DB9 position on the wall | centre the ports to taste |
+| `screw_enable` | corner screw lugs on/off | `false` = friction-fit lid (no lugs) |
+| `screw_pilot_d` | base pilot-hole dia | 2.6 mm = M3 self-tap; widen for inserts |
+| `screw_clear_d`, `screw_head_d/_h` | lid hole + counterbore | match your screw heads |
+| `lug_r`, `lug_off` | lug size / how far it sits out | shrink to reduce footprint |
 
 ## Printing
 
@@ -120,7 +134,8 @@ Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
 | Walls / perimeters | 3 |
 | Infill | 15–20 % |
 | Supports | **none needed** — both parts print flat (base floor-down, lid plate-down) |
-| Orientation | base: cavity up; lid: top plate on the bed, lip up |
+| Orientation | base: cavity up; lid: top plate **on the bed** (lip + lugs up) so the counterbores print clean |
+| Hardware | 4 × M3 self-tapping screws ~12–16 mm (optional: heat-set inserts) |
 
 ## Re-generating the STLs
 
@@ -133,13 +148,16 @@ openscad -D 'part="lid"'      -o stl/lid.stl      tang_nano_20k_ch9350_case.scad
 openscad -D 'part="fitcheck"' -o stl/fitcheck.stl tang_nano_20k_ch9350_case.scad
 ```
 
-Open the `.scad` in the OpenSCAD GUI to preview/tweak interactively (the
-`part="assembly"` default shows both boards ghosted inside the case).
+Preview parts (no STL): `part="assembly"` (exploded, `show_lid=false` drops the
+lid), `part="section"` (cutaway through the Tang with the lid closed). Open the
+`.scad` in the OpenSCAD GUI to tweak any parameter interactively.
 
 ## Notes & ideas
 
-- DB9 joysticks: the notch just lets the Dupont wires escape. If you want
-  panel-mounted DB9 sockets, widen a side wall and add rectangular cutouts
-  (easy to add as another `cube()` subtraction in `wall_cutouts()`).
-- The lid is a friction fit; if you prefer screws, add four corner bosses —
-  ask and I can extend the model.
+- The boards have no mounting holes; they're held by the perimeter shelf +
+  locating ribs and clamped by the closed lid.
+- DB9 ports are full panel-mount sockets (D-aperture + screw holes). If you'd
+  rather just route bare joystick wires out, set `db9_enable = false` and widen
+  `cable_slot_w`.
+- Want a hinged or snap-fit lid, vent slots, or panel-mount sockets for power
+  instead of bare USB-C — ask and I can extend the model.

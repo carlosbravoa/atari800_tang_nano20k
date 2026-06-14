@@ -22,7 +22,7 @@
 //     openscad -D 'part="assembly"' ...                 (preview only)
 // =============================================================================
 
-part = "assembly";   // "base" | "lid" | "fitcheck" | "assembly"
+part = "assembly";   // "base" | "lid" | "fitcheck" | "assembly" | "section"
 show_lid = true;     // assembly preview: set false to drop the floating lid
 
 $fn = 56;
@@ -83,7 +83,7 @@ led_enable  = true;
 // Open notch in the top of the back wall.
 cable_slot_w     = 18.0;
 cable_slot_depth = 12.0;   // how far down from the wall top the notch goes
-cable_slot_frac  = 0.15;   // centre along the back wall (0=HDMI end, 1=USB-C end)
+cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C end)
 cable_enable     = true;
 
 // -----------------------------------------------------------------------------
@@ -130,6 +130,21 @@ lip_depth = 6.0;    // how deep the lid lip plugs into the base
 lip_clear = 0.35;   // clearance so the lid lip slides in
 
 // -----------------------------------------------------------------------------
+//  SCREW-DOWN LID  (four external corner lugs; M3 self-tapping)
+//  The interior is packed (boards + DB9 bodies), so the lugs sit OUTSIDE the
+//  corners. Base lugs get a pilot hole; lid lugs a counterbored clearance hole.
+//  Use 4x M3 self-tapping screws ~12-16 mm long (or M3 machine screws into
+//  heat-set inserts — open up screw_pilot_d to the insert's bore).
+// -----------------------------------------------------------------------------
+screw_enable  = true;
+lug_r         = 4.4;    // corner lug radius
+lug_off       = 1.6;    // how far the lug centre sits outside each corner (/axis)
+screw_pilot_d = 2.6;    // base pilot hole (M3 self-tap into PLA/PETG)
+screw_clear_d = 3.4;    // lid through-hole (M3 clearance)
+screw_head_d  = 6.2;    // lid counterbore diameter (screw head)
+screw_head_h  = 2.4;    // lid counterbore depth
+
+// -----------------------------------------------------------------------------
 //  DERIVED GEOMETRY
 // -----------------------------------------------------------------------------
 // Interior cavity. Tang sits along the front (its ends pinned to the -X/+X
@@ -164,6 +179,10 @@ ch_top = ch_z0 + ch_thick;
 db9_y = (tn_y0 + tn_wid + (wall + inner_y)) / 2 + db9_y_off;  // mid rear bay
 db9_z = base_h * db9_z_frac;
 
+// Corner screw-lug centres (just outside each corner so they miss the boards).
+lug_pts = [[-lug_off, -lug_off], [out_x + lug_off, -lug_off],
+           [out_x + lug_off, out_y + lug_off], [-lug_off, out_y + lug_off]];
+
 // =============================================================================
 //  HELPER MODULES
 // =============================================================================
@@ -172,6 +191,12 @@ db9_z = base_h * db9_z_frac;
 module rrect_prism(sx, sy, sz, r) {
     hull() for (mx = [r, sx-r], my = [r, sy-r])
         translate([mx, my, 0]) cylinder(h = sz, r = r);
+}
+
+// Four solid corner lugs (height h), blended into the corner with a small gusset.
+module corner_lugs(h) {
+    if (screw_enable)
+        for (p = lug_pts) translate([p[0], p[1], 0]) cylinder(h = h, r = lug_r);
 }
 
 // A flat shelf the board rests on: an outer frame minus an inner window,
@@ -269,6 +294,7 @@ module base() {
                 translate([wall, wall, floor_th])
                     cube([inner_x, inner_y, base_h]);   // open-top cavity
             }
+            corner_lugs(base_h);
             // board support shelves
             support_ledge(tn_x0, tn_y0, tn_len, tn_wid, floor_th, tn_z0, ledge_w);
             support_ledge(ch_x0, ch_y0, ch_len, ch_wid, floor_th, ch_z0, ledge_w);
@@ -279,6 +305,10 @@ module base() {
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmax");
         }
         wall_cutouts();
+        // pilot holes in the corner lugs (leave the floor solid)
+        if (screw_enable)
+            for (p = lug_pts) translate([p[0], p[1], floor_th])
+                cylinder(h = base_h, d = screw_pilot_d);
     }
 }
 
@@ -289,6 +319,7 @@ module lid() {
     difference() {
         union() {
             rrect_prism(out_x, out_y, lid_th, fillet);          // top plate
+            corner_lugs(lid_th);                                // screw lugs
             translate([wall + lip_clear, wall + lip_clear, -lip_depth])
                 cube([inner_x - 2*lip_clear, inner_y - 2*lip_clear, lip_depth]);
         }
@@ -315,6 +346,13 @@ module lid() {
                        -lip_depth - 1])
                 cube([cable_slot_w, wall + lip_clear + 5, lip_depth + 2]);
         }
+        // counterbored clearance holes through the corner lugs
+        if (screw_enable)
+            for (p = lug_pts) translate([p[0], p[1], -1]) {
+                cylinder(h = lid_th + 2, d = screw_clear_d);
+                translate([0, 0, lid_th - screw_head_h + 1])
+                    cylinder(h = screw_head_h + 1, d = screw_head_d);
+            }
     }
 }
 
@@ -329,6 +367,29 @@ module fitcheck() {
     intersection() {
         base();
         translate([-1, -1, -1]) cube([out_x + 2, out_y + 2, fc_h + 1]);
+    }
+}
+
+// =============================================================================
+//  SECTION  (cutaway through the Tang, lid closed) — shows how it all stacks:
+//  floor -> standoff gap -> shelf + PCB -> headroom -> closed lid.
+// =============================================================================
+module boards_ghost() {
+    color([0.10, 0.55, 0.20]) translate([tn_x0, tn_y0, tn_z0])
+        cube([tn_len, tn_wid, tn_thick]);
+    color([0.20, 0.20, 0.75]) translate([ch_x0, ch_y0, ch_z0])
+        cube([ch_len, ch_wid, ch_thick]);
+}
+module section() {
+    cut_y = tn_y0 + tn_wid*0.6;
+    difference() {
+        union() {
+            color("DarkSlateGray") base();
+            boards_ghost();
+            color([0.7, 0.7, 0.7]) translate([0, 0, base_h]) lid();  // closed
+        }
+        translate([-60, cut_y, -60])
+            cube([out_x + 120, out_y + 120, base_h + 120]);          // keep front
     }
 }
 
@@ -357,4 +418,5 @@ module assembly() {
 if (part == "base")          base();
 else if (part == "lid")      lid();
 else if (part == "fitcheck") fitcheck();
+else if (part == "section")  section();
 else                         assembly();
