@@ -53,9 +53,9 @@ usbc_w      = 12.0;
 usbc_h      = 6.0;
 usbc_y_off  = 0;
 
-// Tang Nano 20K : microSD / TF slot. It is on the *opposite* PCB face from the
-//   HDMI/USB-C/buttons. With the board flipped component-side-down (pins up),
-//   the SD slot faces UP, so its opening sits just ABOVE the PCB on the +X wall.
+// Tang Nano 20K : microSD / TF slot. It is on the underside at the USB-C (+X)
+//   END. With the board flipped pins-up, that face points UP, so the opening
+//   sits just ABOVE the PCB on the +X wall (stacked over the USB-C opening).
 sd_w        = 14.0;  // opening width  (along Y)
 sd_h        = 3.0;   // opening height (along Z)
 sd_y_off    = 0;
@@ -68,18 +68,20 @@ usba_z_off  = 0;     // raise/lower the opening relative to the CH9350 PCB top
 
 // FLOOR push holes for the Tang Nano S1 / S2 buttons. The board is mounted
 // component-side-DOWN, so the buttons face the floor and are poked from below.
-// Positions are in Tang board coordinates (x from HDMI end, y from front edge);
-// the Y is mirrored at build time because the board is flipped (see flip_y()).
+// From the board photo: both buttons sit at the USB-C end, on OPPOSITE long
+// edges. Coords are component-side-up (x from HDMI end, y from one long edge);
+// flip_y() mirrors Y for the floor since the board is flipped. Fine-tune to yours.
 btn_hole_d  = 4.5;
-btn1_x      = 49.0;  btn1_y = 6.0;    // S1 (reset)  -- ESTIMATE, calibrate
-btn2_x      = 49.0;  btn2_y = 16.0;   // S2 (OSD)    -- ESTIMATE, calibrate
+btn1_x      = 51.0;  btn1_y = 2.5;    // S1 (one long edge, by USB-C)
+btn2_x      = 51.0;  btn2_y = 20.0;   // S2 (other long edge, by USB-C)
 btn_enable  = true;
 
-// LED viewing window in the FLOOR (the 4 status LEDs face down with the board).
-led_win_x   = 40.0;  // start (Tang X)   -- ESTIMATE, calibrate
+// LED viewing window in the FLOOR. From the photo: a row of LEDs along the S1
+// long edge, just inboard of S1, near the USB-C end. (component-side-up coords)
+led_win_x   = 36.0;  // start (Tang X, from HDMI end)
 led_win_len = 12.0;  // length along X
-led_win_y   = 2.0;   // start (Tang Y)
-led_win_wid = 18.5;  // width along Y
+led_win_y   = 1.5;   // start (Tang Y, from the S1 long edge)
+led_win_wid = 4.5;   // width along Y
 led_enable  = true;
 
 // Rear cable-exit slot (handy for the GND/5V/Pin-53 wires, or external wiring).
@@ -439,7 +441,8 @@ module wall_cutouts() {
     translate([out_x - wall - 1, usbc_cy - usbc_w/2, conn_top - usbc_h])
         cube([wall + 2, usbc_w, usbc_h]);
 
-    // --- Tang microSD : +X wall, now on the UP-facing side (just above PCB) ---
+    // --- Tang microSD : +X (USB-C-end) wall, on the UP-facing side (above PCB,
+    //     stacked over the USB-C opening) ---
     if (sd_enable) {
         sd_cy = tn_y0 + tn_wid/2 + sd_y_off;
         translate([out_x - wall - 1, sd_cy - sd_w/2, tn_top - 0.5])
