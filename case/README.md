@@ -15,6 +15,8 @@ GPIO pins).
 | −X wall: HDMI **low** (front) + DB9 (rear) — Tang is component-side-down | Side 3/4: DB9 port detail |
 | ![section](img/section.png) | ![styled](img/lid_styled.png) |
 | Cutaway: connector gap below the PCB, pins-up headroom above, closed lid | Lid: 65XE-style top (vent band / brand strip / Fuji) — a plain cover now |
+| ![floor](img/floor.png) | ![front](img/front_wall.png) |
+| Floor: S1/S2 poke-holes + LED window (board faces down) + feet | Front wall: LED side slot (see the LEDs from the side too) |
 | ![closed](img/closed.png) | |
 | Closed case | |
 
