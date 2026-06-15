@@ -71,22 +71,26 @@ usba_z_off  = 0;     // raise/lower the opening relative to the CH9350 PCB top
 
 // FLOOR push holes for the Tang Nano S1 / S2 buttons. The board is mounted
 // component-side-DOWN, so the buttons face the floor and are poked from below.
-// From the board photo: both buttons sit at the USB-C end, on OPPOSITE long
-// edges. Coords are component-side-up (x from HDMI end, y from one long edge);
-// flip_y() mirrors Y for the floor since the board is flipped. Fine-tune to yours.
+// From the board photo: both buttons sit at the USB-C end on OPPOSITE long
+// edges. Coords are board-local (x from HDMI end, y from the front/-Y edge);
+// the pins-up mount preserves board Y, so they map straight through (no mirror).
+// S1 is on the FRONT (-Y) edge with the LEDs; S2 on the back edge.
 btn_hole_d  = 4.5;
-btn1_x      = 49.0;  btn1_y = 5.0;     // S1: 5 mm from USB-C end, 5 mm off its edge
-btn2_x      = 49.0;  btn2_y = 17.55;   // S2: 5 mm from USB-C end, 5 mm off its edge
+btn1_x      = 49.0;  btn1_y = 5.0;     // S1: 5 mm from USB-C end, 5 mm off front edge
+btn2_x      = 49.0;  btn2_y = 17.55;   // S2: 5 mm from USB-C end, 5 mm off back edge
 btn_enable  = true;
 
-// LED viewing window in the FLOOR. Measured: LED cluster sits ~8.5 mm in from
-// the USB-C short edge (board-x ~45.5), ~2 mm off the S1 edge, and a few mm
-// clear of the S1 button (which is at x=49). Distinct strip, NOT under S1.
-led_win_x   = 43.5;  // start (Tang X, from HDMI end)  -> ends at 46.5, before S1
-led_win_len = 3.0;   // length along X
-led_win_y   = 0.75;  // start (Tang Y, from the S1 long edge)
-led_win_wid = 2.5;   // width along Y
+// LED row in the FLOOR, IN LINE with S1: after S1, a 3.5 mm gap, then 6 LEDs
+// spanning 8.5 mm toward the HDMI end. Same Y as S1 (collinear), front edge.
+led_win_x   = 35.25; // start (Tang X, from HDMI end) -> row runs 35.25..43.75
+led_win_len = 8.5;   // length along X (the 6-LED span)
+led_win_y   = 4.0;   // start (Tang Y) -> centred on the S1 line (btn1_y = 5)
+led_win_wid = 2.0;   // width along Y
 led_enable  = true;
+// Extra slot in the FRONT (-Y) wall aligned with the LED row, to also see the
+// down-facing LEDs from the side. Reaches back through the shelf to the LEDs.
+led_side_enable = true;
+led_side_h      = 6.0;   // slot height (Z), top aligned with the PCB underside
 
 // Rear cable-exit slot (handy for the GND/5V/Pin-53 wires, or external wiring).
 // Open notch in the top of the back wall.
@@ -237,9 +241,9 @@ tn_y0 = wall + clear;
 tn_z0 = floor_th + standoff;                 // PCB underside = COMPONENT face
 tn_top = tn_z0 + tn_thick;                   // PCB top = pins/SD face
 
-// The Tang is flipped component-side-down about the X axis (HDMI stays on -X),
-// which mirrors board-local Y. Use this for off-centre, face-specific features.
-function flip_y(y) = tn_wid - y;
+// Mounting pins-up (component-side-down) while keeping HDMI on the -X wall
+// mirrors board X but PRESERVES board Y, so feature Y-coords map straight
+// through (no mirroring). It just turns the component face toward the floor.
 
 // CH9350: long axis along X, right-aligned so its short-end dual-USB stack sits
 // against the +X wall; placed in the middle band behind the Tang.
@@ -471,18 +475,22 @@ module wall_cutouts() {
             cube([wall + 2, sd_w, (tn_top + sd_h) - tn_z0]);
     }
 
-    // --- Tang S1/S2 buttons : poke-holes in the FLOOR (board faces down). The
-    //     board is flipped, so the board-local Y is mirrored. ---
+    // --- Tang S1/S2 buttons : poke-holes in the FLOOR (board faces down) ---
     if (btn_enable)
         for (b = [[btn1_x, btn1_y], [btn2_x, btn2_y]])
-            translate([tn_x0 + b[0], tn_y0 + flip_y(b[1]), -1])
+            translate([tn_x0 + b[0], tn_y0 + b[1], -1])
                 cylinder(h = floor_th + 2, d = btn_hole_d);
 
-    // --- Tang status LEDs : viewing window in the FLOOR (mirrored Y) ---
+    // --- Tang status LEDs : viewing window in the FLOOR ---
     if (led_enable)
-        translate([tn_x0 + led_win_x,
-                   tn_y0 + flip_y(led_win_y + led_win_wid), -1])
+        translate([tn_x0 + led_win_x, tn_y0 + led_win_y, -1])
             cube([led_win_len, led_win_wid, floor_th + 2]);
+
+    // --- LED side slot : in the FRONT (-Y) wall, aligned with the LED row,
+    //     reaching back through the shelf so the LEDs are visible from the side ---
+    if (led_enable && led_side_enable)
+        translate([tn_x0 + led_win_x, -1, tn_z0 - led_side_h])
+            cube([led_win_len, tn_y0 + shelf_grip + 3, led_side_h]);
 
     // --- CH9350 dual USB-A : +X side wall, in the CH9350 band (above PCB) ---
     usba_cy = ch_y0 + ch_wid/2;
