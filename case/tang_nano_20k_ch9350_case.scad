@@ -53,8 +53,9 @@ usbc_w      = 12.0;
 usbc_h      = 6.0;
 usbc_y_off  = 0;
 
-// Tang Nano 20K : microSD / TF slot, also on the +X end, below the PCB
-//   (card is inserted under the board). Slot sits at the board bottom.
+// Tang Nano 20K : microSD / TF slot. It is on the *opposite* PCB face from the
+//   HDMI/USB-C/buttons. With the board flipped component-side-down (pins up),
+//   the SD slot faces UP, so its opening sits just ABOVE the PCB on the +X wall.
 sd_w        = 14.0;  // opening width  (along Y)
 sd_h        = 3.0;   // opening height (along Z)
 sd_y_off    = 0;
@@ -65,14 +66,16 @@ usba_w      = 14.5;  // connector width
 usba_h      = 16.5;  // connector height (tall: two stacked ports)
 usba_z_off  = 0;     // raise/lower the opening relative to the CH9350 PCB top
 
-// Top-lid push holes over the Tang Nano S1 / S2 buttons (near the USB-C end).
-// Positions are in Tang board coordinates (x from HDMI end, y from front edge).
+// FLOOR push holes for the Tang Nano S1 / S2 buttons. The board is mounted
+// component-side-DOWN, so the buttons face the floor and are poked from below.
+// Positions are in Tang board coordinates (x from HDMI end, y from front edge);
+// the Y is mirrored at build time because the board is flipped (see flip_y()).
 btn_hole_d  = 4.5;
 btn1_x      = 49.0;  btn1_y = 6.0;    // S1 (reset)  -- ESTIMATE, calibrate
 btn2_x      = 49.0;  btn2_y = 16.0;   // S2 (OSD)    -- ESTIMATE, calibrate
 btn_enable  = true;
 
-// LED viewing window in the lid (the 4 status LEDs sit near the USB-C end).
+// LED viewing window in the FLOOR (the 4 status LEDs face down with the board).
 led_win_x   = 40.0;  // start (Tang X)   -- ESTIMATE, calibrate
 led_win_len = 12.0;  // length along X
 led_win_y   = 2.0;   // start (Tang Y)
@@ -148,19 +151,39 @@ wall      = 2.4;    // side-wall thickness
 floor_th  = 1.8;    // base floor thickness
 lid_th    = 2.0;    // lid top-plate thickness
 
-standoff  = 4.0;    // gap under the boards (clears underside parts/solder/SD)
-headroom  = 18.0;   // clear height ABOVE the Tang PCB top: room for soldered
-                    // pin headers + Dupont connectors + wire bend.
-                    // Lower this (e.g. 8-10) if you use low-profile/no headers.
+standoff  = 8.0;    // gap UNDER the Tang PCB. The board is component-side-down,
+                    // so this gap houses the down-facing HDMI / USB-C connectors
+                    // (HDMI is the tallest) plus the buttons/LEDs. Must be >=
+                    // ~ hdmi_h - conn_drop - floor_th for the HDMI hole to clear
+                    // the floor. The CH9350 shares this height (kept coplanar).
+headroom  = 18.0;   // clear height ABOVE the Tang PCB top: the GPIO pin headers
+                    // now point UP into here, with room for Dupont jumpers +
+                    // bend. Lower if you use low-profile/no headers.
 
 clear     = 0.4;    // XY fit clearance around each board
 gap_y     = 3.0;    // gap between the Tang board and the CH9350 board
-conn_drop = 1.0;    // edge connectors sit ABOVE the PCB; opening starts this
-                    // far below the PCB top and extends up by its height
+conn_drop = 1.0;    // margin: the connector opening starts this far past the
+                    // PCB face and runs the connector's height toward the floor
 
 ledge_w   = 2.0;    // width of the perimeter shelf the boards rest on
+shelf_grip= 1.5;    // how far the Tang shelf reaches UNDER the board edge
 rib_h     = 2.5;    // height of locating ribs above the board top
 fillet    = 2.0;    // outer vertical edge rounding
+
+// Board retention: the Tang is captured in the BASE (pins up). It rests on the
+// long-edge shelves and is held down by clips that hook over its top edge, so
+// poking a floor button drives the board UP into the clips (never out). Front
+// (-Y) clips are rigid hooks off the wall; back (+Y) clips are flexible fingers.
+clip_enable = true;
+clip_w      = 6.0;   // clip width along the board edge (X)
+clip_t      = 2.0;   // free-standing (back) finger thickness
+clip_ov     = 1.1;   // how far the hook overhangs the PCB edge (clear the headers!)
+clip_h      = 1.8;   // hook height (Z)
+
+// Feet: lift the case so the floor button holes / LED window clear the desk
+// (and the down-facing LEDs are visible). Four pads under the corner lugs.
+foot_enable = true;
+foot_h      = 4.0;
 
 lip_depth = 6.0;    // how deep the lid lip plugs into the base
 lip_clear = 0.35;   // clearance so the lid lip slides in
@@ -199,8 +222,12 @@ base_h = floor_th + inner_h;
 // where interior coords start at (wall, wall, floor_th).
 tn_x0 = wall + clear;
 tn_y0 = wall + clear;
-tn_z0 = floor_th + standoff;                 // PCB underside height
-tn_top = tn_z0 + tn_thick;                   // PCB top height
+tn_z0 = floor_th + standoff;                 // PCB underside = COMPONENT face
+tn_top = tn_z0 + tn_thick;                   // PCB top = pins/SD face
+
+// The Tang is flipped component-side-down about the X axis (HDMI stays on -X),
+// which mirrors board-local Y. Use this for off-centre, face-specific features.
+function flip_y(y) = tn_wid - y;
 
 // CH9350: long axis along X, right-aligned so its short-end dual-USB stack sits
 // against the +X wall; placed in the middle band behind the Tang.
@@ -324,6 +351,44 @@ module support_ledge(x0, y0, bx, by, z_bottom, z_top, w) {
         }
 }
 
+// Tang shelf: two strips along the LONG (front/back) edges only, reaching
+// shelf_grip under the board so it actually rests on them. The SHORT ends are
+// left clear because the down-facing HDMI / USB-C connectors live there.
+module tang_support() {
+    h = tn_z0 - floor_th;
+    for (yy = [tn_y0 - ledge_w,                 // front (-Y) strip
+               tn_y0 + tn_wid - shelf_grip])    // back  (+Y) strip
+        translate([tn_x0 - ledge_w, yy, floor_th])
+            cube([tn_len + 2*ledge_w, ledge_w + shelf_grip, h]);
+}
+
+// Retention clips that hook over the Tang's TOP edge (board captured in base).
+// Front (-Y): rigid hooks off the front wall. Back (+Y): free-standing flexible
+// fingers rising from the floor. Hook overhang = clip_ov (calibrate vs headers).
+module tang_clips() {
+    if (clip_enable) {
+        xs = [tn_x0 + tn_len*0.28, tn_x0 + tn_len*0.72];
+        for (x = xs) {
+            // front rigid hook: from the wall, over the board front edge
+            translate([x - clip_w/2, wall, tn_top])
+                cube([clip_w, (tn_y0 + clip_ov) - wall, clip_h]);
+            // back finger: post up from the floor + inward hook over the board
+            translate([x - clip_w/2, tn_y0 + tn_wid + clear, floor_th])
+                cube([clip_w, clip_t, (tn_top + clip_h) - floor_th]);
+            translate([x - clip_w/2, tn_y0 + tn_wid - clip_ov, tn_top])
+                cube([clip_w, clip_ov + clear + clip_t, clip_h]);
+        }
+    }
+}
+
+// Four feet under the corner lugs so the floor button/LED openings clear the
+// desk and the down-facing LEDs stay visible.
+module feet() {
+    if (foot_enable)
+        for (p = lug_pts)
+            translate([p[0], p[1], -foot_h]) cylinder(h = foot_h + 0.01, r = lug_r);
+}
+
 // Thin locating rib running along one board edge, sitting just outside the
 // board so the PCB cannot slide. side: "xmin" "xmax" "ymin" "ymax".
 module locate_rib(x0, y0, bx, by, z_bottom, z_top, side, len_frac=1) {
@@ -359,22 +424,40 @@ module db9_shape(d) {
 //  CUTOUTS  (subtracted from the base walls)
 // =============================================================================
 module wall_cutouts() {
-    // --- Tang HDMI : -X wall, centred on Tang width (opening above PCB) ---
+    // Component face is the PCB UNDERSIDE (board flipped); HDMI/USB-C hang DOWN
+    // from it toward the floor, so each opening is anchored at that face (+a
+    // small margin) and runs the connector's height downward.
+    conn_top = tn_z0 + conn_drop;
+
+    // --- Tang HDMI : -X wall, centred on width, dropping from the under-face ---
     hdmi_cy = tn_y0 + tn_wid/2 + hdmi_y_off;
-    translate([-1, hdmi_cy - hdmi_w/2, tn_top - conn_drop])
+    translate([-1, hdmi_cy - hdmi_w/2, conn_top - hdmi_h])
         cube([wall + 2, hdmi_w, hdmi_h]);
 
-    // --- Tang USB-C : +X wall (opening above PCB) ---
+    // --- Tang USB-C : +X wall, dropping from the under-face ---
     usbc_cy = tn_y0 + tn_wid/2 + usbc_y_off;
-    translate([out_x - wall - 1, usbc_cy - usbc_w/2, tn_top - conn_drop])
+    translate([out_x - wall - 1, usbc_cy - usbc_w/2, conn_top - usbc_h])
         cube([wall + 2, usbc_w, usbc_h]);
 
-    // --- Tang microSD : +X wall, at board underside ---
+    // --- Tang microSD : +X wall, now on the UP-facing side (just above PCB) ---
     if (sd_enable) {
         sd_cy = tn_y0 + tn_wid/2 + sd_y_off;
-        translate([out_x - wall - 1, sd_cy - sd_w/2, tn_z0 - sd_h/2])
+        translate([out_x - wall - 1, sd_cy - sd_w/2, tn_top - 0.5])
             cube([wall + 2, sd_w, sd_h + 1]);
     }
+
+    // --- Tang S1/S2 buttons : poke-holes in the FLOOR (board faces down). The
+    //     board is flipped, so the board-local Y is mirrored. ---
+    if (btn_enable)
+        for (b = [[btn1_x, btn1_y], [btn2_x, btn2_y]])
+            translate([tn_x0 + b[0], tn_y0 + flip_y(b[1]), -1])
+                cylinder(h = floor_th + 2, d = btn_hole_d);
+
+    // --- Tang status LEDs : viewing window in the FLOOR (mirrored Y) ---
+    if (led_enable)
+        translate([tn_x0 + led_win_x,
+                   tn_y0 + flip_y(led_win_y + led_win_wid), -1])
+            cube([led_win_len, led_win_wid, floor_th + 2]);
 
     // --- CH9350 dual USB-A : +X side wall, in the CH9350 band (above PCB) ---
     usba_cy = ch_y0 + ch_wid/2;
@@ -409,11 +492,12 @@ module base() {
                     cube([inner_x, inner_y, base_h]);   // open-top cavity
             }
             corner_lugs(base_h);
-            // board support shelves
-            support_ledge(tn_x0, tn_y0, tn_len, tn_wid, floor_th, tn_z0, ledge_w);
+            feet();
+            // Tang: long-edge shelves + capture clips (pins-up, component-down).
+            tang_support();
+            tang_clips();
+            // CH9350 (component-up): perimeter shelf + locating ribs.
             support_ledge(ch_x0, ch_y0, ch_len, ch_wid, floor_th, ch_z0, ledge_w);
-            // locating ribs (keep boards from sliding; leave connector edges clear)
-            locate_rib(tn_x0, tn_y0, tn_len, tn_wid, tn_z0, tn_top + rib_h, "ymax");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymin");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymax");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmin");
@@ -454,17 +538,8 @@ module lid() {
             cube([inner_x - 2*lip_clear - 4, inner_y - 2*lip_clear - 4,
                   lip_depth + 1]);
 
-        // S1 / S2 button push-holes
-        if (btn_enable) {
-            translate([tn_x0 + btn1_x, tn_y0 + btn1_y, -1])
-                cylinder(h = lid_th + 2, d = btn_hole_d);
-            translate([tn_x0 + btn2_x, tn_y0 + btn2_y, -1])
-                cylinder(h = lid_th + 2, d = btn_hole_d);
-        }
-        // LED window
-        if (led_enable)
-            translate([tn_x0 + led_win_x, tn_y0 + led_win_y, -1])
-                cube([led_win_len, led_win_wid, lid_th + 2]);
+        // (S1/S2 button holes and the LED window are now in the BASE FLOOR —
+        //  the board is mounted component-side-down — so the lid is a plain cover.)
         // keep the rear cable notch open through the lid lip too
         if (cable_enable) {
             slot_cx = tn_x0 + tn_len*cable_slot_frac;
@@ -487,12 +562,14 @@ module lid() {
 //  Print this first to confirm board fit & connector alignment.
 // =============================================================================
 module fitcheck() {
-    // tall enough to include the DB9 ports when they are enabled
-    fc_h = db9_enable ? (db9_z + db9_apt_h/2 + db9_screw_d/2 + 3)
-                      : (floor_th + standoff + tn_thick + 3);
+    // tall enough to include the capture clips, and the DB9 ports when enabled
+    fc_h = max(tn_top + clip_h + 1,
+               db9_enable ? (db9_z + db9_apt_h/2 + db9_screw_d/2 + 3)
+                          : (floor_th + standoff + tn_thick + 3));
     intersection() {
         base();
-        translate([-1, -1, -1]) cube([out_x + 2, out_y + 2, fc_h + 1]);
+        translate([-1, -1, -foot_h - 1])
+            cube([out_x + 2, out_y + 2, fc_h + foot_h + 1]);
     }
 }
 

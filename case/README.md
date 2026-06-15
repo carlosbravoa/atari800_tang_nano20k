@@ -12,9 +12,9 @@ GPIO pins).
 | ![base](img/base.png) | ![side](img/side_right.png) |
 | Base tray | +X wall: USB-C/SD (front), dual-USB stack (middle), DB9 (rear) |
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
-| −X wall: HDMI (front) + DB9 (rear) | Side 3/4: DB9 port detail |
+| −X wall: HDMI **low** (front) + DB9 (rear) — Tang is component-side-down | Side 3/4: DB9 port detail |
 | ![section](img/section.png) | ![styled](img/lid_styled.png) |
-| Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | Lid: 65XE-style top (vent band / brand strip / Fuji / LED) |
+| Cutaway: connector gap below the PCB, pins-up headroom above, closed lid | Lid: 65XE-style top (vent band / brand strip / Fuji) — a plain cover now |
 | ![closed](img/closed.png) | |
 | Closed case | |
 
@@ -24,8 +24,9 @@ GPIO pins).
 case/
 ├── tang_nano_20k_ch9350_case.scad   # the parametric model (edit this)
 ├── stl/
-│   ├── base.stl       # the tray that holds both boards
-│   ├── lid.stl        # snap-in lid (LED window + S1/S2 button holes)
+│   ├── base.stl       # the tray that holds both boards (LED window + S1/S2
+│   │                  #   button holes are in the FLOOR; capture clips + feet)
+│   ├── lid.stl        # screw-down lid — plain cover (vents + branding)
 │   └── fitcheck.stl   # thin test frame — PRINT THIS FIRST
 └── img/               # rendered previews
 ```
@@ -43,40 +44,59 @@ dimensions:
 The **exact positions of the connectors, the S1/S2 buttons and the LEDs vary**
 between board revisions and CH9350 vendors. So:
 
-1. **Print `fitcheck.stl` first.** It's just the floor + low walls + the board
-   shelves + the connector cutouts (~10–15 min, little plastic). Drop your
-   boards in and check that the HDMI / USB-C / microSD / USB-A openings line up.
+1. **Print `fitcheck.stl` first.** It's the floor + low walls + the board
+   shelves + capture clips + connector cutouts (~10–15 min, little plastic).
+   Drop the Tang in **pins-up** and check: it snaps under the clips, the HDMI /
+   USB-C openings (now low on the walls) and the microSD slot line up, and the
+   floor button/LED holes sit under S1/S2 and the LEDs.
 2. Adjust the variables at the top of the `.scad` (every dimension is one), then
    re-export and print the real `base.stl` + `lid.stl`.
 
 The connector openings are intentionally a little generous; the parameters
-flagged `ESTIMATE, calibrate` (button + LED window positions) are the most
-likely to need nudging.
+flagged `ESTIMATE, calibrate` (button + LED positions) and `clip_ov` (the clip
+overhang vs. the header rows) are the most likely to need nudging. **Note:** the
+default button/LED positions are estimates and currently overlap — set them from
+your actual board before printing the final base.
 
 ## Layout
 
 Both boards lie flat in one tray, stacked front-to-back:
 **Tang (front) → CH9350 (middle) → DB9 bay (rear)**.
 
-- **Tang Nano 20K** along the front. **HDMI** exits the left short wall (−X);
-  **USB-C power** and the **microSD slot** exit the right short wall (+X);
-  **S1/S2** are reached through holes in the lid; the 4 status **LEDs** show
-  through a window in the lid.
-- **CH9350** sits in the middle band, right-aligned so its **stacked dual
-  USB-A** port (keyboard) exits the **right (+X) wall** above the board — the
-  +X wall therefore carries USB-C/SD (front), the dual-USB (middle) and a DB9
-  (rear), spaced along its length.
-- **DB9 joystick ports** — one panel-mount female D-sub on each short side wall
-  in the **rear bay** behind the CH9350 (left = Joystick 1, right = Joystick 2).
-  Each is a D-shaped aperture plus two 24.99 mm-pitch screw holes; the connector
-  bodies protrude into the empty rear bay.
-- A small **cable-exit notch** in the back wall is handy for the
-  GND / 5 V / Pin-53 wires (or any external wiring).
+### Tang Nano 20K is mounted component-side **down** (pins **up**)
 
-Boards rest on a 4 mm perimeter shelf (clears the underside microSD slot and
-solder joints) and are located by thin ribs (no board mounting holes are
-needed, and the Tang Nano 20K has none anyway). See the **cutaway** above for
-how the PCB, standoff gap, headroom and lid stack up.
+This is the important bit. The Tang's GPIO header pins (where the Dupont jumpers
+to the CH9350 / DB9 / power go) are on one face; the connectors, buttons and LEDs
+are on the other. To wire jumpers comfortably, the board sits **pins-up**, so the
+**component side faces the floor**. Consequences:
+
+- **GPIO pins point up** into the headroom — easy to plug/route jumpers. (The win.)
+- **HDMI** (−X wall) and **USB-C** (+X wall) hang *below* the PCB, so their
+  openings sit **low on the walls**, just above the floor.
+- **microSD** is on the Tang's opposite face, so it flips to the **top** and its
+  slot sits just **above** the PCB on the +X wall.
+- **S1/S2 buttons** and the **status LEDs** face down → **poke-holes and a
+  viewing window in the base FLOOR**. Four **feet** lift the case so they clear
+  the desk (and the LEDs are visible).
+- **CH9350** stays component-side-up; its **stacked dual USB-A** (keyboard) exits
+  the **+X wall** above the board. So the +X wall carries USB-C + SD (front),
+  the dual-USB (middle) and a DB9 (rear), spaced along its length.
+- **DB9 joystick ports** — one panel-mount female D-sub on each side wall in the
+  **rear bay** behind the CH9350 (left = Joystick 1, right = Joystick 2). Each is
+  a D-shaped aperture + two 24.99 mm-pitch screw holes; bodies protrude into the
+  empty rear bay.
+- A small **cable-exit notch** in the back wall is handy for the
+  GND / 5 V / Pin-53 wires.
+
+### How the boards are held
+
+The Tang is **captured in the base**, not the lid: it rests on two long-edge
+shelves and is held down by **clips that hook over its top edge** — rigid hooks
+off the front wall and flexible fingers at the back. Pressing a floor button
+drives the board *up into the clips*, so it can't pop out. **Calibrate `clip_ov`
+to your board** — the hooks must grab bare PCB edge and clear the header rows.
+The CH9350 rests on a perimeter shelf with locating ribs. See the **cutaway**
+for the connector-gap-below / pins-up-headroom-above stack.
 
 The lid **screws down** with **4 × M3 self-tapping screws** into four external
 corner lugs (the interior is too packed for internal posts). The base lugs have
@@ -86,9 +106,11 @@ machine screws into heat-set inserts (open up `screw_pilot_d` to the insert
 bore). Set `screw_enable = false` to drop the lugs and use the lip as a plain
 friction fit.
 
-Outer size with defaults: **box ≈ 60 × 90 × 27 mm**, **≈ 72 × 102 mm including
-the corner lugs** (the depth comes from the three stacked zones + rear DB9 bay;
-turn DB9 off with `db9_enable = false` for a shorter box).
+Outer size with defaults: **box ≈ 60 × 90 × 31 mm** (~35 mm on its feet),
+**≈ 72 × 102 mm including the corner lugs**. The depth comes from the three
+stacked zones + rear DB9 bay; the height grew because the connector gap below
+the PCB plus the pins-up headroom now stack on opposite faces. Turn DB9 off with
+`db9_enable = false` for a shorter box.
 
 ### DB9 joystick ports — wiring & parts
 
