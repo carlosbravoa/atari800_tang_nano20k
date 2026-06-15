@@ -49,16 +49,19 @@ hdmi_h      = 8.0;   // opening height (along Z) — connector ~6 mm tall + clea
 hdmi_y_off  = 0;     // shift along Y from board centre (+ = toward back)
 
 // Tang Nano 20K : USB-C on the +X short end (centred on width)
-usbc_w      = 12.0;  // connector ~8 mm + plug clearance
+usbc_w      = 10.0;  // connector ~8 mm + plug clearance (snug)
 usbc_h      = 5.0;   // connector ~2.5 mm tall + clearance
 usbc_y_off  = 0;
 
-// Tang Nano 20K : microSD / TF slot. It is on the underside at the USB-C (+X)
-//   END. With the board flipped pins-up, that face points UP, so the opening
-//   sits just ABOVE the PCB on the +X wall (stacked over the USB-C opening).
-sd_w        = 14.0;  // opening width  (along Y)
-sd_h        = 3.0;   // opening height (along Z)
-sd_y_off    = 0;
+// Tang Nano 20K : microSD / TF slot. On the underside at the USB-C (+X) END;
+//   with the board flipped pins-up it faces UP, so the opening sits just ABOVE
+//   the PCB on the +X wall. It is NOT centred: its right edge ~aligns with the
+//   USB-C socket and it extends to the side (hence sd_y_off). The opening also
+//   reaches DOWN to overlap the USB-C cutout, so no thin wall is left between
+//   them (one clean stepped opening). Confirm sd_y_off sign/size on the fitcheck.
+sd_w        = 13.0;  // opening width  (along Y)
+sd_h        = 3.0;   // how far the opening rises above the PCB top (along Z)
+sd_y_off    = -1.5;  // offset from board centre (right edge aligns with USB-C)
 sd_enable   = true;
 
 // CH9350 : STACKED DUAL USB-A host port (two ports one above the other)
@@ -76,10 +79,11 @@ btn1_x      = 49.0;  btn1_y = 5.0;     // S1: 5 mm from USB-C end, 5 mm off its 
 btn2_x      = 49.0;  btn2_y = 17.55;   // S2: 5 mm from USB-C end, 5 mm off its edge
 btn_enable  = true;
 
-// LED viewing window in the FLOOR. Measured: LED row runs 1.75-9 mm in from the
-// USB-C end (board-x 45 -> 52.5) along the S1 edge, ~2 mm off that edge.
-led_win_x   = 45.0;  // start (Tang X, from HDMI end)
-led_win_len = 7.5;   // length along X
+// LED viewing window in the FLOOR. Measured: LED cluster sits ~8.5 mm in from
+// the USB-C short edge (board-x ~45.5), ~2 mm off the S1 edge, and a few mm
+// clear of the S1 button (which is at x=49). Distinct strip, NOT under S1.
+led_win_x   = 43.5;  // start (Tang X, from HDMI end)  -> ends at 46.5, before S1
+led_win_len = 3.0;   // length along X
 led_win_y   = 0.75;  // start (Tang Y, from the S1 long edge)
 led_win_wid = 2.5;   // width along Y
 led_enable  = true;
@@ -458,12 +462,13 @@ module wall_cutouts() {
     translate([out_x - wall - 1, usbc_cy - usbc_w/2, conn_top - usbc_h])
         cube([wall + 2, usbc_w, usbc_h]);
 
-    // --- Tang microSD : +X (USB-C-end) wall, on the UP-facing side (above PCB,
-    //     stacked over the USB-C opening) ---
+    // --- Tang microSD : +X (USB-C-end) wall, UP-facing side. Reaches DOWN to
+    //     tn_z0 so it overlaps the USB-C cutout (no thin wall between them) and
+    //     UP past the slot; offset in Y per sd_y_off. ---
     if (sd_enable) {
         sd_cy = tn_y0 + tn_wid/2 + sd_y_off;
-        translate([out_x - wall - 1, sd_cy - sd_w/2, tn_top - 0.5])
-            cube([wall + 2, sd_w, sd_h + 1]);
+        translate([out_x - wall - 1, sd_cy - sd_w/2, tn_z0])
+            cube([wall + 2, sd_w, (tn_top + sd_h) - tn_z0]);
     }
 
     // --- Tang S1/S2 buttons : poke-holes in the FLOOR (board faces down). The
