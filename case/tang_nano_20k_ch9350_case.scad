@@ -97,7 +97,9 @@ led_side_h      = 6.0;   // slot height (Z), top aligned with the PCB underside
 cable_slot_w     = 18.0;
 cable_slot_depth = 12.0;   // how far down from the wall top the notch goes
 cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C end)
-cable_enable     = true;
+cable_enable     = false;  // OFF: power is via USB-C and the GND/5V/Pin-53 lines
+                           // are internal jumpers between the two boards, so no
+                           // wires need to leave the case. Set true to reopen it.
 
 // -----------------------------------------------------------------------------
 //  LID STYLING (top view, rear -> front):
