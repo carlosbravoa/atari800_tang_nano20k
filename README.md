@@ -158,6 +158,19 @@ Get to a BASIC prompt in a few minutes:
 > attach to **GPIO header pins** (see the wiring sections below). A DB9 joystick alone is enough
 > to drive the whole OSD if you don't have a keyboard yet.
 
+### Cartridge sizes & formats
+
+| Format | Max size | Limited by |
+|---|---|---|
+| `.car` | **2 MB** | The free 2 MB SDRAM window (8 MB chip; the rest holds Atari RAM, ROMs and the frame buffer) |
+| `.rom` (raw) | **16 KB** | Raw dumps carry no mapper info — only the simple unbanked sizes (2/4/8/16 KB) work |
+
+A whole cartridge must be **resident in SDRAM** because bank switching is a real-time hardware
+decision made by the 6502 — there's no opportunity to stream banks from the SD card on demand
+(SD latency is ~1000× too slow for the bank-select→read window). 4 MB mappers (The!Cart,
+MegaCart 4 MB) physically cannot fit the 8 MB SDRAM and are rejected. For dumps larger than
+16 KB, convert them to `.car` so the mapper type is encoded in the header.
+
 ---
 
 ## Build
