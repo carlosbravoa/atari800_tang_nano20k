@@ -8,11 +8,11 @@ GPIO pins).
 | | |
 |---|---|
 | ![assembly](img/assembly.png) | ![top](img/top_plan.png) |
-| Exploded preview (lid floating) | Top-down plan (lid off): Tang front, CH9350 centred back, DB9 bodies on the sides |
-| ![base](img/base.png) | ![back](img/back.png) |
-| Base tray | Rear 3/4: USB-A + cable notch (back wall), DB9 on each side |
+| Exploded preview (lid floating) | Top-down (lid off): Tang front, CH9350 middle, DB9 bodies in the rear bay |
+| ![base](img/base.png) | ![side](img/side_right.png) |
+| Base tray | +X wall: USB-C/SD (front), dual-USB stack (middle), DB9 (rear) |
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
-| Side elevation: DB9 port (rear) + HDMI & microSD (front) | Side 3/4: DB9 port detail |
+| −X wall: HDMI (front) + DB9 (rear) | Side 3/4: DB9 port detail |
 | ![section](img/section.png) | ![styled](img/lid_styled.png) |
 | Cutaway: PCB on the shelf, standoff gap below, headroom + closed lid above | Lid: 65XE-style top (vent band / brand strip / Fuji / LED) |
 | ![closed](img/closed.png) | |
@@ -38,7 +38,7 @@ dimensions:
 | Board | Size used | Source |
 |-------|-----------|--------|
 | Tang Nano 20K | 54.04 × 22.55 × 1.6 mm | Sipeed datasheet |
-| CH9350 module | 22.0 × 17.0 × 1.6 mm | module listings |
+| CH9350 module | 49.6 × 20.5 × 1.6 mm, **stacked dual USB-A** on one short end | measured |
 
 The **exact positions of the connectors, the S1/S2 buttons and the LEDs vary**
 between board revisions and CH9350 vendors. So:
@@ -55,20 +55,22 @@ likely to need nudging.
 
 ## Layout
 
-Both boards lie flat in one tray:
+Both boards lie flat in one tray, stacked front-to-back:
+**Tang (front) → CH9350 (middle) → DB9 bay (rear)**.
 
-- **Tang Nano 20K** along the front. **HDMI** exits the left short wall; **USB-C
-  power** and the **microSD slot** exit the right short wall; **S1/S2** are
-  reached through holes in the lid; the 4 status **LEDs** show through a window
-  in the lid.
-- **CH9350** sits in the rear bay, centred against the back wall; its **USB-A**
-  port (where you plug the keyboard) exits the back wall.
+- **Tang Nano 20K** along the front. **HDMI** exits the left short wall (−X);
+  **USB-C power** and the **microSD slot** exit the right short wall (+X);
+  **S1/S2** are reached through holes in the lid; the 4 status **LEDs** show
+  through a window in the lid.
+- **CH9350** sits in the middle band, right-aligned so its **stacked dual
+  USB-A** port (keyboard) exits the **right (+X) wall** above the board — the
+  +X wall therefore carries USB-C/SD (front), the dual-USB (middle) and a DB9
+  (rear), spaced along its length.
 - **DB9 joystick ports** — one panel-mount female D-sub on each short side wall
-  (left = Joystick 1 / HDMI end, right = Joystick 2 / USB-C end), in the rear
-  bay. Each is a D-shaped aperture plus two 24.99 mm-pitch screw holes. The
-  connector bodies protrude inward into the rear bay; the CH9350 is centred so
-  they clear it.
-- A small **cable-exit notch** in the back wall corner is handy for the
+  in the **rear bay** behind the CH9350 (left = Joystick 1, right = Joystick 2).
+  Each is a D-shaped aperture plus two 24.99 mm-pitch screw holes; the connector
+  bodies protrude into the empty rear bay.
+- A small **cable-exit notch** in the back wall is handy for the
   GND / 5 V / Pin-53 wires (or any external wiring).
 
 Boards rest on a 4 mm perimeter shelf (clears the underside microSD slot and
@@ -84,8 +86,9 @@ machine screws into heat-set inserts (open up `screw_pilot_d` to the insert
 bore). Set `screw_enable = false` to drop the lugs and use the lip as a plain
 friction fit.
 
-Outer size with defaults: **box ≈ 60 × 66 × 27 mm**, **≈ 72 × 78 mm including
-the corner lugs** (turn DB9 off with `db9_enable = false` for a ~60 × 48 box).
+Outer size with defaults: **box ≈ 60 × 90 × 27 mm**, **≈ 72 × 102 mm including
+the corner lugs** (the depth comes from the three stacked zones + rear DB9 bay;
+turn DB9 off with `db9_enable = false` for a shorter box).
 
 ### DB9 joystick ports — wiring & parts
 

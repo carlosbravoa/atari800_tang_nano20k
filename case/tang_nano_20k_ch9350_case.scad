@@ -34,8 +34,8 @@ tn_len    = 54.04;   // Tang Nano 20K length  (X, HDMI end .. USB-C end)
 tn_wid    = 22.55;   // Tang Nano 20K width   (Y)
 tn_thick  = 1.6;     // Tang Nano 20K PCB thickness
 
-ch_len    = 22.0;    // CH9350 module length  (X)
-ch_wid    = 17.0;    // CH9350 module width   (Y)
+ch_len    = 49.6;    // CH9350 module length  (X)
+ch_wid    = 20.5;    // CH9350 module width   (Y)
 ch_thick  = 1.6;     // CH9350 module PCB thickness
 
 // -----------------------------------------------------------------------------
@@ -60,9 +60,9 @@ sd_h        = 3.0;   // opening height (along Z)
 sd_y_off    = 0;
 sd_enable   = true;
 
-// CH9350 : USB-A female host port faces the +Y (back) wall
-usba_w      = 14.0;
-usba_h      = 8.0;
+// CH9350 : STACKED DUAL USB-A host port (two ports one above the other)
+usba_w      = 14.5;  // connector width
+usba_h      = 16.5;  // connector height (tall: two stacked ports)
 usba_z_off  = 0;     // raise/lower the opening relative to the CH9350 PCB top
 
 // Top-lid push holes over the Tang Nano S1 / S2 buttons (near the USB-C end).
@@ -103,18 +103,18 @@ vent_angle    = 45;     // slot angle (degrees)
 brand_enable = true;
 brand_text   = "ATARI 800";
 brand_cx     = 0;       // 0 = auto-centre on the lid
-brand_cy     = 40.0;
+brand_cy     = 62.0;    // just below the rear vent band
 brand_w      = 48.0;
 brand_h      = 10.0;
 brand_depth  = 0.8;
 brand_txt_sz = 6.0;
 
-// Fuji logo (lower centre/left).
+// Fuji logo (lower centre/left, near the front).
 logo_enable = true;
 logo_w      = 19.0;
 logo_h      = 15.0;
 logo_cx     = 21.0;     // 0 = auto-centre
-logo_cy     = 15.0;
+logo_cy     = 20.0;
 logo_depth  = 0.8;
 logo_raised = false;    // false = debossed (prints clean lid-face-down)
 
@@ -183,11 +183,11 @@ screw_head_h  = 2.4;    // lid counterbore depth
 // -----------------------------------------------------------------------------
 //  DERIVED GEOMETRY
 // -----------------------------------------------------------------------------
-// Interior cavity. Tang sits along the front (its ends pinned to the -X/+X
-// walls for HDMI / USB-C). Behind it is the rear bay holding the CH9350 and,
-// when enabled, the two DB9 ports on the side walls.
+// Interior cavity. Front-to-back: Tang (front) | CH9350 (middle) | DB9 bay
+// (rear). Tang ends are pinned to the -X/+X walls for HDMI / USB-C. The CH9350
+// is nearly full width, so the DB9 joystick ports get their own bay behind it.
 inner_x = tn_len + 2*clear;                       // along X (pinned to board)
-inner_y = db9_enable ? (tn_wid + 2*clear + db9_zone)
+inner_y = db9_enable ? (tn_wid + gap_y + ch_wid + db9_zone + 2*clear)
                      : (tn_wid + gap_y + ch_wid + 2*clear);
 inner_h = standoff + tn_thick + headroom;         // floor-top .. wall-top
 
@@ -202,17 +202,15 @@ tn_y0 = wall + clear;
 tn_z0 = floor_th + standoff;                 // PCB underside height
 tn_top = tn_z0 + tn_thick;                   // PCB top height
 
-// CH9350: centred against the back wall when DB9s are on (so the side DB9
-// connector bodies clear it); otherwise tucked behind the Tang near +X.
-ch_x0 = db9_enable ? (out_x - ch_len)/2
-                   : (out_x - wall - clear - ch_len - 4);
-ch_y0 = db9_enable ? (out_y - wall - clear - ch_wid)
-                   : (tn_y0 + tn_wid + gap_y);
+// CH9350: long axis along X, right-aligned so its short-end dual-USB stack sits
+// against the +X wall; placed in the middle band behind the Tang.
+ch_x0 = out_x - wall - clear - ch_len;
+ch_y0 = tn_y0 + tn_wid + gap_y;
 ch_z0 = floor_th + standoff;
 ch_top = ch_z0 + ch_thick;
 
-// DB9 port placement: centred along the rear bay (Y), on both side walls.
-db9_y = (tn_y0 + tn_wid + (wall + inner_y)) / 2 + db9_y_off;  // mid rear bay
+// DB9 ports: centred in the rear bay (behind the CH9350), on both side walls.
+db9_y = ((ch_y0 + ch_wid) + (wall + inner_y)) / 2 + db9_y_off;
 db9_z = base_h * db9_z_frac;
 
 // Corner screw-lug centres (just outside each corner so they miss the boards).
@@ -378,10 +376,10 @@ module wall_cutouts() {
             cube([wall + 2, sd_w, sd_h + 1]);
     }
 
-    // --- CH9350 USB-A : +Y (back) wall (opening above PCB) ---
-    usba_cx = ch_x0 + ch_len/2;
-    translate([usba_cx - usba_w/2, out_y - wall - 1, ch_top + usba_z_off - conn_drop])
-        cube([usba_w, wall + 2, usba_h]);
+    // --- CH9350 dual USB-A : +X side wall, in the CH9350 band (above PCB) ---
+    usba_cy = ch_y0 + ch_wid/2;
+    translate([out_x - wall - 1, usba_cy - usba_w/2, ch_top + usba_z_off - conn_drop])
+        cube([wall + 2, usba_w, usba_h]);
 
     // --- Rear cable-exit notch : open slot in the top of the +Y wall ---
     if (cable_enable) {
@@ -417,8 +415,8 @@ module base() {
             // locating ribs (keep boards from sliding; leave connector edges clear)
             locate_rib(tn_x0, tn_y0, tn_len, tn_wid, tn_z0, tn_top + rib_h, "ymax");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymin");
+            locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymax");
             locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmin");
-            locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmax");
         }
         wall_cutouts();
         front_bevel_cut();
