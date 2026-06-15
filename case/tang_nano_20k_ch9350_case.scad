@@ -181,6 +181,11 @@ clip_w      = 6.0;   // clip width along the board edge (X)
 clip_t      = 2.0;   // free-standing (back) finger thickness
 clip_ov     = 1.1;   // how far the hook overhangs the PCB edge (clear the headers!)
 clip_h      = 1.8;   // hook height (Z)
+clip_x      = [10, 30];  // board-local X (from HDMI end) of the long-edge clips.
+                         //   Kept in the HDMI half so they clear S1/S2 and the
+                         //   LED row, which are all at the USB-C end.
+clip_end    = true;  // extra hold-downs on the USB-C short edge (the button end)
+clip_end_w  = 3.5;   // their width along Y (sized to miss the centred SD slot)
 
 // Feet: lift the case so the floor button holes / LED window clear the desk
 // (and the down-facing LEDs are visible). Four pads under the corner lugs.
@@ -369,16 +374,27 @@ module tang_support() {
 // fingers rising from the floor. Hook overhang = clip_ov (calibrate vs headers).
 module tang_clips() {
     if (clip_enable) {
-        xs = [tn_x0 + tn_len*0.28, tn_x0 + tn_len*0.72];
-        for (x = xs) {
-            // front rigid hook: from the wall, over the board front edge
+        // long-edge clips (HDMI half): hold the board down along both long edges
+        for (lx = clip_x) {
+            x = tn_x0 + lx;
+            // front (-Y): rigid hook off the wall, over the board front edge
             translate([x - clip_w/2, wall, tn_top])
                 cube([clip_w, (tn_y0 + clip_ov) - wall, clip_h]);
-            // back finger: post up from the floor + inward hook over the board
+            // back (+Y): free-standing finger up from the floor + inward hook
             translate([x - clip_w/2, tn_y0 + tn_wid + clear, floor_th])
                 cube([clip_w, clip_t, (tn_top + clip_h) - floor_th]);
             translate([x - clip_w/2, tn_y0 + tn_wid - clip_ov, tn_top])
                 cube([clip_w, clip_ov + clear + clip_t, clip_h]);
+        }
+        // USB-C (+X) short-edge hold-downs near each corner: hooks off the +X
+        // wall over the board's +X edge, holding the BUTTON end down. Placed at
+        // the corners so they clear the centred microSD opening (and S1/S2 sit
+        // ~3 mm inboard, below the floor, so the hooks never touch them).
+        if (clip_end) {
+            ex = tn_x0 + tn_len;                 // board +X edge
+            for (yy = [tn_y0 + 0.5, tn_y0 + tn_wid - 0.5 - clip_end_w])
+                translate([ex - clip_ov, yy, tn_top])
+                    cube([(out_x - wall) - (ex - clip_ov), clip_end_w, clip_h]);
         }
     }
 }

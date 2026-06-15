@@ -91,12 +91,21 @@ are on the other. To wire jumpers comfortably, the board sits **pins-up**, so th
 ### How the boards are held
 
 The Tang is **captured in the base**, not the lid: it rests on two long-edge
-shelves and is held down by **clips that hook over its top edge** — rigid hooks
-off the front wall and flexible fingers at the back. Pressing a floor button
-drives the board *up into the clips*, so it can't pop out. **Calibrate `clip_ov`
-to your board** — the hooks must grab bare PCB edge and clear the header rows.
-The CH9350 rests on a perimeter shelf with locating ribs. See the **cutaway**
-for the connector-gap-below / pins-up-headroom-above stack.
+shelves and is held down by **clips that hook over its top edge**. Pressing a
+floor button drives the board *up into the clips*, so it can't pop out. The
+clips are placed to dodge the board features:
+
+- **Long-edge clips** (`clip_x`, default `[10, 30]` mm from the HDMI end) stay in
+  the HDMI half — rigid hooks off the front wall, flexible fingers at the back —
+  clear of S1/S2 and the LED row, which are all at the USB-C end.
+- **USB-C-end hooks** (`clip_end`) hold the *button end* down via two small hooks
+  off the +X wall at the corners, missing the centred SD slot and not touching
+  S1/S2 (which sit ~3 mm inboard and below, in the floor).
+
+**Calibrate `clip_ov`** (and the positions above) to your board — the hooks must
+grab bare PCB edge and clear the header rows. The CH9350 rests on a perimeter
+shelf with locating ribs. See the **cutaway** for the connector-gap-below /
+pins-up-headroom-above stack.
 
 The lid **screws down** with **4 × M3 self-tapping screws** into four external
 corner lugs (the interior is too packed for internal posts). The base lugs have
