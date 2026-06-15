@@ -43,14 +43,14 @@ ch_thick  = 1.6;     // CH9350 module PCB thickness
 //  All offsets are measured along the relevant edge from the board's
 //  reference corner; positive = toward +X / +Y / +Z. Tune to taste.
 // -----------------------------------------------------------------------------
-// Tang Nano 20K : HDMI Type-A on the -X short end (centred on width)
-hdmi_w      = 16.5;  // opening width  (along Y)
-hdmi_h      = 9.0;   // opening height (along Z)
+// Tang Nano 20K : HDMI on the -X short end (centred on width)
+hdmi_w      = 13.0;  // opening width  (along Y) — connector ~9.5 mm + plug clearance
+hdmi_h      = 8.0;   // opening height (along Z) — connector ~6 mm tall + clearance
 hdmi_y_off  = 0;     // shift along Y from board centre (+ = toward back)
 
 // Tang Nano 20K : USB-C on the +X short end (centred on width)
-usbc_w      = 12.0;
-usbc_h      = 6.0;
+usbc_w      = 12.0;  // connector ~8 mm + plug clearance
+usbc_h      = 5.0;   // connector ~2.5 mm tall + clearance
 usbc_y_off  = 0;
 
 // Tang Nano 20K : microSD / TF slot. It is on the underside at the USB-C (+X)
@@ -72,16 +72,16 @@ usba_z_off  = 0;     // raise/lower the opening relative to the CH9350 PCB top
 // edges. Coords are component-side-up (x from HDMI end, y from one long edge);
 // flip_y() mirrors Y for the floor since the board is flipped. Fine-tune to yours.
 btn_hole_d  = 4.5;
-btn1_x      = 51.0;  btn1_y = 2.5;    // S1 (one long edge, by USB-C)
-btn2_x      = 51.0;  btn2_y = 20.0;   // S2 (other long edge, by USB-C)
+btn1_x      = 49.0;  btn1_y = 5.0;     // S1: 5 mm from USB-C end, 5 mm off its edge
+btn2_x      = 49.0;  btn2_y = 17.55;   // S2: 5 mm from USB-C end, 5 mm off its edge
 btn_enable  = true;
 
-// LED viewing window in the FLOOR. From the photo: a row of LEDs along the S1
-// long edge, just inboard of S1, near the USB-C end. (component-side-up coords)
-led_win_x   = 36.0;  // start (Tang X, from HDMI end)
-led_win_len = 12.0;  // length along X
-led_win_y   = 1.5;   // start (Tang Y, from the S1 long edge)
-led_win_wid = 4.5;   // width along Y
+// LED viewing window in the FLOOR. Measured: LED row runs 1.75-9 mm in from the
+// USB-C end (board-x 45 -> 52.5) along the S1 edge, ~2 mm off that edge.
+led_win_x   = 45.0;  // start (Tang X, from HDMI end)
+led_win_len = 7.5;   // length along X
+led_win_y   = 0.75;  // start (Tang Y, from the S1 long edge)
+led_win_wid = 2.5;   // width along Y
 led_enable  = true;
 
 // Rear cable-exit slot (handy for the GND/5V/Pin-53 wires, or external wiring).
@@ -158,9 +158,9 @@ standoff  = 8.0;    // gap UNDER the Tang PCB. The board is component-side-down,
                     // (HDMI is the tallest) plus the buttons/LEDs. Must be >=
                     // ~ hdmi_h - conn_drop - floor_th for the HDMI hole to clear
                     // the floor. The CH9350 shares this height (kept coplanar).
-headroom  = 18.0;   // clear height ABOVE the Tang PCB top: the GPIO pin headers
-                    // now point UP into here, with room for Dupont jumpers +
-                    // bend. Lower if you use low-profile/no headers.
+headroom  = 20.0;   // clear height ABOVE the Tang PCB top: the GPIO pin headers
+                    // now point UP into here. Measured pin+Dupont stack ~17 mm,
+                    // so 20 leaves ~3 mm for the wire bend under the lid.
 
 clear     = 0.4;    // XY fit clearance around each board
 gap_y     = 3.0;    // gap between the Tang board and the CH9350 board
@@ -179,7 +179,8 @@ fillet    = 2.0;    // outer vertical edge rounding
 clip_enable = true;
 clip_w      = 6.0;   // clip width along the board edge (X)
 clip_t      = 2.0;   // free-standing (back) finger thickness
-clip_ov     = 1.1;   // how far the hook overhangs the PCB edge (clear the headers!)
+clip_ov     = 0.8;   // hook overhang. Only ~1 mm of bare edge before the pin row,
+                     // so keep this under 1 mm (light grip, but clears the pins).
 clip_h      = 1.8;   // hook height (Z)
 clip_x      = [10, 30];  // board-local X (from HDMI end) of the long-edge clips.
                          //   Kept in the HDMI half so they clear S1/S2 and the

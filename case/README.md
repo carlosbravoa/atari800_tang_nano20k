@@ -52,11 +52,11 @@ between board revisions and CH9350 vendors. So:
 2. Adjust the variables at the top of the `.scad` (every dimension is one), then
    re-export and print the real `base.stl` + `lid.stl`.
 
-The connector openings are intentionally a little generous; the parameters
-flagged `ESTIMATE, calibrate` (button + LED positions) and `clip_ov` (the clip
-overhang vs. the header rows) are the most likely to need nudging. **Note:** the
-default button/LED positions are estimates and currently overlap — set them from
-your actual board before printing the final base.
+The button/LED/connector positions and the key heights (`standoff`, `headroom`,
+`clip_ov`) have now been set from **measured** values of a real board (see
+`measure_sheet.py`). They should be close — the connector openings still carry a
+little clearance — but a `fitcheck` print is the final confirmation, especially
+`clip_ov` (only ~1 mm of bare PCB edge before the pin row, so the grip is light).
 
 ## Layout
 
@@ -115,11 +115,11 @@ machine screws into heat-set inserts (open up `screw_pilot_d` to the insert
 bore). Set `screw_enable = false` to drop the lugs and use the lip as a plain
 friction fit.
 
-Outer size with defaults: **box ≈ 60 × 90 × 31 mm** (~35 mm on its feet),
+Outer size with defaults: **box ≈ 60 × 90 × 33 mm** (~37 mm on its feet),
 **≈ 72 × 102 mm including the corner lugs**. The depth comes from the three
-stacked zones + rear DB9 bay; the height grew because the connector gap below
-the PCB plus the pins-up headroom now stack on opposite faces. Turn DB9 off with
-`db9_enable = false` for a shorter box.
+stacked zones + rear DB9 bay; the height is the connector gap below the PCB
+(8 mm, clears the ~6 mm HDMI) plus the 20 mm pins-up headroom (measured ~17 mm
+pin+Dupont stack). Turn DB9 off with `db9_enable = false` for a shorter box.
 
 ### DB9 joystick ports — wiring & parts
 
