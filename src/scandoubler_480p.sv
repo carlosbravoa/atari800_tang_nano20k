@@ -116,19 +116,23 @@ wire sof_pix = sof_sync[2] ^ sof_sync[1];
 // ───────────────────────────────────────────────────────────────────────────────
 // Read raster (clk_pix): hx free-runs; vy is reset by the Atari SOF (genlock).
 // ───────────────────────────────────────────────────────────────────────────────
+// hx free-runs (stable hsync). vy resets to 0 the instant SOF is detected — NOT rounded
+// to a line boundary. Rounding to the next boundary added a variable 0..1-line latency
+// from the Atari frame start; when SOF drifted near a boundary that latency dithered ±1
+// line, shifting the whole picture's read-vs-write alignment (the rapid 1-line jitter).
+// Immediate reset gives a constant SOF->vy=0 latency (just the CDC) so the content is
+// stable. The vsync then begins mid-line in vblank, which HDMI sinks tolerate.
 reg [10:0] hx;
 reg [9:0]  vy;
-reg        sof_latch;   // hold SOF until the next line boundary
 always_ff @(posedge clk_pix or negedge rst_n) begin
-    if (!rst_n) begin hx <= 11'd0; vy <= 10'd0; sof_latch <= 1'b0; end
+    if (!rst_n) begin hx <= 11'd0; vy <= 10'd0; end
     else begin
-        if (sof_pix) sof_latch <= 1'b1;
-        if (hx == H_TOT - 11'd1) begin
-            hx <= 11'd0;
-            if (sof_latch || sof_pix) begin vy <= 10'd0; sof_latch <= 1'b0; end
-            else if (vy >= V_SAFETY)    vy <= 10'd0;
-            else                        vy <= vy + 10'd1;
-        end else hx <= hx + 11'd1;
+        hx <= (hx == H_TOT - 11'd1) ? 11'd0 : hx + 11'd1;
+        if (sof_pix)                       vy <= 10'd0;            // genlock (immediate)
+        else if (hx == H_TOT - 11'd1) begin
+            if (vy >= V_SAFETY)            vy <= 10'd0;            // safety: dropped SOF
+            else                           vy <= vy + 10'd1;
+        end
     end
 end
 
