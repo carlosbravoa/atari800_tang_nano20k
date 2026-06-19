@@ -105,6 +105,15 @@ the keyboard alone covers everything.
 > scanlines of latency. The panel sees it as an HD (720-line) signal. This freed the SDRAM bus
 > for the Atari core + IO alone.
 
+> **⚠️ Display compatibility:** staying jitter-free requires a **non-standard timing**
+> (1056×720 active, declared as 720p) rather than exact CEA 720p — the Atari's frame rate
+> simply doesn't divide evenly into any standard HDMI mode. **Most modern TVs and monitors
+> accept it on a direct connection**, but some **strict or older displays** — and pass-through
+> gear like **HDMI splitters, AV receivers and capture cards** — may reject it outright
+> ("no signal" / "unsupported" / "out of range"). If your display won't show it, flash the
+> standard-720p **[v1.0 release](https://github.com/carlosbravoa/atari800_tang_nano20k/releases/tag/v1.0)**
+> instead (fully CEA-standard, at the cost of higher latency).
+
 ---
 
 ## Hardware Required
