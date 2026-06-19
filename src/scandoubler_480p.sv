@@ -64,8 +64,11 @@ localparam integer RING_LINES = 8;
 // to 1216x786 (active 1056x720). 1216*786 = 955776 = 2*477888 = exactly one Atari frame at
 // the 2x pixel rate (clk_pix = 2*clk_core) -> genlocked, integer lines, no jitter. Active is
 // integer 3x of the Atari 352x240 frame. ──
-localparam [10:0] H_ACT = 11'd1056, H_TOT = 11'd1216;      // HBP = 1216-1056-16-80 = 64
-localparam [10:0] H_SYNC_S = 11'd1072, H_SYNC_E = 11'd1152;// HFP=16, HSync=80
+localparam [10:0] H_ACT = 11'd1056, H_TOT = 11'd1216;
+// HSYNC position sets horizontal picture position on the panel (smaller back porch =
+// picture further LEFT). HFP=56, HSync=80, HBP=24. Move HSYNC earlier (smaller H_SYNC_S)
+// to shift the picture RIGHT, later to shift it LEFT. Total stays 1216 (freq-lock).
+localparam [10:0] H_SYNC_S = 11'd1112, H_SYNC_E = 11'd1192;
 localparam [9:0]  V_ACT = 10'd720,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
 localparam [9:0]  V_SAFETY = 10'd800;                       // safety wrap if a SOF is missed (>786)
 localparam [10:0] PIC_X0 = 11'(H_PIC_OFFSET);
