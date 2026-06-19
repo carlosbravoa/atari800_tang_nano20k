@@ -1145,8 +1145,9 @@ void sio_process_command(void) {
 }
 
 // sio_poll() — call as frequently as possible from the main loop.
-#ifdef SIO_HW_CAPTURE
-// Phase B: hardware command-frame capture path (enabled with -DSIO_HW_CAPTURE).
+#ifndef SIO_SW_FALLBACK
+// Phase B: hardware command-frame capture path (DEFAULT; build -DSIO_SW_FALLBACK for the
+// old software-assembly path).
 // The 5-byte command frame is assembled in the FPGA (sio_handler snoop); we poll a
 // ready flag + seq counter, read the bytes, flush the command bytes the snoop left
 // in the RX FIFO, then dispatch exactly as the software path does. The real-time SIO
@@ -1197,7 +1198,7 @@ static void sio_poll_hwcapture(void) {
 //   cmd_count == 0:    data-phase byte (handled inside sio_process_command)
 // We reset if too much time passes without completing a frame (line glitch recovery).
 void sio_poll(void) {
-#ifdef SIO_HW_CAPTURE
+#ifndef SIO_SW_FALLBACK
     sio_poll_hwcapture();
     return;
 #endif
@@ -1420,10 +1421,11 @@ void menu_options() {
             sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
             { // H position: live left/right adjust on the selected item (saved on select)
                 int jj1, jj2; joy_get(&jj1, &jj2);
-                if (choice == 4 && (jj1 & 0x40) && option_h_offset > 0) {
-                    option_h_offset--; apply_video_options(); delay(60);
-                } else if (choice == 4 && (jj1 & 0x80) && option_h_offset < 48) {
+                // Left arrow moves the picture LEFT (bigger offset = pan source right).
+                if (choice == 4 && (jj1 & 0x40) && option_h_offset < 48) {
                     option_h_offset++; apply_video_options(); delay(60);
+                } else if (choice == 4 && (jj1 & 0x80) && option_h_offset > 0) {
+                    option_h_offset--; apply_video_options(); delay(60);
                 }
             }
             if (joy_choice(12, 5, &choice, OSD_KEY_CODE) == 1) {
