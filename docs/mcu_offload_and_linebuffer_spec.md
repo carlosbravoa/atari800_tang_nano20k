@@ -1,7 +1,10 @@
 # Spec: low-latency line-buffer video + robust SIO (lean path) — with optional MCU offload
 
-Status: **proposal / design spec** (2026-06-18). Targets a post-v1.0 rearchitecture on a
-branch; v1.0 (`8c6fc69`) stays the stable fallback throughout.
+Status: **Phase A + B IMPLEMENTED on branch `feat/linebuffer-video-sio-hwcapture`**
+(2026-06-18). Builds clean, TNS=0 on all clocks, worst path 22.8 ns. Awaiting hardware
+verification — see `docs/PHASE_AB_TESTING.md` for flashing + tuning (genlock VSNAP, sync
+polarity, picture position). v1.0 (`8c6fc69`, `main`) stays the stable 720p fallback.
+The optional BL616 offload (§MCU-OFFLOAD) is NOT built (kept self-contained per user).
 
 ## Direction decision (2026-06-18) — keep it lean, self-contained
 
