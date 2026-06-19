@@ -42,7 +42,15 @@ PORT
 	SIO_CLK_OUT : in std_logic;
 	
 	-- CPU interface
-	DATA_OUT : OUT STD_LOGIC_VECTOR(15 DOWNTO 0)
+	DATA_OUT : OUT STD_LOGIC_VECTOR(15 DOWNTO 0);
+
+	-- Phase B: hardware SIO command-frame capture (snoop only — does NOT alter the
+	-- datapath above). Assembles the 5-byte command frame in hardware so the CPU can
+	-- poll a ready flag instead of draining the RX FIFO and assembling it in software.
+	SIO_CMD_BYTES  : OUT STD_LOGIC_VECTOR(39 DOWNTO 0);  -- {b4,b3,b2,b1,b0}
+	SIO_CMD_STATUS : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);   -- b0=ready b1=error b2=active b3=overrun
+	SIO_CMD_SEQ    : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);    -- ++ on each new ready frame
+	SIO_CMD_ACK    : IN  STD_LOGIC                        -- pulse to clear ready/error/overrun
 );
 END sio_handler;
 
@@ -151,6 +159,16 @@ ARCHITECTURE vhdl OF sio_handler IS
 	-- can tell whether the transmit clock-enable is alive (counter moves) or dead.
 	signal pokey_tick_count_reg : std_logic_vector(7 downto 0);
 	signal pokey_tick_count_next : std_logic_vector(7 downto 0);
+
+	-- Phase B: command-frame capture state (clk domain)
+	signal cmd_b0,cmd_b1,cmd_b2,cmd_b3,cmd_b4 : std_logic_vector(7 downto 0);
+	signal cmd_pos         : unsigned(3 downto 0);
+	signal cmd_ready       : std_logic;
+	signal cmd_error       : std_logic;
+	signal cmd_over        : std_logic;
+	signal cmd_seq         : unsigned(7 downto 0);
+	signal cmd_active_prev : std_logic;
+	signal s2p_byte        : std_logic_vector(7 downto 0);
 
 begin
 	pokey_tick_count_next <= std_logic_vector(unsigned(pokey_tick_count_reg)+1) when pokey_enable='1'
@@ -560,6 +578,63 @@ receive_fifo : entity work.fifo_receive
 	                            s2p_state_reg = S2P_STATE_SHIFT_1 or
 	                            s2p_state_reg = S2P_STATE_SHIFT_2) else '0';
 	
+	-- ===== Phase B: SIO command-frame capture =====
+	-- Snoops the deserializer. Each completed byte (s2p_write) while the command line
+	-- is active (command_active='1') is a command-frame byte; assemble up to 5. On
+	-- command-line release, if exactly 5 valid bytes were seen, latch them and raise
+	-- 'ready' (+ bump seq). The CPU polls ready/seq, reads the 5 bytes, then acks.
+	-- This block only READS existing signals + drives new outputs: the SIO datapath is
+	-- byte-for-byte unchanged (RX FIFO still receives every byte as before).
+	s2p_byte <= sio_data_out_reg & s2p_shift_reg(6 downto 0);
+
+	process(clk)
+	begin
+		if rising_edge(clk) then
+			if reset_n='0' then
+				cmd_pos<=(others=>'0'); cmd_ready<='0'; cmd_error<='0'; cmd_over<='0';
+				cmd_seq<=(others=>'0'); cmd_active_prev<='0';
+				cmd_b0<=x"00"; cmd_b1<=x"00"; cmd_b2<=x"00"; cmd_b3<=x"00"; cmd_b4<=x"00";
+			else
+				cmd_active_prev <= command_active;
+				-- frame start: command line goes active
+				if (command_active='1' and cmd_active_prev='0') then
+					cmd_pos   <= (others=>'0');
+					cmd_error <= '0';
+				end if;
+				-- capture each completed byte while command active
+				if (s2p_write='1' and command_active='1') then
+					case to_integer(cmd_pos) is
+						when 0 => cmd_b0 <= s2p_byte;
+						when 1 => cmd_b1 <= s2p_byte;
+						when 2 => cmd_b2 <= s2p_byte;
+						when 3 => cmd_b3 <= s2p_byte;
+						when 4 => cmd_b4 <= s2p_byte;
+						when others => cmd_error <= '1';  -- too many bytes in frame
+					end case;
+					if (cmd_pos < 7) then cmd_pos <= cmd_pos + 1; end if;
+				end if;
+				-- frame end: command line releases
+				if (command_active='0' and cmd_active_prev='1') then
+					if (cmd_pos = 5 and cmd_error='0') then
+						if (cmd_ready='1') then cmd_over <= '1'; end if; -- CPU missed previous
+						cmd_ready <= '1';
+						cmd_seq   <= cmd_seq + 1;
+					elsif (cmd_pos /= 0) then
+						cmd_error <= '1';
+					end if;
+				end if;
+				-- CPU ack: clear status (re-arm)
+				if (SIO_CMD_ACK='1') then
+					cmd_ready <= '0'; cmd_error <= '0'; cmd_over <= '0';
+				end if;
+			end if;
+		end if;
+	end process;
+
+	SIO_CMD_BYTES  <= cmd_b4 & cmd_b3 & cmd_b2 & cmd_b1 & cmd_b0;
+	SIO_CMD_STATUS <= "0000" & cmd_over & command_active & cmd_error & cmd_ready;
+	SIO_CMD_SEQ    <= std_logic_vector(cmd_seq);
+
 	-- output
 	sio_data_in <= p2s_transmit_reg;
 	data_out <= data_out_reg;

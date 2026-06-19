@@ -91,6 +91,12 @@ module iosys_picorv32 #(
     input  wire [15:0] sio_reg_rdata,
     output wire        sio_reg_en,
 
+    // Phase B: hardware SIO command-frame capture
+    input  wire [39:0] siocmd_bytes,
+    input  wire [7:0]  siocmd_status,
+    input  wire [7:0]  siocmd_seq,
+    output wire        siocmd_ack,
+
     // Virtual Keyboard outputs
     output wire [7:0]  virt_kbd_mod_out,
     output wire [7:0]  virt_kbd_key1_out,
@@ -217,6 +223,13 @@ wire        virt_kbd_reg0_sel = mem_valid && (mem_addr == 32'h0200_00a0);
 wire        virt_kbd_reg1_sel = mem_valid && (mem_addr == 32'h0200_00a4);
 wire        cart_reg_sel      = mem_valid && (mem_addr == 32'h0200_00a8);
 
+// Phase B: SIO command-frame capture (read-only snoop in sio_handler)
+//   0x020000ac (R): {aux2, aux1, cmd, device}  = command bytes 3,2,1,0
+//   0x020000b0 (R): {8'b0, seq, status, checksum}   (W any value): ack/clear ready
+wire        siocmd_a_sel = mem_valid && (mem_addr == 32'h0200_00ac);
+wire        siocmd_b_sel = mem_valid && (mem_addr == 32'h0200_00b0);
+assign      siocmd_ack   = siocmd_b_sel && (|mem_wstrb);
+
 assign sio_reg_sel = mem_valid && (mem_addr[31:5] == 27'h0100_004);
 assign sio_reg_addr = mem_addr[6:2];
 assign sio_reg_wdata = mem_wdata[7:0];
@@ -238,7 +251,7 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
-            cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel;
+            cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel || siocmd_a_sel || siocmd_b_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -295,6 +308,8 @@ assign mem_rdata = bram_ready ? bram_rdata :
         virt_kbd_reg0_sel ? {virt_kbd_key3, virt_kbd_key2, virt_kbd_key1, virt_kbd_mod} :
         virt_kbd_reg1_sel ? {22'b0, joystick_mode, usb_host_enable, virt_kbd_key4} :
         cart_reg_sel ? {24'b0, cart_mode_reg} :
+        siocmd_a_sel ? siocmd_bytes[31:0] :
+        siocmd_b_sel ? {8'b0, siocmd_seq, siocmd_status, siocmd_bytes[39:32]} :
         32'h 0000_0000;
 
 picorv32 #(

@@ -789,6 +789,12 @@ wire        sio_reg_wr;
 wire [15:0] sio_reg_rdata;
 wire        sio_reg_en;
 
+// Phase B: hardware SIO command-frame capture (sio_handler ↔ iosys)
+wire [39:0] siocmd_bytes;
+wire [7:0]  siocmd_status;
+wire [7:0]  siocmd_seq;
+wire        siocmd_ack;
+
 wire        sio_rx_data_in;
 wire        sio_clk_out;
 wire        enable_179_early;
@@ -910,7 +916,13 @@ iosys_picorv32 #(
     .sio_reg_wdata(sio_reg_wdata),
     .sio_reg_wr(sio_reg_wr),
     .sio_reg_rdata(sio_reg_rdata),
-    .sio_reg_en(sio_reg_en)
+    .sio_reg_en(sio_reg_en),
+
+    // Phase B: SIO command-frame capture registers
+    .siocmd_bytes(siocmd_bytes),
+    .siocmd_status(siocmd_status),
+    .siocmd_seq(siocmd_seq),
+    .siocmd_ack(siocmd_ack)
 );
 
 // Clock Domain Crossing (CDC) Synchronization for SIO Handler
@@ -1056,7 +1068,12 @@ sio_handler sio_inst (
     .SIO_COMMAND(sio_command_sys),
     .SIO_DATA_OUT(sio_txd_sys),
     .SIO_CLK_OUT(sio_clk_out_sys),
-    .DATA_OUT(sio_reg_rdata)
+    .DATA_OUT(sio_reg_rdata),
+    // Phase B: command-frame capture
+    .SIO_CMD_BYTES(siocmd_bytes),
+    .SIO_CMD_STATUS(siocmd_status),
+    .SIO_CMD_SEQ(siocmd_seq),
+    .SIO_CMD_ACK(siocmd_ack)
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

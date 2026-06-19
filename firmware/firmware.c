@@ -1113,11 +1113,62 @@ void sio_process_command(void) {
 }
 
 // sio_poll() — call as frequently as possible from the main loop.
+#ifdef SIO_HW_CAPTURE
+// Phase B: hardware command-frame capture path (enabled with -DSIO_HW_CAPTURE).
+// The 5-byte command frame is assembled in the FPGA (sio_handler snoop); we poll a
+// ready flag + seq counter, read the bytes, flush the command bytes the snoop left
+// in the RX FIFO, then dispatch exactly as the software path does. The real-time SIO
+// timing lives in hardware so a busy firmware loop can no longer miss a command.
+static uint8_t sio_hw_last_seq = 0;
+static void sio_poll_hwcapture(void) {
+    if (!atr_mounted[0] && !atr_mounted[1]) return;
+
+    uint32_t b = reg_siocmd_b;
+    uint8_t status = (b >> 8) & 0xff;        // b0=ready b1=error b2=active b3=overrun
+    uint8_t seq    = (b >> 16) & 0xff;
+    if (!(status & 0x01)) return;            // no command ready
+    if (seq == sio_hw_last_seq) return;      // already serviced this frame
+    sio_hw_last_seq = seq;
+
+    uint32_t a = reg_siocmd_a;
+    sio_cmd_buf[0] = a & 0xff;               // device
+    sio_cmd_buf[1] = (a >> 8) & 0xff;        // command
+    sio_cmd_buf[2] = (a >> 16) & 0xff;       // aux1
+    sio_cmd_buf[3] = (a >> 24) & 0xff;       // aux2
+    sio_cmd_buf[4] = b & 0xff;               // checksum
+    reg_siocmd_b = 0;                        // ack / re-arm
+
+    // The snoop left the 5 command bytes in the RX FIFO. The data frame (for write
+    // commands) only arrives after we ACK, so the FIFO holds exactly those 5 now —
+    // drain them so the upcoming data phase starts clean.
+    while (!sio_rx_empty()) { (void)reg_sio_rx; }
+
+    dbg_cmd_frame_t *f = &dbg_cmd_history[dbg_cmd_history_idx];
+    f->device = sio_cmd_buf[0]; f->cmd = sio_cmd_buf[1];
+    f->aux1 = sio_cmd_buf[2];   f->aux2 = sio_cmd_buf[3];
+    f->checksum = sio_cmd_buf[4];
+    uint8_t calc = sio_checksum(sio_cmd_buf, 4);
+    f->processed = (calc != f->checksum) ? 2
+                 : (f->device != 0x31 && f->device != 0x32) ? 0 : 1;
+    dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
+
+    uint32_t rsp_t0 = reg_cycle;
+    sio_process_command();
+    dbg_resp_time_us = (uint32_t)(reg_cycle - rsp_t0) / 27;
+    sio_cmd_idx = 0;
+    while (!sio_rx_empty()) { (void)reg_sio_rx; }
+}
+#endif
+
 // Accumulates SIO command frame bytes using cmd_count from the FIFO word:
 //   cmd_count == 1..5: byte is part of a command frame (1=first, 5=checksum)
 //   cmd_count == 0:    data-phase byte (handled inside sio_process_command)
 // We reset if too much time passes without completing a frame (line glitch recovery).
 void sio_poll(void) {
+#ifdef SIO_HW_CAPTURE
+    sio_poll_hwcapture();
+    return;
+#endif
     if (!atr_mounted[0] && !atr_mounted[1]) return;
 
     uint32_t diag = reg_sio_diag;
