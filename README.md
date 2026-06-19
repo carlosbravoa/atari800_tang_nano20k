@@ -111,7 +111,7 @@ the keyboard alone covers everything.
 > accept it on a direct connection**, but some **strict or older displays** — and pass-through
 > gear like **HDMI splitters, AV receivers and capture cards** — may reject it outright
 > ("no signal" / "unsupported" / "out of range"). If your display won't show it, flash the
-> standard-720p **[v1.0 release](https://github.com/carlosbravoa/atari800_tang_nano20k/releases/tag/v1.0)**
+> standard-720p **[v1.1 release](https://github.com/carlosbravoa/atari800_tang_nano20k/releases/tag/v1.1)**
 > instead (fully CEA-standard, at the cost of higher latency).
 
 ---
