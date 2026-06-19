@@ -1,6 +1,6 @@
 # Atari 800 — Tang Nano 20K Port
 
-> This project started as a vibe-coding experiment with no shame. But now we have a full Atari800XL/130XE running with full NTSC Atari speed, perfect HDMI 720p, keyboard, joystick, ATR disks and cartridge emulation, all on this really small device. It's a blast to play with. It took 3,5 weeks and a lot of effort to get the coding agents focused on the right challenge/issue. Enjoy it (because I am)!
+> This project started as a vibe-coding experiment with no shame. But now we have a full Atari800XL/130XE running with full NTSC Atari speed, low-latency jitter-free HDMI (now a genlocked line-buffer, with optional CRT scanlines), keyboard, joystick, ATR disks, cartridges and `.xex` executables, all on this really small device. It's a blast to play with. It took a lot of effort to get the coding agents focused on the right challenge/issue. Enjoy it (because I am)!
 
 
 <img width="400" height="400" alt="Eureka! Atari running Montezuma from an ATR Disk" src="https://github.com/user-attachments/assets/20121280-905e-4c15-8795-352eec9abf01" />
@@ -43,7 +43,11 @@ the keyboard alone covers everything.
 ## Features
 
 - **Atari 800 / 800XL / 65XE / 130XE** emulation (6502 CPU, ANTIC, GTIA, POKEY, PIA)
-- **HDMI video** — standard 720p/60 Hz from an SDRAM **frame buffer** (3× upscale, exact NTSC core speed, minimal latency single-buffer design)
+- **HDMI video — genlocked, low-latency, no frame buffer** (v2.0): the Atari frame is shown via a
+  small line-buffer **scandoubler** (integer 3× → 1056×720 active, HD-class) whose pixel clock is
+  **frequency-locked to the core**, so it's rock-steady (no jitter, no tear) with only ~1–2
+  scanlines of latency — the SDRAM frame buffer is gone entirely
+- **CRT scanlines** (OFF / 25 / 50 / 75 %) and **horizontal position** — both adjustable live in the OSD
 - **HDMI audio** — 48 kHz stereo PCM in HDMI 1.3 data islands (no extra hardware)
 - **GPIO audio** — sigma-delta PDM on GPIO pins (add RC filter for analogue)
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
@@ -54,6 +58,8 @@ the keyboard alone covers everything.
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation, two drives** — mount `.atr` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
 - **Cartridge loading** — `.car` (49 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 2 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
+- **`.xex` executables** (v2.0) — boot Atari binary-load programs directly from the SD card: a baked-in 6502 loader is served as a virtual boot disk on D1:, handling the multi-segment `$FFFF`/INITAD/RUNAD format
+- **Hardware SIO command capture** (v2.0) — the 5-byte SIO command frame is assembled in the FPGA, so disk loading no longer depends on the firmware polling in time
 - **Long filenames** on the SD card (FatFs LFN); file browser with folders, 24 entries/page, instant Left/Right paging
 
 ---
@@ -63,7 +69,10 @@ the keyboard alone covers everything.
 | Feature | Status |
 |---|---|
 | Atari boot (BASIC) — auto-boots on power-on | ✅ Working |
-| HDMI video 720p/60 Hz | ✅ Working |
+| HDMI video — genlocked line-buffer, 1056×720 (3× integer), low-latency, no jitter/tear | ✅ Working |
+| CRT scanlines (OFF/25/50/75 %) + horizontal position — live OSD options | ✅ Working |
+| `.xex` executable loading (virtual-disk 6502 loader) | ✅ Working |
+| Hardware SIO command-frame capture | ✅ Working |
 | HDMI audio (48 kHz PCM) | ✅ Working |
 | GPIO sigma-delta audio | ✅ Working |
 | SD card ROM loader | ✅ Working |
@@ -75,9 +84,7 @@ the keyboard alone covers everything.
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
 | SIO disk emulation (.atr), **D1: + D2:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs |
 | Live OSD overlay (game runs behind menu, inputs masked) | ✅ Working |
-| Video centering (frame + picture) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
-| Frame-buffered 720p60 HDMI (SDRAM single buffer) | ✅ Working — stable across rebuilds |
 | Cartridge images (.car / .rom) | ✅ Working — 8K/16K and banked .car verified on hardware; 49 mapper types, up to 2 MB |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
@@ -89,15 +96,14 @@ the keyboard alone covers everything.
 > **Keyboard runs in hardware:** the CH9350/UART keyboard is decoded by a dedicated RTL module
 > (`uart_kbd_ch9350.sv`), independent of the softcore and the SDRAM bus.
 
-> **Video / clock:** The Atari core runs at **28.6875 MHz / `cycle_length=16` = exact NTSC
-> machine speed**, with the SDRAM controller decoupled onto a synchronous 2× clock
-> (57.375 MHz). Video goes Atari → SDRAM **frame buffer** → free-running standard 720p60,
-> so any monitor locks cleanly. Burst reads from the frame buffer are paced at half command
-> rate (BL2) — the bus-settling fix that ended a long saga of per-build "green ghost" pixel
-> corruption.
-
-> **Known caveat:** with the single frame buffer (chosen for minimal latency) the reader and
-> writer race, so a slow-moving tear line can appear during heavy motion.
+> **Video / clock (v2.0):** The Atari core runs at **28.6875 MHz / `cycle_length=16` = exact NTSC
+> machine speed**. Video is now a **genlocked line-buffer scandoubler** — there is **no SDRAM
+> frame buffer**. The Atari frame is captured a few lines at a time and read out as a custom
+> **1056×720** raster (integer 3× of the Atari's 352×240) whose pixel clock (57.375 MHz =
+> 2× core, from a cascaded PLL) is **frequency-locked to the machine**: exactly one output frame
+> per Atari frame → integer line count → **no ±1-line jitter and no tear**, at only ~1–2
+> scanlines of latency. The panel sees it as an HD (720-line) signal. This freed the SDRAM bus
+> for the Atari core + IO alone.
 
 ---
 
@@ -162,7 +168,7 @@ Get to a BASIC prompt in a few minutes:
 
 | Format | Max size | Limited by |
 |---|---|---|
-| `.car` | **2 MB** | The free 2 MB SDRAM window (8 MB chip; the rest holds Atari RAM, ROMs and the frame buffer) |
+| `.car` | **2 MB** | The free 2 MB SDRAM window (8 MB chip; the rest holds Atari RAM and ROMs) |
 | `.rom` (raw) | **16 KB** | Raw dumps carry no mapper info — only the simple unbanked sizes (2/4/8/16 KB) work |
 
 A whole cartridge must be **resident in SDRAM** because bank switching is a real-time hardware
@@ -409,13 +415,15 @@ The Atari auto-boots first. Press **S2** (or **F12**) to open/close the menu:
 9) Return to Atari (F12)
 ```
 - **D1: / D2: / Cart:** — each shows its current attachment inline and opens a small
-  object menu when selected: **Attach...** (file browser, filtered to `.atr` for drives,
-  `.car`/`.rom` for the cart) / **Detach** / **<< Back**. Attaching a cartridge
+  object menu when selected: **Attach...** (file browser, filtered to `.atr`/`.xex` for
+  drives, `.car`/`.rom` for the cart) / **Detach** / **<< Back**. Attaching a cartridge
   **cold-boots straight into it**; detaching it cold-boots back to BASIC. Disks
-  attach/detach live
+  attach/detach live. Selecting a **`.xex`** on D1: mounts it as a virtual boot disk and
+  **cold-boots straight into the program** (BASIC disabled)
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
 - **Soft / Hard Reset** — warm or cold restart (F9 is a soft-reset hotkey in-game)
-- **Options** — OSD hot key and **Arrow keys: NORMAL/JOYSTICK** (see below)
+- **Options** — OSD hot key, **Arrow keys: NORMAL/JOYSTICK** (see below), **Scanlines**
+  (OFF / 25 / 50 / 75 %), and **H position** (Left/Right to slide the picture live). All persist in `atari.ini`
 - **Return to Atari** — close the OSD (also via S2 / F12)
 
 > While the menu is open, the Atari **keeps running live behind it** (you'll hear the game
@@ -488,8 +496,8 @@ atari800_tang_nano20k_parallel/
     ├── tang_top.sv            # Top-level module (arbiter, clocks, input masking)
     ├── gw2ar_sdram.sv         # SDRAM handshake adapter (clk_core <-> clk_mem)
     ├── sdram_nestang.v        # Low-latency SDRAM controller (NESTang-derived)
-    ├── fb_writer.sv           # Atari video → SDRAM frame buffer (RGB332)
-    ├── fb_reader.sv           # Frame buffer → 720p60 raster (3× upscale)
+    ├── scandoubler_480p.sv    # Genlocked line-buffer scandoubler (Atari video → 1056×720, 3×, scanlines)
+    ├── rpll_287m.v            # Cascaded PLL: 114.75 → 286.875 MHz (HDMI 5×, pixel = 2× core)
     ├── iosys_picorv32.v       # PicoRV32 IO subsystem (OSD, SD); firmware in BSRAM
     ├── fw_bram.v              # 48 KB byte-laned BSRAM firmware boot RAM
     ├── fw_lane{0..3}.hex      # firmware BSRAM init (generated by bin2bram.py)
@@ -506,10 +514,13 @@ atari800_tang_nano20k_parallel/
 
 ## Known Limitations / Roadmap
 
-- **SIO disk emulation** — ✅ working (D1:, read + write)
-- **Atari speed** — ✅ exact NTSC speed (28.6875 MHz core + SDRAM frame buffer → standard 720p60)
-- **core timing / corruption** — ✅ resolved: low-latency SDRAM controller, half-rate BL2 burst
-  reads (bus settling), synchronized clock-divider start-up, hardened timing constraints
+- **SIO disk emulation** — ✅ working (D1: + D2:, read + write); hardware command-frame capture
+- **`.xex` executables** — ✅ working (virtual-disk 6502 loader). A program that loads into
+  page `$0600-$07FF` can clash with the running loader; relocating the loader to high RAM is a
+  possible future fix
+- **Atari speed** — ✅ exact NTSC speed (28.6875 MHz core), genlocked line-buffer video (no
+  frame buffer) — jitter-free, tear-free, low-latency 1056×720
+- **A few demanding `.xex` titles** show intermittent graphics glitches (see `KNOWN_ISSUES.md`)
 - **Joystick paddles** — analogue pot inputs not implemented
 - **Cartridge images** — ✅ `.car`/`.rom` working, banked mappers hardware-verified; 49 CAR
   types up to 2 MB (4 MB mappers like The!Cart cannot fit the 8 MB SDRAM). Rejected types
