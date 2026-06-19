@@ -67,21 +67,24 @@ module tang_top (
 GSR GSR_INST (.GSRI(1'b1));
 
 // ── Clocks & reset ─────────────────────────────────────────────────────────
-// Phase A (480p genlocked scandoubler): HDMI runs at 27 MHz pixel / 135 MHz serializer
-// (was 74.25 / 371.25 for the 720p frame-buffer path). Lower TMDS clock => large slack.
-wire clk_5x;               // 135 MHz    — HDMI OSER10 5x clock (was 371.25)
-wire clk_pix;              // 27 MHz     — HDMI pixel clock (135 ÷ 5)  (was 74.25)
+// Phase A (480p genlocked scandoubler, FREQUENCY-LOCKED): HDMI pixel = clk_core = 28.6875
+// MHz, derived (like clk_core) from clk_108m so the output is locked to the Atari frame
+// (912x524 = exactly one Atari frame -> integer lines -> no ±1 jitter). clk_5x = 5x pixel
+// = 143.4375 MHz from rpll_143m, which is CASCADED off clk_108m (not the crystal).
+wire clk_5x;               // 143.4375 MHz — HDMI OSER10 5x clock
+wire clk_pix;              // 28.6875 MHz  — HDMI pixel clock (143.4375 ÷ 5 = clk_core)
 wire clk_usb;              // 12 MHz     — USB HID host (rpll_108m CLKOUTD ÷18)
 wire clk_108m;             // 114.75 MHz — intermediate (rpll_108m CLKOUT)
 wire clk_core;             // 28.6875 MHz — Atari core (clk_108m ÷ 4; cl=16 → 1.7898 MHz exact NTSC)
 wire clk_mem;              // 57.375 MHz — SDRAM controller (clk_108m ÷ 2; 2:1 synchronous w/ clk_core)
 wire pll_locked, pll_core_locked;
 
-// Phase A: 27 MHz × 5 = 135 MHz HDMI serializer clock (rpll_135m). The port is named
-// clk_371m for drop-in compatibility with the previous rpll_371m instance.
-rpll_135m pll (
-    .clk_in  (sys_clk),
-    .clk_135m(clk_5x),
+// Phase A: HDMI serializer clock 143.4375 MHz, CASCADED off clk_108m (114.75 × 5/4) so the
+// pixel clock (143.4375/5 = 28.6875 = clk_core) is frequency-locked to the Atari frame.
+// clk_108m is driven by rpll_108m below (structural — instantiation order is irrelevant).
+rpll_143m pll (
+    .clk_in  (clk_108m),
+    .clk_143m(clk_5x),
     .locked  (pll_locked)
 );
 

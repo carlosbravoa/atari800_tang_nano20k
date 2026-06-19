@@ -77,6 +77,7 @@ add_file "$src_dir/sdram_statemachine.vhdl"
 # ── Stage 2: HDMI ─────────────────────────────────────────────────────────────
 add_file "$src_dir/rpll_371m.v"
 add_file "$src_dir/rpll_135m.v"
+add_file "$src_dir/rpll_143m.v"
 add_file "$src_dir/rpll_108m.v"
 add_file "$src_dir/fb_writer.sv"
 add_file "$src_dir/fb_reader.sv"

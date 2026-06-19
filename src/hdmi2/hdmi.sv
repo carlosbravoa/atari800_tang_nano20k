@@ -119,8 +119,13 @@ generate
             end
         2, 3:
         begin
-            assign frame_width = 858;
-            assign frame_height = 525;
+            // Phase A: custom frequency-locked 480p — 912x524 @ 28.6875 MHz (= clk_core),
+            // exactly one Atari frame (477888 = 524*912 core cycles) so the output is
+            // genlocked with integer lines and does NOT jitter. Active stays 720x480 and
+            // the AVI infoframe still advertises VIC 2 (480p), which displays accept.
+            // (Was the standard 858x525 @ 27 MHz, which is NOT core-locked -> ±1 jitter.)
+            assign frame_width = 912;
+            assign frame_height = 524;
             assign screen_width = 720;
             assign screen_height = 480;
             assign hsync_pulse_start = 16;

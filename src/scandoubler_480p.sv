@@ -37,7 +37,7 @@ module scandoubler_480p #(
     parameter integer SRC_COLS    = 352,   // Atari active pixels captured per line
     parameter integer SRC_LINES   = 240,   // Atari active lines captured per field
     parameter integer H_PIC_OFFSET = 8,    // left pillarbox: (720 - 2*352)/2 = 8
-    parameter integer V_PIC_TOP   = 44,    // first active output line (tune on hardware)
+    parameter integer V_PIC_TOP   = 22,    // first active output line ((524-480)/2; tune on HW)
     parameter bit     SYNC_ACTIVE_LOW = 1'b0
 )(
     // Atari source (clk_core)
@@ -59,11 +59,13 @@ module scandoubler_480p #(
 // 8-line ring buffer (slot = line mod 8) — read may trail write by up to 7 lines.
 localparam integer RING_LINES = 8;
 
-// ── 480p59.94 horizontal timing, matched to hdmi.sv VIDEO_ID_CODE=2 (858 total, 720 act) ──
-localparam [10:0] H_ACT = 11'd720,  H_TOT = 11'd858;
+// ── Custom frequency-locked 480p timing, matched to hdmi.sv VIDEO_ID_CODE=2 patched to
+// 912x524 (active 720x480). 912*524 = 477888 = exactly one Atari frame in clk_core cycles,
+// so with clk_pix = clk_core the output is genlocked with integer lines (no jitter). ──
+localparam [10:0] H_ACT = 11'd720,  H_TOT = 11'd912;        // HBP = 912-720-16-62 = 114
 localparam [10:0] H_SYNC_S = 11'd736, H_SYNC_E = 11'd798;   // HFP=16, HSync=62
 localparam [9:0]  V_ACT = 10'd480,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
-localparam [9:0]  V_SAFETY = 10'd559;                       // safety wrap if a SOF is missed
+localparam [9:0]  V_SAFETY = 10'd530;                       // safety wrap if a SOF is missed (>524)
 localparam [10:0] PIC_X0 = 11'(H_PIC_OFFSET);
 localparam [10:0] PIC_X1 = 11'(H_PIC_OFFSET + 2*SRC_COLS);
 localparam [9:0]  V_TOP  = 10'(V_PIC_TOP);
