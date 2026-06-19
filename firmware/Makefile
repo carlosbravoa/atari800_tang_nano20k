@@ -8,7 +8,10 @@ RISCV = riscv64-unknown-elf
 CC = $(RISCV)-gcc
 OBJCOPY = $(RISCV)-objcopy
 OBJDUMP = $(RISCV)-objdump
-CFLAGS  = -Wall -Os -g -ffunction-sections -fdata-sections -mabi=ilp32 -march=rv32i -ffreestanding -I.
+# EXTRA_CFLAGS: append build-time options, e.g. `make EXTRA_CFLAGS=-DSIO_HW_CAPTURE`
+# to enable the Phase B hardware SIO command-capture path (default = software path).
+EXTRA_CFLAGS ?=
+CFLAGS  = -Wall -Os -g -ffunction-sections -fdata-sections -mabi=ilp32 -march=rv32i -ffreestanding -I. $(EXTRA_CFLAGS)
 LFLAGS = -mabi=ilp32 -march=rv32i -Wl,--build-id=none,-Bstatic,-T,baremetal.ld,--gc-sections -nostdlib
 LIBS = -lgcc
 
