@@ -67,17 +67,21 @@ module tang_top (
 GSR GSR_INST (.GSRI(1'b1));
 
 // ── Clocks & reset ─────────────────────────────────────────────────────────
-wire clk_5x;               // 371.25 MHz — HDMI OSER10 5x clock
-wire clk_pix;              // 74.25 MHz  — HDMI pixel clock (371.25 ÷ 5)
+// Phase A (480p genlocked scandoubler): HDMI runs at 27 MHz pixel / 135 MHz serializer
+// (was 74.25 / 371.25 for the 720p frame-buffer path). Lower TMDS clock => large slack.
+wire clk_5x;               // 135 MHz    — HDMI OSER10 5x clock (was 371.25)
+wire clk_pix;              // 27 MHz     — HDMI pixel clock (135 ÷ 5)  (was 74.25)
 wire clk_usb;              // 12 MHz     — USB HID host (rpll_108m CLKOUTD ÷18)
 wire clk_108m;             // 114.75 MHz — intermediate (rpll_108m CLKOUT)
 wire clk_core;             // 28.6875 MHz — Atari core (clk_108m ÷ 4; cl=16 → 1.7898 MHz exact NTSC)
 wire clk_mem;              // 57.375 MHz — SDRAM controller (clk_108m ÷ 2; 2:1 synchronous w/ clk_core)
 wire pll_locked, pll_core_locked;
 
-rpll_371m pll (
+// Phase A: 27 MHz × 5 = 135 MHz HDMI serializer clock (rpll_135m). The port is named
+// clk_371m for drop-in compatibility with the previous rpll_371m instance.
+rpll_135m pll (
     .clk_in  (sys_clk),
-    .clk_371m(clk_5x),
+    .clk_135m(clk_5x),
     .locked  (pll_locked)
 );
 
@@ -204,6 +208,7 @@ wire        video_vs, video_hs;
 wire [7:0]  video_r, video_g, video_b;
 wire        video_blank;
 wire        video_pixce;
+wire        video_sof;        // VIDEO_START_OF_FIELD — genlock marker for the scandoubler
 
 
 // ── Audio ──────────────────────────────────────────────────────────────────
@@ -1082,7 +1087,8 @@ sio_handler sio_inst (
 atari800core_simple_sdram #(
     .cycle_length               (16),
     .video_bits                 (8),
-    .palette                    (1),    // Altirra palette
+    .palette                    (0),    // Phase A: 0 = raw GTIA colour code on VIDEO_B
+                                        // (Altirra palette applied on readout in scandoubler_480p)
     .internal_rom               (0),    // ROMs in SDRAM
     .internal_ram               (0),
     .low_memory                 (0),
@@ -1100,7 +1106,7 @@ atari800core_simple_sdram #(
     .VIDEO_BLANK                (video_blank),
     .VIDEO_PIXCE                (video_pixce),
     .VIDEO_BURST                (),
-    .VIDEO_START_OF_FIELD       (),
+    .VIDEO_START_OF_FIELD       (video_sof),
     .VIDEO_ODD_LINE             (),
     .interlace_field            (),
     .interlace                  (),
@@ -1248,13 +1254,19 @@ usb_to_atari800 keyboard (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HDMI video source: fb_reader scales Atari core output to 720p/60Hz from SDRAM
+// HDMI video source: Phase A — genlocked 480p scandoubler (no SDRAM, ~1-2 line latency)
 // ─────────────────────────────────────────────────────────────────────────────
 wire [7:0] hdmi_r, hdmi_g, hdmi_b;
 wire       hdmi_hs, hdmi_vs, hdmi_de;
 
-// B4: free-running standard 720p60 reader, reading the SDRAM frame buffer (written by
-// fb_writer) via its own read-only arbiter client.  No genlock — Atari video taps unused here.
+// fb_reader/fb_writer remain instantiated (still SDRAM arbiter clients) but their video
+// output is no longer used — the scandoubler drives HDMI directly from the Atari video.
+// Removing the now-dead fb clients (to reclaim SDRAM bandwidth, arbiter 4->3) is a
+// follow-up once the scandoubler is hardware-verified; left in place here to avoid
+// touching the arbiter in this step.
+wire [7:0] fbr_r_nc, fbr_g_nc, fbr_b_nc;
+wire       fbr_hs_nc, fbr_vs_nc, fbr_de_nc;
+wire [7:0] fbr_osdx_nc, fbr_osdy_nc;
 fb_reader #(
     .FB_BASE        (25'h0078_0000),
     .WORDS_PER_LINE (88),
@@ -1267,6 +1279,21 @@ fb_reader #(
     .fbr_ack   (fbr_ack),
     .fbr_rdata (fbr_rdata),
     .clk_pixel (clk_pix),
+    .r_out(fbr_r_nc), .g_out(fbr_g_nc), .b_out(fbr_b_nc),
+    .hs_out(fbr_hs_nc), .vs_out(fbr_vs_nc), .de_out(fbr_de_nc),
+    .osd_x(fbr_osdx_nc), .osd_y(fbr_osdy_nc)
+);
+
+// Genlocked scandoubler: Atari video (clk_core) -> 4-line ring -> standard 480p59.94
+// (clk_pix=27 MHz), 2x2 upscale + pillarbox, Altirra palette on readout.
+scandoubler_480p scandoubler (
+    .clk_core  (clk_core),
+    .rst_n     (hdmi_rst_n),
+    .colour_in (video_b),        // GTIA colour code (palette=0)
+    .de_in     (~video_blank),
+    .sof_in    (video_sof),
+    .pixce     (video_pixce),
+    .clk_pix   (clk_pix),
     .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
     .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
     .osd_x(osd_x), .osd_y(osd_y)

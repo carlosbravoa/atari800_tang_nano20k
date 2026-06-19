@@ -2,11 +2,11 @@
 # sys_clk: 27 MHz onboard oscillator (pin 4, LPLL1_T_in, Bank 7)
 create_clock -name sys_clk -period 37.037 [get_ports {sys_clk}]
 
-# clk_5x: 371.25 MHz from rPLL (rpll_371m: FBDIV_SEL=54, IDIV_SEL=3, ODIV_SEL=2)
-create_clock -name clk_5x -period 2.6936 [get_nets {clk_5x}]
+# clk_5x: Phase A — 135 MHz from rpll_135m (was 371.25 MHz rpll_371m). HDMI OSER10 5x.
+create_clock -name clk_5x -period 7.4074 [get_nets {clk_5x}]
 
-# clk_pix: 74.25 MHz CLKDIV output — treat as independent clock (matches Gowin HDMI example)
-create_clock -name clk_pix -period 13.468 -waveform {0 6.734} [get_pins {clkdiv_hdmi/CLKOUT}]
+# clk_pix: Phase A — 27 MHz CLKDIV output (135 ÷ 5; was 74.25). Standard 480p59.94 pixel clk.
+create_clock -name clk_pix -period 37.037 -waveform {0 18.5185} [get_pins {clkdiv_hdmi/CLKOUT}]
 # Require 1 ns of setup margin on clk_pix (P&R only optimizes until constraints barely
 # pass; without this, unrelated source changes can land the TMDS path at ~0 ns slack).
 set_clock_uncertainty -setup -from [get_clocks {clk_pix}] -to [get_clocks {clk_pix}] 1.0
