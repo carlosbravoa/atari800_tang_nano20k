@@ -6,6 +6,7 @@
 #include "picorv32.h"
 #include "fatfs/ff.h"
 #include "firmware.h"
+#include "xex_loader.h"   // 6502 binary-load boot loader image (virtual D1: disk)
 
 uint32_t CORE_ID;
 
@@ -59,6 +60,13 @@ int file_len;		// number of files on this page
 FIL atr_file[ATR_DRIVES];
 bool atr_mounted[ATR_DRIVES] = {false, false};
 uint16_t atr_sector_size[ATR_DRIVES] = {128, 128};
+
+// XEX (Atari binary executable) state — served as a virtual bootable disk on D1:
+// only. When xex_active, D1: STATUS/READ are answered from the baked-in 6502 boot
+// loader (sectors 1..XEX_BLDCNT) + the raw .xex file bytes (XEX_FIRSTSEC..).
+bool     xex_active = false;
+FIL      xex_file;
+uint32_t xex_len = 0;
 
 static uint8_t sio_sector_buf[256];
 static uint8_t sio_cmd_buf[5];
@@ -372,7 +380,8 @@ int load_dir(char *dir, int start, int len, int *count, int carts) {
                 if (carts)
                     is_atr = (strcasecmp(ext, ".car") == 0 || strcasecmp(ext, ".rom") == 0);
                 else
-                    is_atr = (strcasecmp(ext, ".atr") == 0);
+                    // D1: browser also lists .xex (Atari binary executables)
+                    is_atr = (strcasecmp(ext, ".atr") == 0 || strcasecmp(ext, ".xex") == 0);
             }
         }
 
@@ -502,7 +511,11 @@ int mount_atr(char *filepath, int slot) {
         f_close(&atr_file[slot]);
         atr_mounted[slot] = false;
     }
-    
+    if (slot == 0 && xex_active) {   // an ATR takes D1: back from a mounted XEX
+        f_close(&xex_file);
+        xex_active = false;
+    }
+
     int r = f_open(&atr_file[slot], filepath, FA_READ | FA_WRITE);
     if (r != FR_OK) {
         // Try read-only if write access fails
@@ -578,8 +591,72 @@ int atr_read_sector(int slot, uint32_t sector_num, uint8_t *buf, int *sector_len
         uart_printf("Read sector read failed for sector %d, got %d bytes\n", sector_num, br);
         return -2;
     }
-    
+
     return 0;
+}
+
+// Mount a .xex as the virtual boot disk on D1:.  Validates the $FFFF header and
+// patches the 24-bit byte length into the baked-in loader image so it knows how
+// many bytes to pull over SIO.
+int mount_xex(char *filepath) {
+    if (xex_active) {
+        f_close(&xex_file);
+        xex_active = false;
+    }
+    int r = f_open(&xex_file, filepath, FA_READ);
+    if (r != FR_OK) {
+        uart_printf("xex: open '%s' failed %d\n", filepath, r);
+        message("Cannot open XEX file", 1);
+        return r;
+    }
+    xex_len = f_size(&xex_file);
+    // Sanity: a binary-load file must begin with the $FFFF header word.
+    uint8_t h[2];
+    unsigned int br;
+    if (f_read(&xex_file, h, 2, &br) != FR_OK || br != 2 ||
+        h[0] != 0xFF || h[1] != 0xFF) {
+        f_close(&xex_file);
+        message("Not a valid .XEX\n(missing $FFFF header)", 1);
+        return -1;
+    }
+    // Patch the 24-bit remaining-byte length into the loader's init code.
+    xex_loader_img[XEX_REMLO_OFF]  =  xex_len        & 0xFF;
+    xex_loader_img[XEX_REMMID_OFF] = (xex_len >> 8)  & 0xFF;
+    xex_loader_img[XEX_REMHI_OFF]  = (xex_len >> 16) & 0xFF;
+    // Take over D1: from any mounted ATR.
+    if (atr_mounted[0]) {
+        f_close(&atr_file[0]);
+        atr_mounted[0] = false;
+    }
+    atr_sector_size[0] = 128;   // virtual disk is single density
+    xex_active = true;
+    uart_printf("xex: '%s' mounted, %u bytes\n", filepath, (unsigned)xex_len);
+    return 0;
+}
+
+// Serve one 128-byte sector of the virtual XEX disk into buf.
+int xex_read_sector(uint32_t sector_num, uint8_t *buf, int *sector_len) {
+    *sector_len = 128;
+    if (sector_num >= 1 && sector_num <= XEX_BLDCNT) {
+        // Boot loader image.
+        uint32_t base = (sector_num - 1) * 128;
+        for (int i = 0; i < 128; i++) buf[i] = xex_loader_img[base + i];
+        return 0;
+    }
+    if (sector_num >= XEX_FIRSTSEC) {
+        // Raw .xex bytes, 128 per sector; zero-pad the final partial sector.
+        uint32_t off = (sector_num - XEX_FIRSTSEC) * 128;
+        for (int i = 0; i < 128; i++) buf[i] = 0;
+        if (off < xex_len) {
+            unsigned int br;
+            uint32_t n = xex_len - off;
+            if (n > 128) n = 128;
+            if (f_lseek(&xex_file, off) != FR_OK) return -1;
+            if (f_read(&xex_file, buf, n, &br) != FR_OK) return -2;
+        }
+        return 0;
+    }
+    return -1;   // sector 0 is invalid
 }
 
 int atr_write_sector(int slot, uint32_t sector_num, const uint8_t *buf, int len) {
@@ -694,7 +771,15 @@ int menu_loadrom(int *choice, int carts, int slot) {
                             break;          // error shown; stay in the browser
                         }
 
-                        // Disk context: mount as an ATR disk image into the chosen drive
+                        // Disk context. A .xex on D1: becomes the virtual boot disk.
+                        char *fext = strrchr(load_fname, '.');
+                        if (slot == 0 && fext && strcasecmp(fext, ".xex") == 0) {
+                            if (mount_xex(load_fname) == 0)
+                                return 3;   // xex on D1: — caller cold-boots it
+                            break;          // error shown; stay in the browser
+                        }
+
+                        // Otherwise mount as an ATR disk image into the chosen drive
                         int res = mount_atr(load_fname, slot);
                         if (res != 0) {
                             char errmsg[64];
@@ -1060,7 +1145,9 @@ void sio_process_command(void) {
             sio_wait_tx_empty();
             
             // 2. Perform the slow read from the SD card (takes several milliseconds)
-            int r = atr_read_sector(slot, sector, sector_buf, &sector_len);
+            int r = (slot == 0 && xex_active)
+                        ? xex_read_sector(sector, sector_buf, &sector_len)
+                        : atr_read_sector(slot, sector, sector_buf, &sector_len);
             if (r == 0) {
                 // Calculate checksum of sector data (Atari end-around carry)
                 uint8_t sum = sio_checksum(sector_buf, sector_len);
@@ -1154,7 +1241,7 @@ void sio_process_command(void) {
 // timing lives in hardware so a busy firmware loop can no longer miss a command.
 static uint8_t sio_hw_last_seq = 0;
 static void sio_poll_hwcapture(void) {
-    if (!atr_mounted[0] && !atr_mounted[1]) return;
+    if (!atr_mounted[0] && !atr_mounted[1] && !xex_active) return;
 
     uint32_t b = reg_siocmd_b;
     uint8_t status = (b >> 8) & 0xff;        // b0=ready b1=error b2=active b3=overrun
@@ -1202,7 +1289,7 @@ void sio_poll(void) {
     sio_poll_hwcapture();
     return;
 #endif
-    if (!atr_mounted[0] && !atr_mounted[1]) return;
+    if (!atr_mounted[0] && !atr_mounted[1] && !xex_active) return;
 
     uint32_t diag = reg_sio_diag;
     if (((diag >> 13) & 1) == 0) {
@@ -1290,6 +1377,19 @@ static void cold_boot_atari(void) {
     reg_romload_ctrl = 0;
 }
 
+// Cold-boot the virtual XEX disk on D1: with OPTION held (BASIC disabled), then
+// keep servicing SIO so the boot loader's sector reads are answered during boot.
+static void cold_boot_xex(void) {
+    reg_virt_kbd_0 = 0x00410000;                    // hold OPTION (disable BASIC)
+    sio_init();
+    *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
+    reg_romload_ctrl = 1;
+    delay(20);
+    reg_romload_ctrl = 0;
+    sio_delay(600);                                 // serve boot reads while OPTION held
+    reg_virt_kbd_0 = 0x00000000;                    // release OPTION
+}
+
 // Per-drive object menu (entered by selecting "Dn: <name>" on the main menu).
 // Returns 0 = nothing, 1 = disk attached (*sel_idx names it), 2 = detached.
 int menu_drive(int slot, char *cur_name, int *sel_idx) {
@@ -1312,7 +1412,8 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
                 if (choice == 0) {
                     delay(300);
                     int r = menu_loadrom(sel_idx, 0, slot);
-                    if (r == 0) return 1;   // attached
+                    if (r == 0) return 1;   // ATR attached
+                    if (r == 3) return 3;   // XEX attached — caller cold-boots it
                     break;                  // backed out — redraw
                 } else if (choice == 1) {
                     if (atr_mounted[slot]) {
@@ -1705,6 +1806,13 @@ int main() {
                     mounted_atr_name[dslot][15] = '\0';
                 } else if (r == 2) {
                     strncpy(mounted_atr_name[dslot], "None", 16);
+                } else if (r == 3) {
+                    // XEX mounted on D1: as a virtual boot disk — cold-boot into it
+                    strncpy(mounted_atr_name[dslot], file_names[selected_idx], 16);
+                    mounted_atr_name[dslot][15] = '\0';
+                    cold_boot_xex();
+                    booted = true;
+                    overlay(0);
                 }
             } else if (choice == 2) {
                 int selected_idx;
