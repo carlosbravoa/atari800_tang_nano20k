@@ -36,8 +36,8 @@
 module scandoubler_480p #(
     parameter integer SRC_COLS    = 352,   // Atari active pixels captured per line
     parameter integer SRC_LINES   = 240,   // Atari active lines captured per field
-    parameter integer H_PIC_OFFSET = 8,    // left pillarbox: (720 - 2*352)/2 = 8
-    parameter integer V_PIC_TOP   = 22,    // first active output line ((524-480)/2; tune on HW)
+    parameter integer H_PIC_OFFSET = 0,    // left margin: 3*352 = 1056 = full active (no pillarbox)
+    parameter integer V_PIC_TOP   = 33,    // first active output line ((786-720)/2; tune on HW)
     parameter bit     SYNC_ACTIVE_LOW = 1'b0
 )(
     // Atari source (clk_core)
@@ -48,7 +48,7 @@ module scandoubler_480p #(
     input  wire        sof_in,      // VIDEO_START_OF_FIELD
     input  wire        pixce,       // VIDEO_PIXCE pixel strobe
 
-    // HDMI (clk_pix = 27 MHz)
+    // HDMI (clk_pix = 57.375 MHz = 2*clk_core; 720-line mode)
     input  wire        clk_pix,
     output reg  [7:0]  r_out, g_out, b_out,
     output reg         hs_out, vs_out, de_out,
@@ -59,15 +59,16 @@ module scandoubler_480p #(
 // 8-line ring buffer (slot = line mod 8) — read may trail write by up to 7 lines.
 localparam integer RING_LINES = 8;
 
-// ── Custom frequency-locked 480p timing, matched to hdmi.sv VIDEO_ID_CODE=2 patched to
-// 912x524 (active 720x480). 912*524 = 477888 = exactly one Atari frame in clk_core cycles,
-// so with clk_pix = clk_core the output is genlocked with integer lines (no jitter). ──
-localparam [10:0] H_ACT = 11'd720,  H_TOT = 11'd912;        // HBP = 912-720-16-62 = 114
-localparam [10:0] H_SYNC_S = 11'd736, H_SYNC_E = 11'd798;   // HFP=16, HSync=62
-localparam [9:0]  V_ACT = 10'd480,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
-localparam [9:0]  V_SAFETY = 10'd530;                       // safety wrap if a SOF is missed (>524)
+// ── Custom frequency-locked "720-line" timing, matched to hdmi.sv VIDEO_ID_CODE=4 patched
+// to 1216x786 (active 1056x720). 1216*786 = 955776 = 2*477888 = exactly one Atari frame at
+// the 2x pixel rate (clk_pix = 2*clk_core) -> genlocked, integer lines, no jitter. Active is
+// integer 3x of the Atari 352x240 frame. ──
+localparam [10:0] H_ACT = 11'd1056, H_TOT = 11'd1216;      // HBP = 1216-1056-16-80 = 64
+localparam [10:0] H_SYNC_S = 11'd1072, H_SYNC_E = 11'd1152;// HFP=16, HSync=80
+localparam [9:0]  V_ACT = 10'd720,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
+localparam [9:0]  V_SAFETY = 10'd800;                       // safety wrap if a SOF is missed (>786)
 localparam [10:0] PIC_X0 = 11'(H_PIC_OFFSET);
-localparam [10:0] PIC_X1 = 11'(H_PIC_OFFSET + 2*SRC_COLS);
+localparam [10:0] PIC_X1 = 11'(H_PIC_OFFSET + 3*SRC_COLS);  // 3x horizontal
 localparam [9:0]  V_TOP  = 10'(V_PIC_TOP);
 localparam [9:0]  V_BOT  = 10'(V_PIC_TOP) + V_ACT;
 
@@ -142,10 +143,15 @@ wire in_hact = (hx < H_ACT);
 wire in_vact = (vy >= V_TOP) && (vy < V_BOT);
 wire in_pic  = (hx >= PIC_X0) && (hx < PIC_X1) && in_vact;
 
-wire [10:0] pic_x   = hx - PIC_X0;             // 0..703 within picture
-wire [8:0]  src_col = pic_x[9:1];              // /2 -> 0..351
+// 3x downscale of output position -> source col/line. Divide-by-3 via reciprocal multiply
+// (x/3 = floor(x*21846/65536)) keeps src_col/src_row clean combinational functions of hx/vy
+// (no counter/pipeline alignment headaches), exactly as the /2 shift did at 480p.
+wire [10:0] pic_x   = hx - PIC_X0;             // 0..1055 within picture
+wire [26:0] mul_h   = pic_x * 16'd21846;
+wire [8:0]  src_col = mul_h[24:16];            // /3 -> 0..351
 wire [9:0]  vy_rel  = vy - V_TOP;
-wire [7:0]  src_row = vy_rel[8:1];             // /2 -> 0..239
+wire [25:0] mul_v   = vy_rel * 16'd21846;
+wire [7:0]  src_row = mul_v[23:16];            // /3 -> 0..239
 wire [11:0] raddr   = {src_row[2:0], src_col}; // 8-line ring
 
 // OSD coords: 256-col window centred in 352 src (col 48..303), like fb_reader.

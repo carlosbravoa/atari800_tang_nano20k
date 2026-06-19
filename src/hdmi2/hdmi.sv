@@ -136,12 +136,17 @@ generate
             end
         4:
         begin
-            assign frame_width = 1650;   // standard CEA-861 720p60 H-total (was 1672 — non-standard; picky monitors rejected it). fb_reader emits 1650 to match.
-            assign frame_height = 750;
-            assign screen_width = 1280;
+            // Phase A "720-line" custom freq-locked mode: 1216x786 @ 57.375 MHz (= 2*clk_core),
+            // exactly one Atari frame (955776 = 2*477888 pixel cycles) -> integer lines, no
+            // jitter. Active 1056x720 = integer 3x of the Atari 352x240 frame. AVI still
+            // advertises VIC 4 (720p) so the panel treats it as HD (no SD overscan).
+            // (Was standard 1650x750 @ 74.25 MHz for the old 720p frame buffer.)
+            assign frame_width = 1216;
+            assign frame_height = 786;
+            assign screen_width = 1056;
             assign screen_height = 720;
-            assign hsync_pulse_start = 110;
-            assign hsync_pulse_size = 40;
+            assign hsync_pulse_start = 16;
+            assign hsync_pulse_size = 80;
             assign vsync_pulse_start = 5;
             assign vsync_pulse_size = 5;
             assign invert = 0;

@@ -2,12 +2,12 @@
 # sys_clk: 27 MHz onboard oscillator (pin 4, LPLL1_T_in, Bank 7)
 create_clock -name sys_clk -period 37.037 [get_ports {sys_clk}]
 
-# clk_5x: Phase A freq-lock — 143.4375 MHz from rpll_143m (cascaded off clk_108m). HDMI 5x.
-create_clock -name clk_5x -period 6.9717 [get_nets {clk_5x}]
+# clk_5x: Phase A 720-line freq-lock — 286.875 MHz from rpll_287m (cascaded off clk_108m). HDMI 5x.
+create_clock -name clk_5x -period 3.4859 [get_nets {clk_5x}]
 
-# clk_pix: Phase A freq-lock — 28.6875 MHz CLKDIV output (143.4375 ÷ 5 = clk_core). 480p custom
-# 912x524 locked to the Atari frame.
-create_clock -name clk_pix -period 34.858 -waveform {0 17.429} [get_pins {clkdiv_hdmi/CLKOUT}]
+# clk_pix: Phase A 720-line freq-lock — 57.375 MHz CLKDIV output (286.875 ÷ 5 = 2*clk_core).
+# Custom 1216x786 (active 1056x720, integer 3x) locked to the Atari frame.
+create_clock -name clk_pix -period 17.429 -waveform {0 8.715} [get_pins {clkdiv_hdmi/CLKOUT}]
 # Require 1 ns of setup margin on clk_pix (P&R only optimizes until constraints barely
 # pass; without this, unrelated source changes can land the TMDS path at ~0 ns slack).
 set_clock_uncertainty -setup -from [get_clocks {clk_pix}] -to [get_clocks {clk_pix}] 1.0

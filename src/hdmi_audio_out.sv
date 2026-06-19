@@ -26,15 +26,15 @@ assign audio_sample_word[0] = audio_l;
 assign audio_sample_word[1] = audio_r;
 
 // ── 48 kHz sample tick generator ──────────────────────────────────────────────
-// Phase A freq-lock: pixel clock is now 28.6875 MHz (= clk_core). 28.6875e6/48000 =
-// 597.66 → +8 each cycle, tick at 4781 (4781/8 = 597.6) for ~48.00 kHz.
+// Phase A 720-line freq-lock: pixel clock is now 57.375 MHz (= 2*clk_core). 57.375e6/48000
+// = 1195.3 → +8 each cycle, tick at 9563 (9563/8 = 1195.4) for ~48.00 kHz.
 reg [13:0] smp_acc;
-wire       smp_tick = (smp_acc + 14'd8 >= 14'd4781);
+wire       smp_tick = (smp_acc + 14'd8 >= 14'd9563);
 always_ff @(posedge clk_pix or negedge rst_n) begin
     if (!rst_n)
         smp_acc <= 14'd0;
     else
-        smp_acc <= smp_tick ? (smp_acc + 14'd8 - 14'd4781) : (smp_acc + 14'd8);
+        smp_acc <= smp_tick ? (smp_acc + 14'd8 - 14'd9563) : (smp_acc + 14'd8);
 end
 
 // ── Reset alignment to the first active pixel of the frame ───────────────────
@@ -66,7 +66,7 @@ wire [2:0] tmds_internal;
 wire       tmds_clock_internal;
 
 hdmi #(
-    .VIDEO_ID_CODE(2),              // Phase A: 480p59.94 (858x525) — was 4 (720p60)
+    .VIDEO_ID_CODE(4),              // Phase A 720-line: custom 1216x786 (active 1056x720)
     .DVI_OUTPUT(DVI_OUTPUT),
     .NO_DATA_ISLANDS(NO_DATA_ISLANDS),
     .VIDEO_REFRESH_RATE(60.0),
