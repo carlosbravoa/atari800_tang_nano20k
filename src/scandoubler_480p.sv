@@ -50,7 +50,8 @@ module scandoubler_480p #(
 
     // HDMI (clk_pix = 57.375 MHz = 2*clk_core; 720-line mode)
     input  wire        clk_pix,
-    input  wire        scanlines_en,    // 1 = dim the bottom output line of each 3x group
+    input  wire [1:0]  scanline_level,  // 0=off, 1=25%, 2=50%, 3=75% brightness of the dim line
+    input  wire [7:0]  h_offset,        // front porch 0..80 -> horizontal picture position
     output reg  [7:0]  r_out, g_out, b_out,
     output reg         hs_out, vs_out, de_out,
     output wire [7:0]  osd_x,
@@ -65,10 +66,12 @@ localparam integer RING_LINES = 8;
 // the 2x pixel rate (clk_pix = 2*clk_core) -> genlocked, integer lines, no jitter. Active is
 // integer 3x of the Atari 352x240 frame. ──
 localparam [10:0] H_ACT = 11'd1056, H_TOT = 11'd1216;
-// HSYNC position sets horizontal picture position on the panel (smaller back porch =
-// picture further LEFT). HFP=56, HSync=80, HBP=24. Move HSYNC earlier (smaller H_SYNC_S)
-// to shift the picture RIGHT, later to shift it LEFT. Total stays 1216 (freq-lock).
-localparam [10:0] H_SYNC_S = 11'd1112, H_SYNC_E = 11'd1192;
+localparam [10:0] H_SYNC_W = 11'd80;   // HSYNC width
+// HSYNC position is runtime-adjustable: front porch = h_offset (0..80), so HSYNC slides
+// within the blanking to move the picture horizontally on the panel (bigger h_offset =
+// HSYNC later = smaller back porch = picture further LEFT). Total stays 1216 (freq-lock).
+wire [10:0] hsync_s = H_ACT + {3'b0, h_offset};
+wire [10:0] hsync_e = hsync_s + H_SYNC_W;
 localparam [9:0]  V_ACT = 10'd720,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
 localparam [9:0]  V_SAFETY = 10'd800;                       // safety wrap if a SOF is missed (>786)
 localparam [10:0] PIC_X0 = 11'(H_PIC_OFFSET);
@@ -203,11 +206,23 @@ always_ff @(posedge clk_pix or negedge rst_n) begin
         else                    v_rep <= v_rep + 2'd1;
     end
 end
-wire dim_s0 = scanlines_en && (v_rep == 2'd2);
+wire dim_s0 = (scanline_level != 2'd0) && (v_rep == 2'd2);
+
+// Scanline attenuation of the dim line: 25% = c>>2, 50% = c>>1, 75% = c - c>>2.
+function [7:0] atten(input [7:0] c);
+    case (scanline_level)
+        2'd1:    atten = {2'b00, c[7:2]};        // 25%
+        2'd3:    atten = c - {2'b00, c[7:2]};    // 75%
+        default: atten = {1'b0,  c[7:1]};        // 50%
+    endcase
+endfunction
+wire [7:0] pr_dim = atten(pr);
+wire [7:0] pg_dim = atten(pg);
+wire [7:0] pb_dim = atten(pb);
 
 // ── Output pipeline: src_col/row registered(T+1) -> raddr -> code_q(T+2) -> r_out(T+3),
 // so sync/de/pic/dim need THREE register stages (s1, s2, output) to align with the pixel. ──
-wire hs_lvl = (hx >= H_SYNC_S) && (hx < H_SYNC_E);
+wire hs_lvl = (hx >= hsync_s) && (hx < hsync_e);
 wire vs_lvl = (vy < V_SYNC);
 wire de_s0  = in_hact && in_vact;
 reg de_s1, hs_s1, vs_s1, pic_s1, dim_s1;
@@ -222,9 +237,9 @@ always_ff @(posedge clk_pix) begin
     hs_out <= SYNC_ACTIVE_LOW ? ~hs_s2 : hs_s2;
     vs_out <= SYNC_ACTIVE_LOW ? ~vs_s2 : vs_s2;
     if (de_s2 && pic_s2) begin
-        r_out <= dim_s2 ? {1'b0, pr[7:1]} : pr;   // 50% dim on scanline
-        g_out <= dim_s2 ? {1'b0, pg[7:1]} : pg;
-        b_out <= dim_s2 ? {1'b0, pb[7:1]} : pb;
+        r_out <= dim_s2 ? pr_dim : pr;   // scanline attenuation (off/25/50/75%)
+        g_out <= dim_s2 ? pg_dim : pg;
+        b_out <= dim_s2 ? pb_dim : pb;
     end else begin
         r_out <= 8'd0; g_out <= 8'd0; b_out <= 8'd0;   // pillarbox / blanking
     end

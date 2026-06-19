@@ -98,7 +98,8 @@ module iosys_picorv32 #(
     output wire        siocmd_ack,
 
     // Video options (scanlines etc.)
-    output wire        scanlines_en_out,
+    output wire [1:0]  scanline_level_out,   // 0=off,1=25%,2=50%,3=75%
+    output wire [7:0]  h_offset_out,         // horizontal picture position (front porch 0..80)
 
     // Virtual Keyboard outputs
     output wire [7:0]  virt_kbd_mod_out,
@@ -225,7 +226,8 @@ wire        spiflash_reg_ctrl_sel = mem_valid && (mem_addr == 32'h0200_0078);
 wire        virt_kbd_reg0_sel = mem_valid && (mem_addr == 32'h0200_00a0);
 wire        virt_kbd_reg1_sel = mem_valid && (mem_addr == 32'h0200_00a4);
 wire        cart_reg_sel      = mem_valid && (mem_addr == 32'h0200_00a8);
-wire        video_opts_sel    = mem_valid && (mem_addr == 32'h0200_00b4);  // [0]=scanlines
+wire        video_opts_sel    = mem_valid && (mem_addr == 32'h0200_00b4);  // [1:0]=scanline level
+wire        h_offset_sel      = mem_valid && (mem_addr == 32'h0200_00b8);  // [7:0]=H position
 
 // Phase B: SIO command-frame capture (read-only snoop in sio_handler)
 //   0x020000ac (R): {aux2, aux1, cmd, device}  = command bytes 3,2,1,0
@@ -256,7 +258,7 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
             cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel || siocmd_a_sel || siocmd_b_sel ||
-            video_opts_sel;
+            video_opts_sel || h_offset_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -316,6 +318,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         siocmd_a_sel ? siocmd_bytes[31:0] :
         siocmd_b_sel ? {8'b0, siocmd_seq, siocmd_status, siocmd_bytes[39:32]} :
         video_opts_sel ? {24'b0, video_opts_reg} :
+        h_offset_sel ? {24'b0, h_offset_reg} :
         32'h 0000_0000;
 
 picorv32 #(
@@ -493,8 +496,10 @@ reg [7:0] virt_kbd_key4 = 8'h00;
 reg       usb_host_enable = 1'b1;
 reg       joystick_mode = 1'b0;
 reg [7:0] cart_mode_reg = 8'h00;   // CartLogic mapper code; 0 = no cartridge
-reg [7:0] video_opts_reg = 8'h00;  // [0] = scanlines enable
-assign    scanlines_en_out = video_opts_reg[0];
+reg [7:0] video_opts_reg = 8'h00;  // [1:0] = scanline level
+reg [7:0] h_offset_reg   = 8'd56;  // horizontal position (front porch), default centred-ish
+assign    scanline_level_out = video_opts_reg[1:0];
+assign    h_offset_out       = h_offset_reg;
 
 always @(posedge clk) begin
     if (~resetn) begin
@@ -507,6 +512,7 @@ always @(posedge clk) begin
         joystick_mode <= 1'b0;
         cart_mode_reg <= 8'h00;
         video_opts_reg <= 8'h00;
+        h_offset_reg <= 8'd56;
     end else begin
         if (virt_kbd_reg0_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_mod  <= mem_wdata[7:0];
@@ -521,6 +527,7 @@ always @(posedge clk) begin
         end
         if (cart_reg_sel && mem_wstrb[0]) cart_mode_reg <= mem_wdata[7:0];
         if (video_opts_sel && mem_wstrb[0]) video_opts_reg <= mem_wdata[7:0];
+        if (h_offset_sel && mem_wstrb[0])   h_offset_reg   <= mem_wdata[7:0];
     end
 end
 

@@ -19,7 +19,8 @@ void uart_keyboard_poll(void);
 
 int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
 int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
-int option_scanlines = 0;                   // 1 = CRT-style scanlines (dim bottom line of each 3x group)
+int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
+int option_h_offset = 56;                   // horizontal picture position (front porch, 0..80)
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
@@ -29,9 +30,10 @@ static inline void apply_input_options(void) {
     reg_virt_kbd_1 = (option_arrow_joystick ? 0x200 : 0x000);
 }
 
-// Push video options into the hardware config register (0xB4): bit 0 = scanlines.
+// Push video options into the hardware config registers.
 static inline void apply_video_options(void) {
-    reg_video_opts = option_scanlines ? 0x1 : 0x0;
+    reg_video_opts = option_scanline_level & 0x3;   // 0x B4 [1:0] scanline level
+    reg_h_offset   = option_h_offset & 0xFF;        // 0x B8 [7:0] horizontal position
 }
 
 char load_fname[512];
@@ -264,7 +266,12 @@ int load_option()  {
             option_arrow_joystick = (atoi(value) != 0);
         }
         if (strcmp(key, "scanlines") == 0) {
-            option_scanlines = (atoi(value) != 0);
+            option_scanline_level = atoi(value) & 0x3;
+        }
+        if (strcmp(key, "hpos") == 0) {
+            int v = atoi(value);
+            if (v < 0) v = 0; if (v > 80) v = 80;
+            option_h_offset = v;
         }
     }
 
@@ -299,7 +306,17 @@ int save_option() {
         message("f_puts failed",1);
         goto save_options_close;
     }
-    f_puts(option_scanlines ? "1\n" : "0\n", &f);
+    { char s[2] = { (char)('0' + (option_scanline_level & 0x3)), 0 }; f_puts(s, &f); }
+    f_puts("\n", &f);
+
+    if (f_puts("hpos=", &f) < 0) {
+        message("f_puts failed",1);
+        goto save_options_close;
+    }
+    { char s[4]; int n = option_h_offset, k = 0;
+      if (n >= 10) s[k++] = '0' + (n / 10);
+      s[k++] = '0' + (n % 10); s[k] = 0; f_puts(s, &f); }
+    f_puts("\n", &f);
 
 save_options_close:
     f_close(&f);
@@ -1385,14 +1402,31 @@ void menu_options() {
         cursor(2, 15);
         print("Scanlines:");
         cursor(16, 15);
-        print(option_scanlines ? "ON" : "OFF");
+        print(option_scanline_level == 1 ? "25%" :
+              option_scanline_level == 2 ? "50%" :
+              option_scanline_level == 3 ? "75%" : "OFF");
+
+        cursor(2, 16);
+        print("H position:");
+        cursor(16, 16);
+        { char hb[8]; int n = option_h_offset; int k = 0;
+          if (n >= 10) hb[k++] = '0' + (n / 10);
+          hb[k++] = '0' + (n % 10); hb[k] = 0; print(hb); print("  <- ->"); }
 
         delay(300);
 
         for (;;) {
             uart_keyboard_poll();
             sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
-            if (joy_choice(12, 4, &choice, OSD_KEY_CODE) == 1) {
+            { // H position: live left/right adjust on the selected item (saved on select)
+                int jj1, jj2; joy_get(&jj1, &jj2);
+                if (choice == 4 && (jj1 & 0x40) && option_h_offset > 0) {
+                    option_h_offset--; apply_video_options(); delay(60);
+                } else if (choice == 4 && (jj1 & 0x80) && option_h_offset < 80) {
+                    option_h_offset++; apply_video_options(); delay(60);
+                }
+            }
+            if (joy_choice(12, 5, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     return;
                 } else if (choice == 1) {
@@ -1418,9 +1452,19 @@ void menu_options() {
                     }
                     break; // redraw UI
                 } else if (choice == 3) {
-                    option_scanlines = !option_scanlines;
+                    option_scanline_level = (option_scanline_level + 1) & 0x3; // OFF/25/50/75
                     apply_video_options();
 
+                    status("Saving options...");
+                    if (save_option()) {
+                        message("Cannot save options to SD", 1);
+                        break;
+                    }
+                    break; // redraw UI
+                } else if (choice == 4) {
+                    // H position: value already applied live by the left/right handler;
+                    // pressing select just saves the current value.
+                    apply_video_options();
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
