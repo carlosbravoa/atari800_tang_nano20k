@@ -66,12 +66,14 @@ localparam integer RING_LINES = 8;
 // the 2x pixel rate (clk_pix = 2*clk_core) -> genlocked, integer lines, no jitter. Active is
 // integer 3x of the Atari 352x240 frame. ──
 localparam [10:0] H_ACT = 11'd1056, H_TOT = 11'd1216;
-localparam [10:0] H_SYNC_W = 11'd80;   // HSYNC width
-// HSYNC position is runtime-adjustable: front porch = h_offset (0..80), so HSYNC slides
-// within the blanking to move the picture horizontally on the panel (bigger h_offset =
-// HSYNC later = smaller back porch = picture further LEFT). Total stays 1216 (freq-lock).
-wire [10:0] hsync_s = H_ACT + {3'b0, h_offset};
-wire [10:0] hsync_e = hsync_s + H_SYNC_W;
+// Fixed HSYNC (porch position has no effect on DE-positioned panels). HFP=40, HSync=80, HBP=40.
+localparam [10:0] H_SYNC_S = 11'd1096, H_SYNC_E = 11'd1176;
+// h_offset is the CAPTURE start offset (skip this many leading active pixels per line), which
+// pans WHICH part of the Atari line we show — moves the picture without resizing. Bigger
+// h_offset shows columns further right in the source = picture moves LEFT on screen.
+// 2-FF sync into clk_core (slow config; a rare 1-frame transient while adjusting is harmless).
+reg [7:0] h_off_s1, h_off_core;
+always_ff @(posedge clk_core) begin h_off_s1 <= h_offset; h_off_core <= h_off_s1; end
 localparam [9:0]  V_ACT = 10'd720,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
 localparam [9:0]  V_SAFETY = 10'd800;                       // safety wrap if a SOF is missed (>786)
 localparam [10:0] PIC_X0 = 11'(H_PIC_OFFSET);
@@ -87,6 +89,7 @@ wire       de_fall  = de_d  & ~de_in;
 wire       sof_rise = sof_in & ~sof_d;
 
 reg [8:0]  wcol;
+reg [9:0]  acol;     // active-pixel index within the line (counts skipped pixels too)
 reg [7:0]  wrow;
 wire [11:0] waddr = {wrow[2:0], wcol};   // 8 slots x 512 cols
 reg        we;
@@ -94,21 +97,23 @@ reg [7:0]  wdata;
 
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
-        de_d <= 1'b0; sof_d <= 1'b0; wcol <= 9'd0; wrow <= 8'd0; we <= 1'b0; wdata <= 8'd0;
+        de_d <= 1'b0; sof_d <= 1'b0; wcol <= 9'd0; acol <= 10'd0; wrow <= 8'd0; we <= 1'b0; wdata <= 8'd0;
     end else begin
         de_d <= de_in; sof_d <= sof_in;
         we   <= 1'b0;
         if (sof_rise) begin
-            wrow <= 8'd0; wcol <= 9'd0;
+            wrow <= 8'd0; wcol <= 9'd0; acol <= 10'd0;
         end else if (de_fall) begin
             if (wrow != SRC_LINES-1) wrow <= wrow + 8'd1;
-            wcol <= 9'd0;
+            wcol <= 9'd0; acol <= 10'd0;
         end else if (pixce && de_in) begin
-            if (wcol < SRC_COLS) begin
+            // skip the first h_off_core active pixels, then capture SRC_COLS columns
+            if ((acol >= {2'b0, h_off_core}) && (wcol < SRC_COLS)) begin
                 wdata <= colour_in;
                 we    <= 1'b1;
                 wcol  <= wcol + 9'd1;
             end
+            acol <= acol + 10'd1;
         end
     end
 end
@@ -222,7 +227,7 @@ wire [7:0] pb_dim = atten(pb);
 
 // ── Output pipeline: src_col/row registered(T+1) -> raddr -> code_q(T+2) -> r_out(T+3),
 // so sync/de/pic/dim need THREE register stages (s1, s2, output) to align with the pixel. ──
-wire hs_lvl = (hx >= hsync_s) && (hx < hsync_e);
+wire hs_lvl = (hx >= H_SYNC_S) && (hx < H_SYNC_E);
 wire vs_lvl = (vy < V_SYNC);
 wire de_s0  = in_hact && in_vact;
 reg de_s1, hs_s1, vs_s1, pic_s1, dim_s1;

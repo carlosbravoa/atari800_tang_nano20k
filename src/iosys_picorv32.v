@@ -497,7 +497,7 @@ reg       usb_host_enable = 1'b1;
 reg       joystick_mode = 1'b0;
 reg [7:0] cart_mode_reg = 8'h00;   // CartLogic mapper code; 0 = no cartridge
 reg [7:0] video_opts_reg = 8'h00;  // [1:0] = scanline level
-reg [7:0] h_offset_reg   = 8'd56;  // horizontal position (front porch), default centred-ish
+reg [7:0] h_offset_reg   = 8'd0;   // horizontal position (capture-skip pixels); 0 = no pan
 assign    scanline_level_out = video_opts_reg[1:0];
 assign    h_offset_out       = h_offset_reg;
 
@@ -512,7 +512,7 @@ always @(posedge clk) begin
         joystick_mode <= 1'b0;
         cart_mode_reg <= 8'h00;
         video_opts_reg <= 8'h00;
-        h_offset_reg <= 8'd56;
+        h_offset_reg <= 8'd0;
     end else begin
         if (virt_kbd_reg0_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_mod  <= mem_wdata[7:0];

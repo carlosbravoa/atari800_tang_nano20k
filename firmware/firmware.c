@@ -20,7 +20,7 @@ void uart_keyboard_poll(void);
 int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
 int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
-int option_h_offset = 56;                   // horizontal picture position (front porch, 0..80)
+int option_h_offset = 0;                    // horizontal pan: capture-skip pixels (0..48)
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
@@ -270,7 +270,7 @@ int load_option()  {
         }
         if (strcmp(key, "hpos") == 0) {
             int v = atoi(value);
-            if (v < 0) v = 0; if (v > 80) v = 80;
+            if (v < 0) v = 0; if (v > 48) v = 48;
             option_h_offset = v;
         }
     }
@@ -1422,7 +1422,7 @@ void menu_options() {
                 int jj1, jj2; joy_get(&jj1, &jj2);
                 if (choice == 4 && (jj1 & 0x40) && option_h_offset > 0) {
                     option_h_offset--; apply_video_options(); delay(60);
-                } else if (choice == 4 && (jj1 & 0x80) && option_h_offset < 80) {
+                } else if (choice == 4 && (jj1 & 0x80) && option_h_offset < 48) {
                     option_h_offset++; apply_video_options(); delay(60);
                 }
             }
