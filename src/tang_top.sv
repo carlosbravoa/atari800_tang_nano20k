@@ -409,15 +409,17 @@ wire sdram_ctrl_req = (sadap_st == SA_WAIT) ? 1'b0 :
 wire        sdram_ctrl_read_en  = (current_owner == OWN_RV) ? (~|rv_wstrb) : core_sdram_read_en;
 wire        sdram_ctrl_write_en = (current_owner == OWN_RV) ? (|rv_wstrb)  : core_sdram_write_en;
 // Cartridge address remap: the core places emulated-cart accesses at SDRAM offset
-// 8 MB+ (addr[24:22] = 3'b010, fine on MiSTer's 32 MB part). Our embedded SDRAM is
+// 8 MB+ (addr[24:22] = 3'b010, fine on MiSTer's 32 MB part). The core's
+// SDRAM_CART_ADDR uses a full 22-bit (4 MB) emu_cart_address. Our embedded SDRAM is
 // exactly 8 MB and gw2ar_sdram ignores addr[24:23], so without remapping carts would
-// alias onto Atari RAM at 0x000000. Remap them into the free 2 MB window at
-// 0x400000-0x5FFFFF (RAM ends 0x020000 with RAM_SELECT=128K; the core's freezer —
-// the only other tenant of this region — is disabled; BASIC/OS/FB live at 0x700000+).
-// Supports carts up to 2 MB (MegaCart 2MB); larger (4 MB Flash MegaCart, The!Cart)
-// cannot fit the 8 MB part and are rejected by the firmware loader.
+// alias onto Atari RAM at 0x000000. Remap them into the 4 MB window at
+// 0x400000-0x7FFFFF (RAM ends 0x020000 with RAM_SELECT=128K; BASIC/OS relocated to
+// 0x020000/0x024000 — below this window — and the old frame buffer is gone, so the
+// whole upper 4 MB is free for carts; the core's freezer in this region is disabled).
+// Supports carts up to 4 MB (MegaCart 4 MB / .car type 63). The!Cart 32/64/128 MB
+// still cannot fit the 8 MB part and are rejected by the firmware loader.
 wire        core_addr_is_cart   = (core_sdram_addr[24:22] == 3'b010);
-wire [24:0] core_sdram_addr_eff = core_addr_is_cart ? {4'b0010, core_sdram_addr[20:0]}
+wire [24:0] core_sdram_addr_eff = core_addr_is_cart ? {3'b001, core_sdram_addr[21:0]}
                                                     : core_sdram_addr;
 
 wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV) ? rv_physical_addr : core_sdram_addr_eff;

@@ -908,10 +908,15 @@ gen_normal_memory : if low_memory=0 generate
 	SDRAM_FREEZER_ROM_ADDR <= "001001010" & freezer_access_address(15 downto 0);
 	-- CARTS         -              "0 0101 YYYY YYY0 0000 0000 0000" (BOT) - 2MB! 8kb banks
 	SDRAM_CART_ADDR	<= "010" & emu_cart_address(21 downto 0);
-	-- BASIC/OS ROM  -              "0 0111 XXXX XX00 0000 0000 0000" (BOT) (BASIC IN SLOT 0!), 2nd to last 512K below 8MB
-	SDRAM_BASIC_ROM_ADDR <= "00111"&"000000" &"00000000000000";
-	SDRAM_OS_ROM_ADDR    <= "00111"&"000010" &"00000000000000" when atari800mode = '1' else
-				"00111"&"000001" &"00000000000000";
+	-- BASIC/OS ROM  -              "0 0000 001X XX00 0000 0000 0000" (BOT)
+	-- TN20K: relocated below RAM-top into the free low region (BASIC 0x020000,
+	-- OS 0x024000 XL/XE, 0x028000 a800) so the 4 MB cart window 0x400000-0x7FFFFF is
+	-- contiguous. Was 0x700000/0x704000 (now inside the cart window). The firmware
+	-- writes ROMs to the matching physical addresses via 0x00220000/0x00224000 (the
+	-- iosys bank-0/1 swap maps those to physical 0x020000/0x024000). Keep both in sync.
+	SDRAM_BASIC_ROM_ADDR <= "00000"&"001000" &"00000000000000";
+	SDRAM_OS_ROM_ADDR    <= "00000"&"001010" &"00000000000000" when atari800mode = '1' else
+				"00000"&"001001" &"00000000000000";
 	-- SYSTEM        -              "0 0111 1000 0000 0000 0000 0000" (BOT) - Free 512K below 8MB
 
 end generate;

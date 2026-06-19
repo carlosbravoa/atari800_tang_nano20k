@@ -57,7 +57,7 @@ the keyboard alone covers everything.
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation, two drives** — mount `.atr` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
-- **Cartridge loading** — `.car` (49 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 2 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
+- **Cartridge loading** — `.car` (50 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 4 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
 - **`.xex` executables** (v2.0) — boot Atari binary-load programs directly from the SD card: a baked-in 6502 loader is served as a virtual boot disk on D1:, handling the multi-segment `$FFFF`/INITAD/RUNAD format
 - **Hardware SIO command capture** (v2.0) — the 5-byte SIO command frame is assembled in the FPGA, so disk loading no longer depends on the firmware polling in time
 - **Long filenames** on the SD card (FatFs LFN); file browser with folders, 24 entries/page, instant Left/Right paging
@@ -85,7 +85,7 @@ the keyboard alone covers everything.
 | SIO disk emulation (.atr), **D1: + D2:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs |
 | Live OSD overlay (game runs behind menu, inputs masked) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
-| Cartridge images (.car / .rom) | ✅ Working — 8K/16K and banked .car verified on hardware; 49 mapper types, up to 2 MB |
+| Cartridge images (.car / .rom) | ✅ Working — 8K/16K, banked, and 4 MB MegaCart verified on hardware; 50 mapper types, up to 4 MB |
 
 > **Architecture note — firmware runs from BSRAM:** The PicoRV32 IO subsystem (OSD, SD
 > access, keyboard) executes from on-chip **BSRAM**, not SDRAM. This removes its instruction
@@ -177,14 +177,15 @@ Get to a BASIC prompt in a few minutes:
 
 | Format | Max size | Limited by |
 |---|---|---|
-| `.car` | **2 MB** | The free 2 MB SDRAM window (8 MB chip; the rest holds Atari RAM and ROMs) |
+| `.car` | **4 MB** | The 4 MB SDRAM cart window (8 MB chip; the rest holds Atari RAM and ROMs) |
 | `.rom` (raw) | **16 KB** | Raw dumps carry no mapper info — only the simple unbanked sizes (2/4/8/16 KB) work |
 
 A whole cartridge must be **resident in SDRAM** because bank switching is a real-time hardware
 decision made by the 6502 — there's no opportunity to stream banks from the SD card on demand
-(SD latency is ~1000× too slow for the bank-select→read window). 4 MB mappers (The!Cart,
-MegaCart 4 MB) physically cannot fit the 8 MB SDRAM and are rejected. For dumps larger than
-16 KB, convert them to `.car` so the mapper type is encoded in the header.
+(SD latency is ~1000× too slow for the bank-select→read window). This covers everything up to
+**MegaCart 4 MB** (`.car` type 63). The!Cart 32/64/128 MB still can't fit the 8 MB SDRAM and are
+rejected. For dumps larger than 16 KB, convert them to `.car` so the mapper type is encoded in
+the header.
 
 ---
 
@@ -531,8 +532,8 @@ atari800_tang_nano20k_parallel/
   frame buffer) — jitter-free, tear-free, low-latency 1056×720
 - **A few demanding `.xex` titles** show intermittent graphics glitches (see `KNOWN_ISSUES.md`)
 - **Joystick paddles** — analogue pot inputs not implemented
-- **Cartridge images** — ✅ `.car`/`.rom` working, banked mappers hardware-verified; 49 CAR
-  types up to 2 MB (4 MB mappers like The!Cart cannot fit the 8 MB SDRAM). Rejected types
+- **Cartridge images** — ✅ `.car`/`.rom` working, banked + 4 MB MegaCart hardware-verified; 50 CAR
+  types up to 4 MB (The!Cart 32/64/128 MB cannot fit the 8 MB SDRAM). Rejected types
   show their id on screen — report them if the core should support one
 - **Machine is NTSC** (`PAL=0`); runtime PAL/NTSC switch planned
 

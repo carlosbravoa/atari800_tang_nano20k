@@ -410,11 +410,12 @@ int load_dir(char *dir, int start, int len, int *count, int carts) {
 
 // ── Cartridge loading ────────────────────────────────────────────────────────
 // The Atari core's CartLogic reads cart data from SDRAM; tang_top remaps those
-// accesses into the free 1 MB window at physical 0x600000 (= same address in the
-// firmware's view), so we just f_read the image straight into SDRAM there, set
-// the mapper code in reg_cart_mode, and cold-boot.
+// accesses into the 4 MB window at physical 0x400000-0x7FFFFF (= same address in
+// the firmware's view, banks 2-3 pass through the iosys swap unchanged), so we just
+// f_read the image straight into SDRAM there, set the mapper code in reg_cart_mode,
+// and cold-boot. BASIC/OS were relocated out of this window (to 0x020000/0x024000).
 #define CART_SDRAM_BASE 0x00400000u
-#define CART_MAX_SIZE   0x00200000u
+#define CART_MAX_SIZE   0x00400000u
 
 // CAR header type -> core CartLogic mode (see rtl/common/a8core/cart_logic.vhd).
 // Pairs of {CAR type, mode}; unknown types are rejected with an error message.
@@ -428,7 +429,7 @@ static const uint8_t car_type_map[][2] = {
     {40,0x23}, {41,0x02}, {42,0x03}, {43,0x09}, {44,0x05}, {45,0x06},
     {46,0x12}, {50,0x45}, {51,0x46}, {52,0x47},                       // Turbosoft, Ultracart
     {54,0x24}, {55,0x25}, {56,0x26}, {57,0x16}, {58,0x17}, {59,0x15},
-    {60,0x13}, {64,0x2F},                                             // MegaCart 2MB
+    {60,0x13}, {63,0x20}, {64,0x2F},                                  // MegaCart 4MB / 2MB
     {69,0x48}, {70,0x49},                                             // aDawliah 32/64K
     {75,0x10},
 };
@@ -489,7 +490,7 @@ int load_cartridge(char *filepath) {
     }
     if (data_size > CART_MAX_SIZE) {
         f_close(&f);
-        message("Cartridge too large (>2MB)\ndoes not fit 8MB SDRAM", 1);
+        message("Cartridge too large (>4MB)\ndoes not fit 8MB SDRAM", 1);
         return -5;
     }
 
@@ -862,9 +863,10 @@ int load_system_roms(void) {
     }
     
     // Load OS.ROM into SDRAM at the address the Atari core's address_decoder expects:
-    // SDRAM_OS_ROM_ADDR (XL/XE mode, low_memory=0) = 0x704000
-    // See gw2ar_sdram.sv header and address_decoder.vhdl line 913-914.
-    volatile uint8_t *os_rom_ptr = (volatile uint8_t *)0x00704000;
+    // SDRAM_OS_ROM_ADDR (XL/XE mode, low_memory=0) = physical 0x024000, relocated below
+    // the 4 MB cart window 0x400000-0x7FFFFF. Firmware addr 0x00224000 -> physical
+    // 0x024000 via the iosys bank-0/1 swap. Keep in sync with address_decoder.vhdl.
+    volatile uint8_t *os_rom_ptr = (volatile uint8_t *)0x00224000;
     r = f_read(&f, (void *)os_rom_ptr, 16384, &br);
     f_close(&f);
     if (r != FR_OK || br != 16384) {
@@ -873,7 +875,7 @@ int load_system_roms(void) {
         reg_romload_ctrl = 0;
         return (2 << 8) | r;
     }
-    uart_printf("OS.ROM loaded successfully (%d bytes) at SDRAM 0x704000\n", br);
+    uart_printf("OS.ROM loaded successfully (%d bytes) at SDRAM 0x024000\n", br);
     
     // Load BASIC.ROM
     r = f_open(&f, "/BASIC.ROM", FA_READ);
@@ -888,9 +890,10 @@ int load_system_roms(void) {
     }
     
     // Load BASIC.ROM into SDRAM at the address the Atari core's address_decoder expects:
-    // SDRAM_BASIC_ROM_ADDR (low_memory=0) = 0x700000
-    // See gw2ar_sdram.sv header and address_decoder.vhdl line 912.
-    volatile uint8_t *basic_rom_ptr = (volatile uint8_t *)0x00700000;
+    // SDRAM_BASIC_ROM_ADDR (low_memory=0) = physical 0x020000, relocated below the 4 MB
+    // cart window. Firmware addr 0x00220000 -> physical 0x020000 via the iosys bank-0/1
+    // swap. Keep in sync with address_decoder.vhdl.
+    volatile uint8_t *basic_rom_ptr = (volatile uint8_t *)0x00220000;
     r = f_read(&f, (void *)basic_rom_ptr, 8192, &br);
     f_close(&f);
     if (r != FR_OK || br != 8192) {
@@ -899,7 +902,7 @@ int load_system_roms(void) {
         reg_romload_ctrl = 0;
         return (4 << 8) | r;
     }
-    uart_printf("BASIC.ROM loaded successfully (%d bytes) at SDRAM 0x700000\n", br);
+    uart_printf("BASIC.ROM loaded successfully (%d bytes) at SDRAM 0x020000\n", br);
     
     // Release reset
     reg_romload_ctrl = 0;
@@ -1399,7 +1402,7 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
         cursor(2, 9);
         printf("D%d: %s", slot + 1, cur_name);
         cursor(2, 11);
-        print("1) Attach disk...");
+        print("1) Attach (.atr / .xex)...");
         cursor(2, 12);
         print("2) Detach");
         cursor(2, 13);

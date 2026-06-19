@@ -160,8 +160,9 @@ reg [31:0] ram_rdata;
 
 // Low 8 MB region (addr[31:23]==0) is split:
 //   addr < 32 KB (0x0000_0000..0x0000_7FFF) → on-chip BSRAM = firmware code/data/stack
-//   addr >= 32 KB                            → SDRAM (Atari memory: ROM load 0x700000/
-//                                              0x704000, COLDST 0x200244, etc.)
+//   addr >= 32 KB                            → SDRAM (Atari memory: ROM load 0x220000/
+//                                              0x224000 → phys 0x020000/0x024000, COLDST
+//                                              0x200244, 4 MB cart 0x400000-0x7FFFFF)
 // Firmware EXECUTES from BSRAM so its instruction fetches never touch SDRAM —
 // this is the whole point (ends CPU↔ANTIC SDRAM contention).
 wire        lowregion_sel = mem_valid && mem_addr[31:23] == 0;
