@@ -19,6 +19,7 @@ void uart_keyboard_poll(void);
 
 int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
 int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
+int option_scanlines = 0;                   // 1 = CRT-style scanlines (dim bottom line of each 3x group)
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
@@ -26,6 +27,11 @@ int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (
 // bit 9 = arrow-keys-as-joystick mode.
 static inline void apply_input_options(void) {
     reg_virt_kbd_1 = (option_arrow_joystick ? 0x200 : 0x000);
+}
+
+// Push video options into the hardware config register (0xB4): bit 0 = scanlines.
+static inline void apply_video_options(void) {
+    reg_video_opts = option_scanlines ? 0x1 : 0x0;
 }
 
 char load_fname[512];
@@ -257,6 +263,9 @@ int load_option()  {
         if (strcmp(key, "joystick") == 0) {
             option_arrow_joystick = (atoi(value) != 0);
         }
+        if (strcmp(key, "scanlines") == 0) {
+            option_scanlines = (atoi(value) != 0);
+        }
     }
 
 load_option_close:
@@ -285,6 +294,12 @@ int save_option() {
         goto save_options_close;
     }
     f_puts(option_arrow_joystick ? "1\n" : "0\n", &f);
+
+    if (f_puts("scanlines=", &f) < 0) {
+        message("f_puts failed",1);
+        goto save_options_close;
+    }
+    f_puts(option_scanlines ? "1\n" : "0\n", &f);
 
 save_options_close:
     f_close(&f);
@@ -1367,12 +1382,17 @@ void menu_options() {
         cursor(16, 14);
         print(option_arrow_joystick ? "JOYSTICK" : "NORMAL");
 
+        cursor(2, 15);
+        print("Scanlines:");
+        cursor(16, 15);
+        print(option_scanlines ? "ON" : "OFF");
+
         delay(300);
 
         for (;;) {
             uart_keyboard_poll();
             sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
-            if (joy_choice(12, 3, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 4, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     return;
                 } else if (choice == 1) {
@@ -1390,6 +1410,16 @@ void menu_options() {
                 } else if (choice == 2) {
                     option_arrow_joystick = !option_arrow_joystick;
                     apply_input_options();
+
+                    status("Saving options...");
+                    if (save_option()) {
+                        message("Cannot save options to SD", 1);
+                        break;
+                    }
+                    break; // redraw UI
+                } else if (choice == 3) {
+                    option_scanlines = !option_scanlines;
+                    apply_video_options();
 
                     status("Saving options...");
                     if (save_option()) {
@@ -1487,6 +1517,7 @@ int main() {
     load_option();
     // Initialize USB Host enable state based on loaded option (0 = UART, 1 = USB)
     apply_input_options();
+    apply_video_options();
     sio_init();
 
     // Auto-load system ROMs on boot. On a warm reset (S1) the SD card is left

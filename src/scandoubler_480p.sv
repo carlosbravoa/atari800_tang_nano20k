@@ -50,6 +50,7 @@ module scandoubler_480p #(
 
     // HDMI (clk_pix = 57.375 MHz = 2*clk_core; 720-line mode)
     input  wire        clk_pix,
+    input  wire        scanlines_en,    // 1 = dim the bottom output line of each 3x group
     output reg  [7:0]  r_out, g_out, b_out,
     output reg         hs_out, vs_out, de_out,
     output wire [7:0]  osd_x,
@@ -144,14 +145,19 @@ wire in_vact = (vy >= V_TOP) && (vy < V_BOT);
 wire in_pic  = (hx >= PIC_X0) && (hx < PIC_X1) && in_vact;
 
 // 3x downscale of output position -> source col/line. Divide-by-3 via reciprocal multiply
-// (x/3 = floor(x*21846/65536)) keeps src_col/src_row clean combinational functions of hx/vy
-// (no counter/pipeline alignment headaches), exactly as the /2 shift did at 480p.
+// (x/3 = floor(x*21846/65536)). The ×21846 constant multiply is a LUT adder tree; at the
+// 57.375 MHz pixel clock it is the critical path, so REGISTER its result (src_col/src_row)
+// to give the adder tree a full cycle. The output pipeline below gains one matching stage.
 wire [10:0] pic_x   = hx - PIC_X0;             // 0..1055 within picture
 wire [26:0] mul_h   = pic_x * 16'd21846;
-wire [8:0]  src_col = mul_h[24:16];            // /3 -> 0..351
 wire [9:0]  vy_rel  = vy - V_TOP;
 wire [25:0] mul_v   = vy_rel * 16'd21846;
-wire [7:0]  src_row = mul_v[23:16];            // /3 -> 0..239
+reg  [8:0]  src_col;                           // /3 -> 0..351 (registered)
+reg  [7:0]  src_row;                           // /3 -> 0..239 (registered)
+always_ff @(posedge clk_pix) begin
+    src_col <= mul_h[24:16];
+    src_row <= mul_v[23:16];
+end
 wire [11:0] raddr   = {src_row[2:0], src_col}; // 8-line ring
 
 // OSD coords: 256-col window centred in 352 src (col 48..303), like fb_reader.
@@ -180,21 +186,42 @@ gtia_palette palrom (
     .B_next       (pb)
 );
 
-// ── Output pipeline: raddr(T) -> code_q(T+1) -> r_out(T+2); sync needs 2 stages too. ──
+// Scanlines: v_rep = which of the 3 output lines within this source line (0,1,2), tracked as
+// a registered per-line counter — NOT derived from src_row, which would chain a 2nd multiply
+// onto clk_pix (dropped the worst-path slack to 0.2ns). Held at 0 before the active region so
+// v_rep = (vy - V_TOP) mod 3 during the picture. Dim the bottom line (v_rep==2).
+reg [1:0] v_rep;
+always_ff @(posedge clk_pix or negedge rst_n) begin
+    if (!rst_n)              v_rep <= 2'd0;
+    else if (sof_pix)        v_rep <= 2'd0;
+    else if (hx == H_TOT - 11'd1) begin
+        if (vy < V_TOP)         v_rep <= 2'd0;
+        else if (v_rep == 2'd2) v_rep <= 2'd0;
+        else                    v_rep <= v_rep + 2'd1;
+    end
+end
+wire dim_s0 = scanlines_en && (v_rep == 2'd2);
+
+// ── Output pipeline: src_col/row registered(T+1) -> raddr -> code_q(T+2) -> r_out(T+3),
+// so sync/de/pic/dim need THREE register stages (s1, s2, output) to align with the pixel. ──
 wire hs_lvl = (hx >= H_SYNC_S) && (hx < H_SYNC_E);
 wire vs_lvl = (vy < V_SYNC);
 wire de_s0  = in_hact && in_vact;
-reg de_s1, hs_s1, vs_s1, pic_s1;
+reg de_s1, hs_s1, vs_s1, pic_s1, dim_s1;
+reg de_s2, hs_s2, vs_s2, pic_s2, dim_s2;
 always_ff @(posedge clk_pix) begin
-    de_s1 <= de_s0;  hs_s1 <= hs_lvl;  vs_s1 <= vs_lvl;  pic_s1 <= in_pic;
+    de_s1 <= de_s0;  hs_s1 <= hs_lvl;  vs_s1 <= vs_lvl;  pic_s1 <= in_pic;  dim_s1 <= dim_s0;
+    de_s2 <= de_s1;  hs_s2 <= hs_s1;   vs_s2 <= vs_s1;   pic_s2 <= pic_s1;  dim_s2 <= dim_s1;
 end
 
 always_ff @(posedge clk_pix) begin
-    de_out <= de_s1;
-    hs_out <= SYNC_ACTIVE_LOW ? ~hs_s1 : hs_s1;
-    vs_out <= SYNC_ACTIVE_LOW ? ~vs_s1 : vs_s1;
-    if (de_s1 && pic_s1) begin
-        r_out <= pr; g_out <= pg; b_out <= pb;
+    de_out <= de_s2;
+    hs_out <= SYNC_ACTIVE_LOW ? ~hs_s2 : hs_s2;
+    vs_out <= SYNC_ACTIVE_LOW ? ~vs_s2 : vs_s2;
+    if (de_s2 && pic_s2) begin
+        r_out <= dim_s2 ? {1'b0, pr[7:1]} : pr;   // 50% dim on scanline
+        g_out <= dim_s2 ? {1'b0, pg[7:1]} : pg;
+        b_out <= dim_s2 ? {1'b0, pb[7:1]} : pb;
     end else begin
         r_out <= 8'd0; g_out <= 8'd0; b_out <= 8'd0;   // pillarbox / blanking
     end

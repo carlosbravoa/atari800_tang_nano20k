@@ -49,6 +49,7 @@ int atoi(const char *str);
 // Phase B: hardware SIO command-frame capture
 #define reg_siocmd_a       (*(volatile uint32_t*)0x020000ac)  // R: {aux2,aux1,cmd,device}
 #define reg_siocmd_b       (*(volatile uint32_t*)0x020000b0)  // R: [7:0]=checksum [15:8]=status [23:16]=seq; W: ack
+#define reg_video_opts     (*(volatile uint32_t*)0x020000b4)  // [0] = scanlines enable
 #define reg_video_diag     (*(volatile uint32_t*)0x02000064)  // [31:16]=lines/frame [15:0]=frame counter
 #define reg_sio_cap_idx    (*(volatile uint32_t*)0x02000068)  // write: select SIO capture word 0..3
 #define reg_sio_cap_data   (*(volatile uint32_t*)0x0200006c)  // read: selected SIO capture word

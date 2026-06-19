@@ -804,6 +804,9 @@ wire [7:0]  siocmd_status;
 wire [7:0]  siocmd_seq;
 wire        siocmd_ack;
 
+// Video options (OSD-toggled)
+wire        scanlines_en;
+
 wire        sio_rx_data_in;
 wire        sio_clk_out;
 wire        enable_179_early;
@@ -931,7 +934,10 @@ iosys_picorv32 #(
     .siocmd_bytes(siocmd_bytes),
     .siocmd_status(siocmd_status),
     .siocmd_seq(siocmd_seq),
-    .siocmd_ack(siocmd_ack)
+    .siocmd_ack(siocmd_ack),
+
+    // Video options
+    .scanlines_en_out(scanlines_en)
 );
 
 // Clock Domain Crossing (CDC) Synchronization for SIO Handler
@@ -1298,6 +1304,7 @@ scandoubler_480p scandoubler (
     .sof_in    (video_sof),
     .pixce     (video_pixce),
     .clk_pix   (clk_pix),
+    .scanlines_en(scanlines_en),
     .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
     .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
     .osd_x(osd_x), .osd_y(osd_y)

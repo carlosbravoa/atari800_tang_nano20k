@@ -97,6 +97,9 @@ module iosys_picorv32 #(
     input  wire [7:0]  siocmd_seq,
     output wire        siocmd_ack,
 
+    // Video options (scanlines etc.)
+    output wire        scanlines_en_out,
+
     // Virtual Keyboard outputs
     output wire [7:0]  virt_kbd_mod_out,
     output wire [7:0]  virt_kbd_key1_out,
@@ -222,6 +225,7 @@ wire        spiflash_reg_ctrl_sel = mem_valid && (mem_addr == 32'h0200_0078);
 wire        virt_kbd_reg0_sel = mem_valid && (mem_addr == 32'h0200_00a0);
 wire        virt_kbd_reg1_sel = mem_valid && (mem_addr == 32'h0200_00a4);
 wire        cart_reg_sel      = mem_valid && (mem_addr == 32'h0200_00a8);
+wire        video_opts_sel    = mem_valid && (mem_addr == 32'h0200_00b4);  // [0]=scanlines
 
 // Phase B: SIO command-frame capture (read-only snoop in sio_handler)
 //   0x020000ac (R): {aux2, aux1, cmd, device}  = command bytes 3,2,1,0
@@ -251,7 +255,8 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             simplespimaster_reg_cs_sel || simplespimaster_reg_clkdiv_sel ||
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
-            cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel || siocmd_a_sel || siocmd_b_sel;
+            cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel || siocmd_a_sel || siocmd_b_sel ||
+            video_opts_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -310,6 +315,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         cart_reg_sel ? {24'b0, cart_mode_reg} :
         siocmd_a_sel ? siocmd_bytes[31:0] :
         siocmd_b_sel ? {8'b0, siocmd_seq, siocmd_status, siocmd_bytes[39:32]} :
+        video_opts_sel ? {24'b0, video_opts_reg} :
         32'h 0000_0000;
 
 picorv32 #(
@@ -487,6 +493,8 @@ reg [7:0] virt_kbd_key4 = 8'h00;
 reg       usb_host_enable = 1'b1;
 reg       joystick_mode = 1'b0;
 reg [7:0] cart_mode_reg = 8'h00;   // CartLogic mapper code; 0 = no cartridge
+reg [7:0] video_opts_reg = 8'h00;  // [0] = scanlines enable
+assign    scanlines_en_out = video_opts_reg[0];
 
 always @(posedge clk) begin
     if (~resetn) begin
@@ -498,6 +506,7 @@ always @(posedge clk) begin
         usb_host_enable <= 1'b1;
         joystick_mode <= 1'b0;
         cart_mode_reg <= 8'h00;
+        video_opts_reg <= 8'h00;
     end else begin
         if (virt_kbd_reg0_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_mod  <= mem_wdata[7:0];
@@ -511,6 +520,7 @@ always @(posedge clk) begin
             if (mem_wstrb[1]) joystick_mode   <= mem_wdata[9];
         end
         if (cart_reg_sel && mem_wstrb[0]) cart_mode_reg <= mem_wdata[7:0];
+        if (video_opts_sel && mem_wstrb[0]) video_opts_reg <= mem_wdata[7:0];
     end
 end
 
