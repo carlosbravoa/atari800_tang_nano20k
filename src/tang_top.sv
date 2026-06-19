@@ -258,33 +258,15 @@ wire [3:0]  rv_wstrb;
 wire [31:0] rv_rdata;
 wire        sdram_ready;
 
-// ── Frame-buffer writer client (Stage 1, docs/frame_buffer_plan.md) ──────────
-// Write-only SDRAM client in the clk_core domain (no CDC).  Captures the Atari
-// video stream and packs it into the SDRAM double frame buffer.  Nothing reads
-// the buffer yet — this stage proves the 3rd arbiter client coexists with the
-// hard-real-time Atari core without disturbing it.
-wire        fbw_req_raw;
-wire [24:0] fbw_addr;
-wire [31:0] fbw_wdata;
-wire        fbw_ack;
-// B0/B1: validate the decoupled SDRAM (clk_mem) + Atari handshake with the writer OFF.
-// Flip FB_WRITER_EN to 1'b1 in B3 to bring the writer onto the bus as the 3rd client.
-localparam FB_WRITER_EN = 1'b1;
-wire        fbw_req = fbw_req_raw & FB_WRITER_EN;
+// ── Frame buffer REMOVED (2026-06-19) ────────────────────────────────────────
+// Video is now the genlocked scandoubler line buffer (no SDRAM). The SDRAM
+// frame-buffer writer/reader and their two arbiter clients have been removed, so
+// the Atari core and PicoRV32 are the only SDRAM clients (freeing the video
+// write+read bandwidth the dead clients were still consuming).
+wire [255:0] sdram_burst_dout;     // controller burst output (no burst clients now)
 
-// Frame-buffer reader client (B4) — read-only SDRAM client (clk_core domain).
-// Gate fbr_req with core_reset_n so the reader stays OFF the bus until the ROMs are loaded
-// (it outranks PicoRV32; ungated it starves the iosys ROM loader → no boot).  The reader's
-// raster still free-runs on hdmi_rst_n so HDMI stays locked; only the SDRAM fetch waits.
-wire        fbr_req_raw;
-wire        fbr_req = fbr_req_raw & core_reset_n;
-wire [24:0] fbr_addr;
-wire        fbr_ack;
-wire [255:0] fbr_rdata;            // 8-word burst read result for the reader
-wire [255:0] sdram_burst_dout;
-
-// 3-client SDRAM owner encoding (strict priority Atari > FBwriter > PicoRV32).
-localparam [1:0] OWN_ATARI = 2'd0, OWN_RV = 2'd1, OWN_FBW = 2'd2, OWN_FBR = 2'd3;
+// 2-client SDRAM owner encoding (strict priority Atari > PicoRV32).
+localparam [1:0] OWN_ATARI = 2'd0, OWN_RV = 2'd1;
 
 // ── PicoRV32 ↔ SDRAM arbiter CDC ─────────────────────────────────────────────
 // iosys_picorv32 stays on sys_clk (27 MHz) so its firmware-compiled SPI timing
@@ -326,7 +308,7 @@ wire rv_req = rv_valid_core && !rv_hold;
 // ── Dual-Client SDRAM Arbiter & Adapter ──────────────────────────────────────
 wire        sdram_complete;
 reg         sdram_complete_r = 1'b0;
-reg  [1:0]  sdram_owner = OWN_ATARI; // OWN_ATARI / OWN_RV / OWN_FBW
+reg  [1:0]  sdram_owner = OWN_ATARI; // OWN_ATARI / OWN_RV
 
 assign sdram_complete = sdram_complete_r;
 assign core_sdram_req_complete = sdram_complete && (sdram_owner == OWN_ATARI);
@@ -409,33 +391,23 @@ reg rv_slot = 1'b0;  // retained (assigned but unused) to minimise churn; always
 // without ever preempting the Atari), then PicoRV32.  The writer is a clk_core,
 // write-only client — no CDC, the simplest of the three.
 wire [1:0] next_owner = atari_req_pending             ? OWN_ATARI :
-                        fbw_req                       ? OWN_FBW   :
-                        fbr_req                       ? OWN_FBR   :
                         (rv_req && !sdram_complete_r) ? OWN_RV    : OWN_ATARI;
 
-wire next_req = atari_req_pending || fbw_req || fbr_req ||
-                (rv_req && !sdram_complete_r);
+wire next_req = atari_req_pending || (rv_req && !sdram_complete_r);
 
 wire [1:0] current_owner = (sadap_st == SA_BUSY) ? sdram_owner : next_owner;
 // During SA_BUSY keep the persistent request of the active owner (rv_valid_core,
 // not rv_req, so an in-progress PicoRV32 transaction is not dropped mid-flight if
-// rv_hold happens to be set; fbw_req is held by the writer until its ack).
+// rv_hold happens to be set).
 // SA_WAIT forces req low for one clk_core cycle (= 2 clk_mem cycles) after each access so the
 // clk_mem SDRAM wrapper sees a clean req-deassert boundary between back-to-back accesses
 // (4-phase handshake across the 2:1 clk_core↔clk_mem crossing).
 wire sdram_ctrl_req = (sadap_st == SA_WAIT) ? 1'b0 :
                       (sadap_st == SA_BUSY) ?
-                          ((sdram_owner == OWN_RV)  ? rv_valid_core    :
-                           (sdram_owner == OWN_FBW) ? fbw_req          :
-                           (sdram_owner == OWN_FBR) ? fbr_req          :
-                                                      atari_req_pending)
+                          ((sdram_owner == OWN_RV) ? rv_valid_core : atari_req_pending)
                           : next_req;
-wire        sdram_ctrl_read_en  = (current_owner == OWN_RV)  ? (~|rv_wstrb) :
-                                  (current_owner == OWN_FBW) ? 1'b0         :
-                                  (current_owner == OWN_FBR) ? 1'b1         : core_sdram_read_en;
-wire        sdram_ctrl_write_en = (current_owner == OWN_RV)  ? (|rv_wstrb)  :
-                                  (current_owner == OWN_FBW) ? 1'b1         :
-                                  (current_owner == OWN_FBR) ? 1'b0         : core_sdram_write_en;
+wire        sdram_ctrl_read_en  = (current_owner == OWN_RV) ? (~|rv_wstrb) : core_sdram_read_en;
+wire        sdram_ctrl_write_en = (current_owner == OWN_RV) ? (|rv_wstrb)  : core_sdram_write_en;
 // Cartridge address remap: the core places emulated-cart accesses at SDRAM offset
 // 8 MB+ (addr[24:22] = 3'b010, fine on MiSTer's 32 MB part). Our embedded SDRAM is
 // exactly 8 MB and gw2ar_sdram ignores addr[24:23], so without remapping carts would
@@ -448,22 +420,13 @@ wire        core_addr_is_cart   = (core_sdram_addr[24:22] == 3'b010);
 wire [24:0] core_sdram_addr_eff = core_addr_is_cart ? {4'b0010, core_sdram_addr[20:0]}
                                                     : core_sdram_addr;
 
-wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV)  ? rv_physical_addr :
-                                  (current_owner == OWN_FBW) ? fbw_addr         :
-                                  (current_owner == OWN_FBR) ? fbr_addr         : core_sdram_addr_eff;
-wire [31:0] sdram_ctrl_wdata    = (current_owner == OWN_RV)  ? rv_wdata  :
-                                  (current_owner == OWN_FBW) ? fbw_wdata : {4{core_sdram_data_from_core[7:0]}};
-wire [3:0]  sdram_ctrl_wmask    = (current_owner == OWN_RV)  ? rv_wstrb :
-                                  (current_owner == OWN_FBW) ? 4'b1111  :
-                                  (current_owner == OWN_FBR) ? 4'b0000  : core_sdram_wmask;
+wire [24:0] sdram_ctrl_addr     = (current_owner == OWN_RV) ? rv_physical_addr : core_sdram_addr_eff;
+wire [31:0] sdram_ctrl_wdata    = (current_owner == OWN_RV) ? rv_wdata : {4{core_sdram_data_from_core[7:0]}};
+wire [3:0]  sdram_ctrl_wmask    = (current_owner == OWN_RV) ? rv_wstrb : core_sdram_wmask;
 wire        sdram_ctrl_refresh  = core_sdram_refresh;
 
-// fb_writer FIFO pop / fb_reader word strobe: 1-cycle pulses at their access completion.
-assign fbw_ack  = (sadap_st == SA_BUSY) && (sdram_owner == OWN_FBW) && sdram_complete_wire;
-assign fbr_ack  = (sadap_st == SA_BUSY) && (sdram_owner == OWN_FBR) && sdram_complete_wire;
-assign fbr_rdata = sdram_burst_dout;
-// Reader accesses are always BL8 burst reads.
-wire   sdram_ctrl_burst = (current_owner == OWN_FBR);
+// No burst clients remain (the FB reader was the only one).
+wire   sdram_ctrl_burst = 1'b0;
 
 wire        sdram_complete_wire;
 
@@ -490,18 +453,10 @@ always_ff @(posedge clk_core or negedge hw_reset_n) begin
         case (sadap_st)
             SA_IDLE: begin
                 if (sdram_ready_wire) begin
-                    // Strict priority Atari > FBwriter > PicoRV32.  The Atari wins
-                    // whenever it has a pending request; the frame-buffer writer
-                    // takes the next idle cycle; PicoRV32 is served only when both
-                    // the Atari and the writer are idle.
+                    // Strict priority Atari > PicoRV32: the Atari wins whenever it has a
+                    // pending request; PicoRV32 is served only when the Atari is idle.
                     if (atari_req_pending) begin
                         sdram_owner <= OWN_ATARI;
-                        sadap_st    <= SA_BUSY;
-                    end else if (fbw_req) begin
-                        sdram_owner <= OWN_FBW;
-                        sadap_st    <= SA_BUSY;
-                    end else if (fbr_req) begin
-                        sdram_owner <= OWN_FBR;
                         sadap_st    <= SA_BUSY;
                     end else if (rv_req && !sdram_complete_r) begin
                         sdram_owner <= OWN_RV;
@@ -630,31 +585,7 @@ gw2ar_sdram sdram_ip (
     .sdram_ready  (sdram_ready_wire)
 );
 
-// ── Frame-buffer writer (Stage 1) ────────────────────────────────────────────
-// Captures the Atari video stream and packs RGB332 words into the SDRAM double
-// frame buffer at FB_BASE = 0x780000 (the core's documented "Free 512K below 8MB",
-// address_decoder.vhdl:915 — clear of RAM/ROM/cartridge).  Reset with core_reset_n
-// so it stays idle until the ROMs are loaded (iosys keeps SDRAM priority during
-// load).  Nothing reads the buffer yet — Stage 2 adds the reader.
-fb_writer #(
-    .FB_BASE        (25'h0078_0000),
-    .WORDS_PER_LINE (88),
-    .LINES          (240),
-    .FB_SIZE        (25'd84480)
-) fb_writer_inst (
-    .clk_core (clk_core),
-    .rst_n    (core_reset_n),
-    .r_in     (video_r),
-    .g_in     (video_g),
-    .b_in     (video_b),
-    .de_in    (~video_blank),
-    .vs_in    (video_vs),
-    .pixce    (video_pixce),
-    .fbw_req  (fbw_req_raw),
-    .fbw_addr (fbw_addr),
-    .fbw_wdata(fbw_wdata),
-    .fbw_ack  (fbw_ack)
-);
+// (Frame-buffer writer removed — the scandoubler reads Atari video directly.)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PicoRV32 Softcore MCU & SIO Disk Handler
@@ -1266,35 +1197,12 @@ usb_to_atari800 keyboard (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HDMI video source: Phase A — genlocked 480p scandoubler (no SDRAM, ~1-2 line latency)
+// HDMI video source: genlocked scandoubler line buffer (no SDRAM, ~1-2 line latency)
 // ─────────────────────────────────────────────────────────────────────────────
 wire [7:0] hdmi_r, hdmi_g, hdmi_b;
 wire       hdmi_hs, hdmi_vs, hdmi_de;
-
-// fb_reader/fb_writer remain instantiated (still SDRAM arbiter clients) but their video
-// output is no longer used — the scandoubler drives HDMI directly from the Atari video.
-// Removing the now-dead fb clients (to reclaim SDRAM bandwidth, arbiter 4->3) is a
-// follow-up once the scandoubler is hardware-verified; left in place here to avoid
-// touching the arbiter in this step.
-wire [7:0] fbr_r_nc, fbr_g_nc, fbr_b_nc;
-wire       fbr_hs_nc, fbr_vs_nc, fbr_de_nc;
-wire [7:0] fbr_osdx_nc, fbr_osdy_nc;
-fb_reader #(
-    .FB_BASE        (25'h0078_0000),
-    .WORDS_PER_LINE (88),
-    .LINES          (240)
-) scaler (
-    .clk_core  (clk_core),
-    .rst_n     (hdmi_rst_n),
-    .fbr_req   (fbr_req_raw),
-    .fbr_addr  (fbr_addr),
-    .fbr_ack   (fbr_ack),
-    .fbr_rdata (fbr_rdata),
-    .clk_pixel (clk_pix),
-    .r_out(fbr_r_nc), .g_out(fbr_g_nc), .b_out(fbr_b_nc),
-    .hs_out(fbr_hs_nc), .vs_out(fbr_vs_nc), .de_out(fbr_de_nc),
-    .osd_x(fbr_osdx_nc), .osd_y(fbr_osdy_nc)
-);
+// (The SDRAM frame-buffer reader was removed — the scandoubler below reads Atari video
+//  directly. The Atari core and PicoRV32 are now the only SDRAM clients.)
 
 // Genlocked scandoubler: Atari video (clk_core) -> 4-line ring -> standard 480p59.94
 // (clk_pix=27 MHz), 2x2 upscale + pillarbox, Altirra palette on readout.
