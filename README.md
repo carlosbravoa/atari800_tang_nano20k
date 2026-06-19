@@ -56,7 +56,7 @@ the keyboard alone covers everything.
 - **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F12 = OSD menu**
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
-- **SIO disk emulation, two drives** — mount `.atr` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
+- **SIO disk emulation, two drives** — mount `.atr` and raw `.xfd` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
 - **Cartridge loading** — `.car` (50 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 4 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
 - **`.xex` executables** (v2.0) — boot Atari binary-load programs directly from the SD card: a baked-in 6502 loader is served as a virtual boot disk on D1:, handling the multi-segment `$FFFF`/INITAD/RUNAD format
 - **Hardware SIO command capture** (v2.0) — the 5-byte SIO command frame is assembled in the FPGA, so disk loading no longer depends on the firmware polling in time
@@ -82,7 +82,7 @@ the keyboard alone covers everything.
 | F9 soft-reset hotkey | ✅ Working |
 | DB9 joystick (wired to GPIO pins) | ✅ Working |
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
-| SIO disk emulation (.atr), **D1: + D2:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs |
+| SIO disk emulation (.atr / .xfd), **D1: + D2:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs |
 | Live OSD overlay (game runs behind menu, inputs masked) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
 | Cartridge images (.car / .rom) | ✅ Working — 8K/16K, banked, and 4 MB MegaCart verified on hardware; 50 mapper types, up to 4 MB |

@@ -60,6 +60,8 @@ int file_len;		// number of files on this page
 FIL atr_file[ATR_DRIVES];
 bool atr_mounted[ATR_DRIVES] = {false, false};
 uint16_t atr_sector_size[ATR_DRIVES] = {128, 128};
+// Byte offset of sector 1 in the image: 16 for .atr (header), 0 for raw .xfd.
+uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16};
 
 // XEX (Atari binary executable) state — served as a virtual bootable disk on D1:
 // only. When xex_active, D1: STATUS/READ are answered from the baked-in 6502 boot
@@ -380,8 +382,9 @@ int load_dir(char *dir, int start, int len, int *count, int carts) {
                 if (carts)
                     is_atr = (strcasecmp(ext, ".car") == 0 || strcasecmp(ext, ".rom") == 0);
                 else
-                    // D1: browser also lists .xex (Atari binary executables)
-                    is_atr = (strcasecmp(ext, ".atr") == 0 || strcasecmp(ext, ".xex") == 0);
+                    // disk browser lists .atr, raw .xfd, and .xex (binary executables)
+                    is_atr = (strcasecmp(ext, ".atr") == 0 || strcasecmp(ext, ".xfd") == 0 ||
+                              strcasecmp(ext, ".xex") == 0);
             }
         }
 
@@ -530,6 +533,29 @@ int mount_atr(char *filepath, int slot) {
         uart_printf("ATR file opened read-write\n");
     }
     
+    char *ext = strrchr(filepath, '.');
+    if (ext && strcasecmp(ext, ".xfd") == 0) {
+        // .xfd = raw sector dump, no header. Geometry inferred from file size.
+        // SD = 92160 (720x128), ED = 133120 (1040x128), DD = 183936 (sectors 1-3 are
+        // 128 B, 4+ are 256 B — same boot-sector quirk as ATR). Any other 128-multiple
+        // is treated as a 128-B-sector image (offset math is size-independent there).
+        uint32_t fsz = f_size(&atr_file[slot]);
+        if (fsz == 183936) {
+            atr_sector_size[slot] = 256;
+        } else if (fsz >= 128 && (fsz % 128) == 0) {
+            atr_sector_size[slot] = 128;
+        } else {
+            uart_printf("Unsupported XFD size: %u\n", (unsigned)fsz);
+            message("Unsupported .xfd size", 1);
+            f_close(&atr_file[slot]);
+            return -3;
+        }
+        atr_hdr_off[slot] = 0;
+        uart_printf("Mounted XFD D%d: %s, sector size: %d\n", slot+1, filepath, atr_sector_size[slot]);
+        atr_mounted[slot] = true;
+        return 0;
+    }
+
     // Read ATR 16-byte header
     uint8_t header[16];
     unsigned int br;
@@ -539,7 +565,7 @@ int mount_atr(char *filepath, int slot) {
         f_close(&atr_file[slot]);
         return -1;
     }
-    
+
     // Verify magic
     uint16_t magic = header[0] | (header[1] << 8);
     if (magic != 0x0296) {
@@ -547,14 +573,15 @@ int mount_atr(char *filepath, int slot) {
         f_close(&atr_file[slot]);
         return -2;
     }
-    
+
     atr_sector_size[slot] = header[4] | (header[5] << 8);
     if (atr_sector_size[slot] != 128 && atr_sector_size[slot] != 256) {
         uart_printf("Unsupported sector size: %d\n", atr_sector_size[slot]);
         f_close(&atr_file[slot]);
         return -3;
     }
-    
+    atr_hdr_off[slot] = 16;
+
     uart_printf("Mounted ATR D%d: %s, sector size: %d\n", slot+1, filepath, atr_sector_size[slot]);
     atr_mounted[slot] = true;
     return 0;
@@ -563,17 +590,18 @@ int mount_atr(char *filepath, int slot) {
 int atr_read_sector(int slot, uint32_t sector_num, uint8_t *buf, int *sector_len) {
     if (!atr_mounted[slot]) return -1;
     
+    uint32_t base = atr_hdr_off[slot];   // 16 for .atr, 0 for .xfd
     uint32_t offset = 0;
     int len = 128;
     if (atr_sector_size[slot] == 128) {
-        offset = 16 + (sector_num - 1) * 128;
+        offset = base + (sector_num - 1) * 128;
         len = 128;
     } else { // 256 bytes
         if (sector_num <= 3) {
-            offset = 16 + (sector_num - 1) * 128;
+            offset = base + (sector_num - 1) * 128;
             len = 128;
         } else {
-            offset = 400 + (sector_num - 4) * 256;
+            offset = base + 384 + (sector_num - 4) * 256;
             len = 256;
         }
     }
@@ -663,14 +691,15 @@ int xex_read_sector(uint32_t sector_num, uint8_t *buf, int *sector_len) {
 int atr_write_sector(int slot, uint32_t sector_num, const uint8_t *buf, int len) {
     if (!atr_mounted[slot]) return -1;
     
+    uint32_t base = atr_hdr_off[slot];   // 16 for .atr, 0 for .xfd
     uint32_t offset = 0;
     if (atr_sector_size[slot] == 128) {
-        offset = 16 + (sector_num - 1) * 128;
+        offset = base + (sector_num - 1) * 128;
     } else { // 256 bytes
         if (sector_num <= 3) {
-            offset = 16 + (sector_num - 1) * 128;
+            offset = base + (sector_num - 1) * 128;
         } else {
-            offset = 400 + (sector_num - 4) * 256;
+            offset = base + 384 + (sector_num - 4) * 256;
         }
     }
     
@@ -780,7 +809,7 @@ int menu_loadrom(int *choice, int carts, int slot) {
                             break;          // error shown; stay in the browser
                         }
 
-                        // Otherwise mount as an ATR disk image into the chosen drive
+                        // Otherwise mount as an .atr / .xfd disk image into the drive
                         int res = mount_atr(load_fname, slot);
                         if (res != 0) {
                             char errmsg[64];
@@ -1402,7 +1431,7 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
         cursor(2, 9);
         printf("D%d: %s", slot + 1, cur_name);
         cursor(2, 11);
-        print("1) Attach (.atr / .xex)...");
+        print("1) Attach (.atr/.xfd/.xex)...");
         cursor(2, 12);
         print("2) Detach");
         cursor(2, 13);
