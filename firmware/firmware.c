@@ -1416,6 +1416,11 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
                     if (r == 3) return 3;   // XEX attached — caller cold-boots it
                     break;                  // backed out — redraw
                 } else if (choice == 1) {
+                    if (slot == 0 && xex_active) {   // detach a mounted XEX from D1:
+                        f_close(&xex_file);
+                        xex_active = false;
+                        return 2;
+                    }
                     if (atr_mounted[slot]) {
                         f_close(&atr_file[slot]);
                         atr_mounted[slot] = false;

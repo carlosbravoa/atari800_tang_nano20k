@@ -35,6 +35,14 @@ BRAM_HEX   = $(BRAM_DIR)/fw_lane0.hex
 default: $(TARGET_BIN) $(BRAM_HEX)
 all: default
 
+# Regenerate the 6502 XEX boot-loader image from its assembler source.
+xex_loader.h: xex_loader.py
+ifneq ($(VERBOSE),1)
+	@echo GEN xex_loader.h
+endif
+	$(Q)python3 xex_loader.py
+firmware.o: xex_loader.h
+
 %.o: %.c $(HDRS)
 ifneq ($(VERBOSE),1)
 	@echo CC $@

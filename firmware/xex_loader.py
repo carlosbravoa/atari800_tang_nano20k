@@ -27,7 +27,7 @@ LOAD = 0x0700
 # jumping. Lets us locate a hardware boot failure with no UART (TX is unwired):
 #   red  = loader got control      green = a sector read succeeded
 #   blue + frozen = parsed to RUNAD (loader works; problem is downstream)
-DIAG = True
+DIAG = False     # production: no COLBK milestone painting; JMP RUNAD (don't halt)
 COLBK = 0x02C8   # background colour shadow (VBI copies it to $D01A each frame)
 
 # Zero-page scratch — all in the "free for application" $CB-$D7 region.
