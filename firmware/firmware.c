@@ -22,6 +22,7 @@ int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
 int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
 int option_h_offset = 0;                    // horizontal pan: capture-skip pixels (0..48)
+int option_stereo = 0;                      // 1 = dual-POKEY stereo (POKEY2 @ $D210 -> right); default mono
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
@@ -33,7 +34,8 @@ static inline void apply_input_options(void) {
 
 // Push video options into the hardware config registers.
 static inline void apply_video_options(void) {
-    reg_video_opts = option_scanline_level & 0x3;   // 0x B4 [1:0] scanline level
+    reg_video_opts = (option_scanline_level & 0x3)  // 0x B4 [1:0] scanline level
+                   | ((option_stereo & 1) << 2);    //      [2]   dual-POKEY stereo enable
     reg_h_offset   = option_h_offset & 0xFF;        // 0x B8 [7:0] horizontal position
 }
 
@@ -283,6 +285,9 @@ int load_option()  {
             if (v < 0) v = 0; if (v > 48) v = 48;
             option_h_offset = v;
         }
+        if (strcmp(key, "stereo") == 0) {
+            option_stereo = (atoi(value) != 0);
+        }
     }
 
 load_option_close:
@@ -327,6 +332,12 @@ int save_option() {
       if (n >= 10) s[k++] = '0' + (n / 10);
       s[k++] = '0' + (n % 10); s[k] = 0; f_puts(s, &f); }
     f_puts("\n", &f);
+
+    if (f_puts("stereo=", &f) < 0) {
+        message("f_puts failed",1);
+        goto save_options_close;
+    }
+    f_puts(option_stereo ? "1\n" : "0\n", &f);
 
 save_options_close:
     f_close(&f);
@@ -1554,6 +1565,11 @@ void menu_options() {
           hb[k++] = '0' + (n % 10); hb[k] = 0; print(hb); print("  <- ->"); }
 
         cursor(2, 17);
+        print("Stereo:");
+        cursor(16, 17);
+        print(option_stereo ? "ON" : "OFF");
+
+        cursor(2, 18);
         print(options_dirty ? "Save changes *" : "Save changes");
 
         delay(300);
@@ -1570,7 +1586,7 @@ void menu_options() {
                     option_h_offset--; apply_video_options(); options_dirty = 1; delay(60);
                 }
             }
-            if (joy_choice(12, 6, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 7, &choice, OSD_KEY_CODE) == 1) {
                 // Every item applies its change LIVE (so you can see it) but does NOT write
                 // to SD — only "Save changes" persists. Leaving without saving keeps the
                 // changes for this session; they revert to the saved values on next boot.
@@ -1598,6 +1614,11 @@ void menu_options() {
                     // here (use "Save changes" to persist).
                     break; // redraw UI
                 } else if (choice == 5) {
+                    option_stereo = !option_stereo;   // dual-POKEY stereo on/off
+                    apply_video_options();            // applies live (reg_video_opts bit 2)
+                    options_dirty = 1;
+                    break; // redraw UI
+                } else if (choice == 6) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);

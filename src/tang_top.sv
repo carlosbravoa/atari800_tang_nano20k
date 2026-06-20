@@ -741,6 +741,12 @@ wire        siocmd_ack;
 wire [1:0]  scanline_level;
 wire [7:0]  h_offset;
 
+// Dual-POKEY stereo enable (OSD-toggled): quasi-static config from iosys (sys_clk).
+// 2-FF synchronise into clk_core where the Atari core's STEREO input lives.
+wire        stereo_opt;
+reg         stereo_s1 = 1'b0, stereo_core = 1'b0;
+always @(posedge clk_core) begin stereo_s1 <= stereo_opt; stereo_core <= stereo_s1; end
+
 wire        sio_rx_data_in;
 wire        sio_clk_out;
 wire        enable_179_early;
@@ -872,7 +878,8 @@ iosys_picorv32 #(
 
     // Video options
     .scanline_level_out(scanline_level),
-    .h_offset_out(h_offset)
+    .h_offset_out(h_offset),
+    .stereo_out(stereo_opt)
 );
 
 // Clock Domain Crossing (CDC) Synchronization for SIO Handler
@@ -1060,7 +1067,7 @@ atari800core_simple_sdram #(
     .VBLANK                     (),
 
     // Audio
-    .STEREO                     (1'b0),
+    .STEREO                     (stereo_core),   // dual-POKEY stereo (OSD toggle): POKEY2 $D210 -> AUDIO_R
     .AUDIO_L                    (audio_l_pcm),
     .AUDIO_R                    (audio_r_pcm),
 
