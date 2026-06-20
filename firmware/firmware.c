@@ -1518,6 +1518,7 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
 
 void menu_options() {
     int choice = 0;
+    int options_dirty = 0;   // a change was applied live but not yet written to SD
     while (1) {
         clear();
         cursor(8, 10);
@@ -1552,21 +1553,27 @@ void menu_options() {
           if (n >= 10) hb[k++] = '0' + (n / 10);
           hb[k++] = '0' + (n % 10); hb[k] = 0; print(hb); print("  <- ->"); }
 
+        cursor(2, 17);
+        print(options_dirty ? "Save changes *" : "Save changes");
+
         delay(300);
 
         for (;;) {
             uart_keyboard_poll();
             sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
-            { // H position: live left/right adjust on the selected item (saved on select)
+            { // H position: live left/right adjust on the selected item (Save to persist)
                 int jj1, jj2; joy_get(&jj1, &jj2);
                 // Left arrow moves the picture LEFT (bigger offset = pan source right).
                 if (choice == 4 && (jj1 & 0x40) && option_h_offset < 48) {
-                    option_h_offset++; apply_video_options(); delay(60);
+                    option_h_offset++; apply_video_options(); options_dirty = 1; delay(60);
                 } else if (choice == 4 && (jj1 & 0x80) && option_h_offset > 0) {
-                    option_h_offset--; apply_video_options(); delay(60);
+                    option_h_offset--; apply_video_options(); options_dirty = 1; delay(60);
                 }
             }
-            if (joy_choice(12, 5, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 6, &choice, OSD_KEY_CODE) == 1) {
+                // Every item applies its change LIVE (so you can see it) but does NOT write
+                // to SD — only "Save changes" persists. Leaving without saving keeps the
+                // changes for this session; they revert to the saved values on next boot.
                 if (choice == 0) {
                     return;
                 } else if (choice == 1) {
@@ -1574,42 +1581,31 @@ void menu_options() {
                         option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
                     else
                         option_osd_key = OPTION_OSD_KEY_SELECT_START;
-                    
-                    status("Saving options...");
-                    if (save_option()) {
-                        message("Cannot save options to SD", 1);
-                        break;
-                    }
+                    options_dirty = 1;
                     break;	// redraw UI
                 } else if (choice == 2) {
                     option_arrow_joystick = !option_arrow_joystick;
                     apply_input_options();
-
-                    status("Saving options...");
-                    if (save_option()) {
-                        message("Cannot save options to SD", 1);
-                        break;
-                    }
+                    options_dirty = 1;
                     break; // redraw UI
                 } else if (choice == 3) {
                     option_scanline_level = (option_scanline_level + 1) & 0x3; // OFF/25/50/75
                     apply_video_options();
-
-                    status("Saving options...");
-                    if (save_option()) {
-                        message("Cannot save options to SD", 1);
-                        break;
-                    }
+                    options_dirty = 1;
                     break; // redraw UI
                 } else if (choice == 4) {
-                    // H position: value already applied live by the left/right handler;
-                    // pressing select just saves the current value.
-                    apply_video_options();
+                    // H position is adjusted live with Left/Right; select does nothing
+                    // here (use "Save changes" to persist).
+                    break; // redraw UI
+                } else if (choice == 5) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
                         break;
                     }
+                    options_dirty = 0;
+                    status("Options saved.");
+                    delay(600);
                     break; // redraw UI
                 }
             }
