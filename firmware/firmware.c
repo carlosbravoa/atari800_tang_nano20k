@@ -427,7 +427,7 @@ int load_dir(char *dir, int start, int len, int *count, int carts) {
 // accesses into the 4 MB window at physical 0x400000-0x7FFFFF (= same address in
 // the firmware's view, banks 2-3 pass through the iosys swap unchanged), so we just
 // f_read the image straight into SDRAM there, set the mapper code in reg_cart_mode,
-// and cold-boot. BASIC/OS were relocated out of this window (to 0x020000/0x024000).
+// and cold-boot. BASIC/OS were relocated out of this window (to 0x1F0000/0x1F4000).
 #define CART_SDRAM_BASE 0x00400000u
 #define CART_MAX_SIZE   0x00400000u
 
@@ -903,10 +903,11 @@ int load_system_roms(void) {
     }
     
     // Load OS.ROM into SDRAM at the address the Atari core's address_decoder expects:
-    // SDRAM_OS_ROM_ADDR (XL/XE mode, low_memory=0) = physical 0x024000, relocated below
-    // the 4 MB cart window 0x400000-0x7FFFFF. Firmware addr 0x00224000 -> physical
-    // 0x024000 via the iosys bank-0/1 swap. Keep in sync with address_decoder.vhdl.
-    volatile uint8_t *os_rom_ptr = (volatile uint8_t *)0x00224000;
+    // SDRAM_OS_ROM_ADDR (XL/XE mode, low_memory=0) = physical 0x1F4000, at the top of
+    // physical bank 0 so the RAM region below can grow to 1088 KB. Firmware addr
+    // 0x003F4000 -> physical 0x1F4000 via the iosys bank-0/1 swap. Keep in sync with
+    // address_decoder.vhdl.
+    volatile uint8_t *os_rom_ptr = (volatile uint8_t *)0x003F4000;
     r = f_read(&f, (void *)os_rom_ptr, 16384, &br);
     f_close(&f);
     if (r != FR_OK || br != 16384) {
@@ -915,7 +916,7 @@ int load_system_roms(void) {
         reg_romload_ctrl = 0;
         return (2 << 8) | r;
     }
-    uart_printf("OS.ROM loaded successfully (%d bytes) at SDRAM 0x024000\n", br);
+    uart_printf("OS.ROM loaded successfully (%d bytes) at SDRAM 0x1F4000\n", br);
     
     // Load BASIC.ROM
     r = f_open(&f, "/BASIC.ROM", FA_READ);
@@ -930,10 +931,10 @@ int load_system_roms(void) {
     }
     
     // Load BASIC.ROM into SDRAM at the address the Atari core's address_decoder expects:
-    // SDRAM_BASIC_ROM_ADDR (low_memory=0) = physical 0x020000, relocated below the 4 MB
-    // cart window. Firmware addr 0x00220000 -> physical 0x020000 via the iosys bank-0/1
-    // swap. Keep in sync with address_decoder.vhdl.
-    volatile uint8_t *basic_rom_ptr = (volatile uint8_t *)0x00220000;
+    // SDRAM_BASIC_ROM_ADDR (low_memory=0) = physical 0x1F0000, at the top of physical
+    // bank 0 (above the 1088 KB RAM region). Firmware addr 0x003F0000 -> physical
+    // 0x1F0000 via the iosys bank-0/1 swap. Keep in sync with address_decoder.vhdl.
+    volatile uint8_t *basic_rom_ptr = (volatile uint8_t *)0x003F0000;
     r = f_read(&f, (void *)basic_rom_ptr, 8192, &br);
     f_close(&f);
     if (r != FR_OK || br != 8192) {
@@ -942,7 +943,7 @@ int load_system_roms(void) {
         reg_romload_ctrl = 0;
         return (4 << 8) | r;
     }
-    uart_printf("BASIC.ROM loaded successfully (%d bytes) at SDRAM 0x020000\n", br);
+    uart_printf("BASIC.ROM loaded successfully (%d bytes) at SDRAM 0x1F0000\n", br);
     
     // Release reset
     reg_romload_ctrl = 0;

@@ -413,9 +413,9 @@ wire        sdram_ctrl_write_en = (current_owner == OWN_RV) ? (|rv_wstrb)  : cor
 // SDRAM_CART_ADDR uses a full 22-bit (4 MB) emu_cart_address. Our embedded SDRAM is
 // exactly 8 MB and gw2ar_sdram ignores addr[24:23], so without remapping carts would
 // alias onto Atari RAM at 0x000000. Remap them into the 4 MB window at
-// 0x400000-0x7FFFFF (RAM ends 0x020000 with RAM_SELECT=128K; BASIC/OS relocated to
-// 0x020000/0x024000 — below this window — and the old frame buffer is gone, so the
-// whole upper 4 MB is free for carts; the core's freezer in this region is disabled).
+// 0x400000-0x7FFFFF (RAM reaches 0x10FFFF with RAM_SELECT=1088K; BASIC/OS relocated to
+// the TOP of bank 0 at 0x1F0000/0x1F4000 — above RAM, below this window — and the old
+// frame buffer is gone, so the whole upper 4 MB is free for carts; freezer disabled).
 // Supports carts up to 4 MB (MegaCart 4 MB / .car type 63). The!Cart 32/64/128 MB
 // still cannot fit the 8 MB part and are rejected by the firmware loader.
 wire        core_addr_is_cart   = (core_sdram_addr[24:22] == 3'b010);
@@ -1124,7 +1124,7 @@ atari800core_simple_sdram #(
     .DMA_MEMORY_DATA            (),
 
     // Config
-    .RAM_SELECT                 (3'b001),   // 128 KB
+    .RAM_SELECT                 (3'b110),   // 1088 KB (RAMBO) — RAM 0x000000-0x10FFFF
     .PAL                        (1'b0),     // NTSC
     .CLIP_SIDES                 (1'b0),
     .RESET_RNMI                 (1'b0),

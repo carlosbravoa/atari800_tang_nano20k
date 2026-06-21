@@ -909,14 +909,16 @@ gen_normal_memory : if low_memory=0 generate
 	-- CARTS         -              "0 0101 YYYY YYY0 0000 0000 0000" (BOT) - 2MB! 8kb banks
 	SDRAM_CART_ADDR	<= "010" & emu_cart_address(21 downto 0);
 	-- BASIC/OS ROM  -              "0 0000 001X XX00 0000 0000 0000" (BOT)
-	-- TN20K: relocated below RAM-top into the free low region (BASIC 0x020000,
-	-- OS 0x024000 XL/XE, 0x028000 a800) so the 4 MB cart window 0x400000-0x7FFFFF is
-	-- contiguous. Was 0x700000/0x704000 (now inside the cart window). The firmware
-	-- writes ROMs to the matching physical addresses via 0x00220000/0x00224000 (the
-	-- iosys bank-0/1 swap maps those to physical 0x020000/0x024000). Keep both in sync.
-	SDRAM_BASIC_ROM_ADDR <= "00000"&"001000" &"00000000000000";
-	SDRAM_OS_ROM_ADDR    <= "00000"&"001010" &"00000000000000" when atari800mode = '1' else
-				"00000"&"001001" &"00000000000000";
+	-- TN20K: relocated to the TOP of physical bank 0 (BASIC 0x1F0000, PBI 0x1F2000,
+	-- OS 0x1F4000) so the Atari RAM region below can grow up to 1088 KB (top 0x10FFFF)
+	-- without colliding, and the 4 MB cart window 0x400000-0x7FFFFF stays contiguous.
+	-- (Previously 0x020000/0x024000, which butted right against 128 KB RAM.) The firmware
+	-- writes ROMs to the matching physical addresses via 0x003F0000/0x003F4000 (the iosys
+	-- bank-0/1 swap maps those to physical 0x1F0000/0x1F4000). Keep BOTH SIDES in sync or
+	-- the machine will not boot. (atari800mode='1' OS path is dead in this XL/XE build.)
+	SDRAM_BASIC_ROM_ADDR <= "00001"&"111100" &"00000000000000";  -- 0x1F0000
+	SDRAM_OS_ROM_ADDR    <= "00001"&"111110" &"00000000000000" when atari800mode = '1' else  -- 0x1F8000 (dead)
+				"00001"&"111101" &"00000000000000";          -- 0x1F4000
 	-- SYSTEM        -              "0 0111 1000 0000 0000 0000 0000" (BOT) - Free 512K below 8MB
 
 end generate;
