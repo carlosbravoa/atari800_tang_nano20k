@@ -37,7 +37,9 @@ module scandoubler_480p #(
     parameter integer SRC_COLS    = 352,   // Atari active pixels captured per line
     parameter integer SRC_LINES   = 240,   // Atari active lines captured per field
     parameter integer H_PIC_OFFSET = 0,    // left margin: 3*352 = 1056 = full active (no pillarbox)
-    parameter integer V_PIC_TOP   = 33,    // first active output line ((786-720)/2; tune on HW)
+    parameter integer V_PIC_TOP   = 57,    // first active output line; HW-tuned centre on the reference panel
+                                           // (also gives the read-vs-write lead that clears the 8-line
+                                           // bottom-at-top wrap). Theoretical centre is 33; 57 is real.
     parameter bit     SYNC_ACTIVE_LOW = 1'b0
 )(
     // Atari source (clk_core)
