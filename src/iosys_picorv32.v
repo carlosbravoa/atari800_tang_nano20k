@@ -101,6 +101,7 @@ module iosys_picorv32 #(
     output wire [1:0]  scanline_level_out,   // 0=off,1=25%,2=50%,3=75%
     output wire [7:0]  h_offset_out,         // horizontal picture position (front porch 0..80)
     output wire        stereo_out,           // dual-POKEY stereo enable (video_opts bit 2)
+    output wire [2:0]  ram_select_out,       // Atari RAM size code (core RAM_SELECT)
 
     // Virtual Keyboard outputs
     output wire [7:0]  virt_kbd_mod_out,
@@ -230,6 +231,7 @@ wire        virt_kbd_reg1_sel = mem_valid && (mem_addr == 32'h0200_00a4);
 wire        cart_reg_sel      = mem_valid && (mem_addr == 32'h0200_00a8);
 wire        video_opts_sel    = mem_valid && (mem_addr == 32'h0200_00b4);  // [1:0]=scanline level
 wire        h_offset_sel      = mem_valid && (mem_addr == 32'h0200_00b8);  // [7:0]=H position
+wire        ram_select_sel    = mem_valid && (mem_addr == 32'h0200_00bc);  // [2:0]=RAM size code
 
 // Phase B: SIO command-frame capture (read-only snoop in sio_handler)
 //   0x020000ac (R): {aux2, aux1, cmd, device}  = command bytes 3,2,1,0
@@ -260,7 +262,7 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
             cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel || siocmd_a_sel || siocmd_b_sel ||
-            video_opts_sel || h_offset_sel;
+            video_opts_sel || h_offset_sel || ram_select_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -321,6 +323,7 @@ assign mem_rdata = bram_ready ? bram_rdata :
         siocmd_b_sel ? {8'b0, siocmd_seq, siocmd_status, siocmd_bytes[39:32]} :
         video_opts_sel ? {24'b0, video_opts_reg} :
         h_offset_sel ? {24'b0, h_offset_reg} :
+        ram_select_sel ? {29'b0, ram_select_reg} :
         32'h 0000_0000;
 
 picorv32 #(
@@ -503,6 +506,8 @@ reg [7:0] h_offset_reg   = 8'd0;   // horizontal position (capture-skip pixels);
 assign    scanline_level_out = video_opts_reg[1:0];
 assign    stereo_out         = video_opts_reg[2];
 assign    h_offset_out       = h_offset_reg;
+reg [2:0] ram_select_reg = 3'b001;   // default 128 KB (matches firmware default)
+assign    ram_select_out     = ram_select_reg;
 
 always @(posedge clk) begin
     if (~resetn) begin
@@ -516,6 +521,7 @@ always @(posedge clk) begin
         cart_mode_reg <= 8'h00;
         video_opts_reg <= 8'h00;
         h_offset_reg <= 8'd0;
+        ram_select_reg <= 3'b001;
     end else begin
         if (virt_kbd_reg0_sel && |mem_wstrb) begin
             if (mem_wstrb[0]) virt_kbd_mod  <= mem_wdata[7:0];
@@ -531,6 +537,7 @@ always @(posedge clk) begin
         if (cart_reg_sel && mem_wstrb[0]) cart_mode_reg <= mem_wdata[7:0];
         if (video_opts_sel && mem_wstrb[0]) video_opts_reg <= mem_wdata[7:0];
         if (h_offset_sel && mem_wstrb[0])   h_offset_reg   <= mem_wdata[7:0];
+        if (ram_select_sel && mem_wstrb[0]) ram_select_reg <= mem_wdata[2:0];
     end
 end
 

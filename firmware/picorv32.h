@@ -51,6 +51,7 @@ int atoi(const char *str);
 #define reg_siocmd_b       (*(volatile uint32_t*)0x020000b0)  // R: [7:0]=checksum [15:8]=status [23:16]=seq; W: ack
 #define reg_video_opts     (*(volatile uint32_t*)0x020000b4)  // [1:0] = scanline level (0=off,1=25,2=50,3=75%), [2] = stereo (dual POKEY)
 #define reg_h_offset       (*(volatile uint32_t*)0x020000b8)  // [7:0] = horizontal position (0..80)
+#define reg_ram_select     (*(volatile uint32_t*)0x020000bc)  // [2:0] = core RAM_SELECT (1=128K,3=320K,5=576K,6=1088K)
 #define reg_video_diag     (*(volatile uint32_t*)0x02000064)  // [31:16]=lines/frame [15:0]=frame counter
 #define reg_sio_cap_idx    (*(volatile uint32_t*)0x02000068)  // write: select SIO capture word 0..3
 #define reg_sio_cap_data   (*(volatile uint32_t*)0x0200006c)  // read: selected SIO capture word

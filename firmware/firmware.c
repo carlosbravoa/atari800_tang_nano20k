@@ -23,6 +23,14 @@ int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (
 int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
 int option_h_offset = 0;                    // horizontal pan: capture-skip pixels (0..48)
 int option_stereo = 0;                      // 1 = dual-POKEY stereo (POKEY2 @ $D210 -> right); default mono
+
+// Atari RAM size choices offered in OSD Options. code = core RAM_SELECT (RAMBO
+// variants); kb = label/persisted value. Index 0 (128 KB) is the default.
+static const struct { unsigned char code; int kb; } ram_opts[] = {
+    {1, 128}, {3, 320}, {5, 576}, {6, 1088}
+};
+#define N_RAM_OPTS 4
+int option_ram_idx = 0;                      // index into ram_opts; 0 = 128 KB (default)
 #define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
@@ -37,6 +45,13 @@ static inline void apply_video_options(void) {
     reg_video_opts = (option_scanline_level & 0x3)  // 0x B4 [1:0] scanline level
                    | ((option_stereo & 1) << 2);    //      [2]   dual-POKEY stereo enable
     reg_h_offset   = option_h_offset & 0xFF;        // 0x B8 [7:0] horizontal position
+}
+
+// RAM size only takes effect when the core boots, so this is written before the
+// core is released at boot and again inside cold_boot_atari() (RAM changes in the
+// OSD cold-boot the machine). 0x BC [2:0] = core RAM_SELECT.
+static inline void apply_machine_options(void) {
+    reg_ram_select = ram_opts[option_ram_idx].code;
 }
 
 char load_fname[512];
@@ -288,6 +303,12 @@ int load_option()  {
         if (strcmp(key, "stereo") == 0) {
             option_stereo = (atoi(value) != 0);
         }
+        if (strcmp(key, "ram") == 0) {
+            int kb = atoi(value);
+            option_ram_idx = 0;   // default 128 KB if no match
+            for (int i = 0; i < N_RAM_OPTS; i++)
+                if (ram_opts[i].kb == kb) { option_ram_idx = i; break; }
+        }
     }
 
 load_option_close:
@@ -338,6 +359,16 @@ int save_option() {
         goto save_options_close;
     }
     f_puts(option_stereo ? "1\n" : "0\n", &f);
+
+    if (f_puts("ram=", &f) < 0) {
+        message("f_puts failed",1);
+        goto save_options_close;
+    }
+    { char s[6]; int n = ram_opts[option_ram_idx].kb, k = 0, d = 1000;
+      while (d > n && d > 1) d /= 10;
+      while (d >= 1) { s[k++] = '0' + (n / d) % 10; d /= 10; }
+      s[k] = 0; f_puts(s, &f); }
+    f_puts("\n", &f);
 
 save_options_close:
     f_close(&f);
@@ -1414,6 +1445,7 @@ void sio_poll(void) {
 // Cold-boot the Atari (COLDST=1 + core reset pulse). Caller flips booted/overlay.
 static void cold_boot_atari(void) {
     reg_virt_kbd_0 = 0x00000000;
+    apply_machine_options();                        // RAM_SELECT stable before core leaves reset
     sio_init();
     *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
     reg_romload_ctrl = 1;
@@ -1528,6 +1560,17 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
     }
 }
 
+// Draw the RAM size value + "<- ->" hint at the menu's RAM row (col 16, row 18).
+// Trailing spaces clear stale characters when the digit count shrinks (1088->128).
+static void draw_ram_line(void) {
+    cursor(16, 18);
+    int n = ram_opts[option_ram_idx].kb; char s[6]; int k = 0, d = 1000;
+    while (d > n && d > 1) d /= 10;
+    while (d >= 1) { s[k++] = '0' + (n / d) % 10; d /= 10; }
+    s[k] = 0;
+    print(s); print("K  <- ->  ");
+}
+
 void menu_options() {
     int choice = 0;
     int options_dirty = 0;   // a change was applied live but not yet written to SD
@@ -1571,6 +1614,10 @@ void menu_options() {
         print(option_stereo ? "ON" : "OFF");
 
         cursor(2, 18);
+        print("RAM:");
+        draw_ram_line();
+
+        cursor(2, 19);
         print(options_dirty ? "Save changes *" : "Save changes");
 
         delay(300);
@@ -1586,8 +1633,15 @@ void menu_options() {
                 } else if (choice == 4 && (jj1 & 0x80) && option_h_offset > 0) {
                     option_h_offset--; apply_video_options(); options_dirty = 1; delay(60);
                 }
+                // RAM size: Left = smaller, Right = bigger (clamped). NOT applied until
+                // Enter (cold boot) — just update the selection and redraw it in place.
+                else if (choice == 6 && (jj1 & 0x80) && option_ram_idx < N_RAM_OPTS - 1) {
+                    option_ram_idx++; options_dirty = 1; draw_ram_line(); delay(180);
+                } else if (choice == 6 && (jj1 & 0x40) && option_ram_idx > 0) {
+                    option_ram_idx--; options_dirty = 1; draw_ram_line(); delay(180);
+                }
             }
-            if (joy_choice(12, 7, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 8, &choice, OSD_KEY_CODE) == 1) {
                 // Every item applies its change LIVE (so you can see it) but does NOT write
                 // to SD — only "Save changes" persists. Leaving without saving keeps the
                 // changes for this session; they revert to the saved values on next boot.
@@ -1620,6 +1674,13 @@ void menu_options() {
                     options_dirty = 1;
                     break; // redraw UI
                 } else if (choice == 6) {
+                    // RAM size is chosen with Left/Right; Enter applies it. A running
+                    // machine can't change RAM, so cold-boot (cold_boot_atari writes
+                    // RAM_SELECT before releasing the core). Save persists it.
+                    status("Rebooting with new RAM size...");
+                    cold_boot_atari();
+                    break; // redraw UI
+                } else if (choice == 7) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
@@ -1720,6 +1781,7 @@ int main() {
     // Initialize USB Host enable state based on loaded option (0 = UART, 1 = USB)
     apply_input_options();
     apply_video_options();
+    apply_machine_options();   // set RAM_SELECT before the core is released below
     sio_init();
 
     // Auto-load system ROMs on boot. On a warm reset (S1) the SD card is left

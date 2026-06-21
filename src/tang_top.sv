@@ -747,6 +747,13 @@ wire        stereo_opt;
 reg         stereo_s1 = 1'b0, stereo_core = 1'b0;
 always @(posedge clk_core) begin stereo_s1 <= stereo_opt; stereo_core <= stereo_s1; end
 
+// Atari RAM size (OSD-selected): quasi-static config from iosys (sys_clk). The
+// firmware only changes it across a cold boot, so a plain 2-FF sync into clk_core
+// is safe (settles long before the core leaves reset). Default 3'b001 = 128 KB.
+wire [2:0]  ram_select_opt;
+reg  [2:0]  ram_sel_s1 = 3'b001, ram_select_core = 3'b001;
+always @(posedge clk_core) begin ram_sel_s1 <= ram_select_opt; ram_select_core <= ram_sel_s1; end
+
 wire        sio_rx_data_in;
 wire        sio_clk_out;
 wire        enable_179_early;
@@ -879,7 +886,8 @@ iosys_picorv32 #(
     // Video options
     .scanline_level_out(scanline_level),
     .h_offset_out(h_offset),
-    .stereo_out(stereo_opt)
+    .stereo_out(stereo_opt),
+    .ram_select_out(ram_select_opt)
 );
 
 // Clock Domain Crossing (CDC) Synchronization for SIO Handler
@@ -1124,7 +1132,7 @@ atari800core_simple_sdram #(
     .DMA_MEMORY_DATA            (),
 
     // Config
-    .RAM_SELECT                 (3'b110),   // 1088 KB (RAMBO) — RAM 0x000000-0x10FFFF
+    .RAM_SELECT                 (ram_select_core),  // OSD-selected RAM size (default 128 KB); BASIC/OS at top of bank 0
     .PAL                        (1'b0),     // NTSC
     .CLIP_SIDES                 (1'b0),
     .RESET_RNMI                 (1'b0),
