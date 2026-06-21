@@ -43,6 +43,7 @@ the keyboard alone covers everything.
 ## Features
 
 - **Atari 800 / 800XL / 65XE / 130XE** emulation (6502 CPU, ANTIC, GTIA, POKEY, PIA)
+- **Expandable RAM — up to 1088 KB** (v2.2): OSD selector for **128 KB** (130XE) / **320** / **576** / **1088 KB** (RAMBO); default 128 KB, cold-boots to apply, persisted in `atari.ini`. Coexists with 4 MB carts
 - **HDMI video — genlocked, low-latency, no frame buffer** (v2.0): the Atari frame is shown via a
   small line-buffer **scandoubler** (integer 3× → 1056×720 active, HD-class) whose pixel clock is
   **frequency-locked to the core**, so it's rock-steady (no jitter, no tear) with only ~1–2
@@ -50,6 +51,7 @@ the keyboard alone covers everything.
 - **CRT scanlines** (OFF / 25 / 50 / 75 %) and **horizontal position** — both adjustable live in the OSD
 - **HDMI audio** — 48 kHz stereo PCM in HDMI 1.3 data islands (no extra hardware)
 - **GPIO audio** — sigma-delta PDM on GPIO pins (add RC filter for analogue)
+- **Dual-POKEY stereo** (v2.2) — the classic second-POKEY-at-`$D210` stereo upgrade (POKEY1→left, POKEY2→right); OSD toggle, **default mono** so all existing software is unaffected. Enable it *before* loading stereo-aware software
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open)
@@ -69,6 +71,8 @@ the keyboard alone covers everything.
 | Feature | Status |
 |---|---|
 | Atari boot (BASIC) — auto-boots on power-on | ✅ Working |
+| Expandable RAM 128 KB / 320 / 576 / 1088 KB (OSD selector, default 128 KB) | ✅ Working |
+| Dual-POKEY stereo (OSD toggle, default mono) | ✅ Working |
 | HDMI video — genlocked line-buffer, 1056×720 (3× integer), low-latency, no jitter/tear | ✅ Working |
 | CRT scanlines (OFF/25/50/75 %) + horizontal position — live OSD options | ✅ Working |
 | `.xex` executable loading (virtual-disk 6502 loader) | ✅ Working |
