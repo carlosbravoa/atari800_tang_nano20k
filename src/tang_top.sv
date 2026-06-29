@@ -1249,9 +1249,36 @@ wire [7:0] osd_b = {overlay_color[14:10], overlay_color[14:12]};
 // Draw OSD character/logo pixel if overlay is enabled, active, and color is not transparent (black)
 wire       osd_active = overlay && (overlay_color[14:0] != 15'd0) && hdmi_de;
 
-wire [7:0] mixed_r = osd_active ? osd_r : hdmi_r;
-wire [7:0] mixed_g = osd_active ? osd_g : hdmi_g;
-wire [7:0] mixed_b = osd_active ? osd_b : hdmi_b;
+// ── On-screen activity "LED" (the board lives in a case → real LEDs are hidden) ──
+// Mirror the two SIO status LEDs as small green blocks in the bottom-right corner:
+//   left block  = sio_data_act      (LED2: blinks while a disk sector streams)
+//   right block = sio_cmd_stretch!=0 (LED4: one flash per SIO command/drive request)
+// Coordinates are in Atari-pixel space from the scandoubler: osd_x 0..255 spans the
+// visible picture width, osd_y 0..223 spans its height (28 char rows * 8).
+// The sio_*_stretch flags live on sys_clk; sample them into clk_pix through a 2-FF
+// synchronizer. They are slow (~19 ms) status flags, so metastability is harmless, but
+// keep the crossing clean. The box hit is then REGISTERED (act_hit_r) so that only a
+// 2:1 mux — not the coordinate comparators — lands on the clk_pix path that feeds the
+// TMDS encoders (the HDMI-stability-critical setup path; see CLAUDE.md).
+localparam [7:0] ACT_Y0  = 8'd200, ACT_Y1  = 8'd212;   // shared vertical band
+localparam [7:0] ACT_DX0 = 8'd214, ACT_DX1 = 8'd228;   // data-activity block columns
+localparam [7:0] ACT_CX0 = 8'd234, ACT_CX1 = 8'd248;   // command-frame block columns
+reg sio_act_meta = 1'b0, sio_act_pix = 1'b0;
+reg sio_cmd_meta = 1'b0, sio_cmd_pix = 1'b0;
+reg act_hit_r = 1'b0;
+always_ff @(posedge clk_pix) begin
+    sio_act_meta <= sio_data_act;            sio_act_pix <= sio_act_meta;
+    sio_cmd_meta <= (sio_cmd_stretch != 0);  sio_cmd_pix <= sio_cmd_meta;
+    act_hit_r <= hdmi_de && (osd_y >= ACT_Y0) && (osd_y <= ACT_Y1) &&
+                 ((sio_act_pix && (osd_x >= ACT_DX0) && (osd_x <= ACT_DX1)) ||
+                  (sio_cmd_pix && (osd_x >= ACT_CX0) && (osd_x <= ACT_CX1)));
+end
+
+// OSD text keeps priority over the activity block (so a menu open during a background
+// load is never obscured); the block shows green over the running picture otherwise.
+wire [7:0] mixed_r = osd_active ? osd_r : (act_hit_r ? 8'h00 : hdmi_r);
+wire [7:0] mixed_g = osd_active ? osd_g : (act_hit_r ? 8'hFF : hdmi_g);
+wire [7:0] mixed_b = osd_active ? osd_b : (act_hit_r ? 8'h00 : hdmi_b);
 
 // Pipeline register to eliminate the setup violation from the OSD RAM
 // all the way to the HDMI TMDS encoders.
