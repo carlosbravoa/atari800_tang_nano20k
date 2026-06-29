@@ -259,14 +259,19 @@ void message(char *msg, int center) {
     delay(300);
 }
 
-// return 0: success, 1: no option file found, 2: option file corrupt
+// return 0: success, 1: no option file found, 2: option file corrupt,
+// -1: transient SD/FS error (card not ready / disk error) -> caller should retry.
+// The distinction matters at boot: load_option() is the FIRST real SD access (f_mount
+// is lazy), so a mid-state card (common after a warm S1 reset) makes f_open fail. A
+// genuinely-absent file (FR_NO_FILE, first run) must NOT trigger a retry storm.
 int load_option()  {
     FIL f;
     int r = 0;
     char buf[1024];
     char *line, *key, *value;
-    if (f_open(&f, OPTION_FILE, FA_READ))
-        return 1;
+    FRESULT fr = f_open(&f, OPTION_FILE, FA_READ);
+    if (fr != FR_OK)
+        return (fr == FR_NO_FILE || fr == FR_NO_PATH) ? 1 : -1;
     while (f_gets(buf, 1024, &f)) {
         line = trimwhitespace(buf);
         if (line[0] == '\0' || line[0] == '[' || line[0] == ';' || line[0] == '#')
@@ -316,62 +321,47 @@ load_option_close:
     return r;
 }
 
-// return 0: success, 1: cannot save
+// return 0: success, 1: cannot save. EVERY f_puts is checked (a half-written file is
+// worse than none — it loads back as defaults for the missing keys), and so is f_close:
+// FatFs buffers the last sector, so a card write error often surfaces only on close. The
+// caller reports the failure to the user; we only mark the file hidden once it is whole.
 int save_option() {
     FIL f;
-    if (f_open(&f, OPTION_FILE, FA_READ | FA_WRITE | FA_CREATE_ALWAYS)) {
-        message("f_open failed",1);
+    int err = 0;
+    if (f_open(&f, OPTION_FILE, FA_READ | FA_WRITE | FA_CREATE_ALWAYS))
         return 1;
-    }
-    if (f_puts("osd_key=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
-    if (option_osd_key == OPTION_OSD_KEY_SELECT_START)
-        f_puts("1\n", &f);
-    else
-        f_puts("2\n", &f);
 
-    if (f_puts("joystick=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
-    f_puts(option_arrow_joystick ? "1\n" : "0\n", &f);
+    err |= (f_puts("osd_key=", &f) < 0);
+    err |= (f_puts(option_osd_key == OPTION_OSD_KEY_SELECT_START ? "1\n" : "2\n", &f) < 0);
 
-    if (f_puts("scanlines=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
-    { char s[2] = { (char)('0' + (option_scanline_level & 0x3)), 0 }; f_puts(s, &f); }
-    f_puts("\n", &f);
+    err |= (f_puts("joystick=", &f) < 0);
+    err |= (f_puts(option_arrow_joystick ? "1\n" : "0\n", &f) < 0);
 
-    if (f_puts("hpos=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
+    err |= (f_puts("scanlines=", &f) < 0);
+    { char s[2] = { (char)('0' + (option_scanline_level & 0x3)), 0 }; err |= (f_puts(s, &f) < 0); }
+    err |= (f_puts("\n", &f) < 0);
+
+    err |= (f_puts("hpos=", &f) < 0);
     { char s[4]; int n = option_h_offset, k = 0;
       if (n >= 10) s[k++] = '0' + (n / 10);
-      s[k++] = '0' + (n % 10); s[k] = 0; f_puts(s, &f); }
-    f_puts("\n", &f);
+      s[k++] = '0' + (n % 10); s[k] = 0; err |= (f_puts(s, &f) < 0); }
+    err |= (f_puts("\n", &f) < 0);
 
-    if (f_puts("stereo=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
-    f_puts(option_stereo ? "1\n" : "0\n", &f);
+    err |= (f_puts("stereo=", &f) < 0);
+    err |= (f_puts(option_stereo ? "1\n" : "0\n", &f) < 0);
 
-    if (f_puts("ram=", &f) < 0) {
-        message("f_puts failed",1);
-        goto save_options_close;
-    }
+    err |= (f_puts("ram=", &f) < 0);
     { char s[6]; int n = ram_opts[option_ram_idx].kb, k = 0, d = 1000;
       while (d > n && d > 1) d /= 10;
       while (d >= 1) { s[k++] = '0' + (n / d) % 10; d /= 10; }
-      s[k] = 0; f_puts(s, &f); }
-    f_puts("\n", &f);
+      s[k] = 0; err |= (f_puts(s, &f) < 0); }
+    err |= (f_puts("\n", &f) < 0);
 
-save_options_close:
-    f_close(&f);
+    if (f_close(&f) != FR_OK)        // flushes the final sector — write errors land here
+        err = 1;
+    if (err)
+        return 1;
+
     f_chmod(OPTION_FILE, AM_HID, AM_HID);
     return 0;
 }
@@ -1777,7 +1767,20 @@ int main() {
             message("Insert SD card and press any key", 1);
     }
 
-    load_option();
+    // load_option() is the first real SD access (f_mount above is lazy). On a warm
+    // reset the card is mid-state and this first read can fail transiently — retry with
+    // a full remount, exactly like the ROM loader below. Without this, a glitched first
+    // read silently reverts ALL options to defaults while the ROM loader still recovers,
+    // i.e. "settings saved fine but boot comes up with defaults". (-1 = transient.)
+    int opt_r = load_option();
+    for (int attempt = 0; opt_r < 0 && attempt < 5; attempt++) {
+        uart_printf("load_option failed (transient), remount+retry %d\n", attempt + 1);
+        delay(50);
+        f_mount(0, "", 0);                       // unmount (deinit volume)
+        delay(20);
+        if (f_mount(&fs, "", 0) != FR_OK) { delay(80); continue; }
+        opt_r = load_option();
+    }
     // Initialize USB Host enable state based on loaded option (0 = UART, 1 = USB)
     apply_input_options();
     apply_video_options();
