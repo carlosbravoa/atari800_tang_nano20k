@@ -302,7 +302,8 @@ int load_option()  {
         }
         if (strcmp(key, "hpos") == 0) {
             int v = atoi(value);
-            if (v < 0) v = 0; if (v > 48) v = 48;
+            if (v < 0) v = 0;
+            if (v > 48) v = 48;
             option_h_offset = v;
         }
         if (strcmp(key, "stereo") == 0) {
@@ -844,7 +845,6 @@ int menu_loadrom(int *choice, int carts, int slot) {
                         // Otherwise mount as an .atr / .xfd disk image into the drive
                         int res = mount_atr(load_fname, slot);
                         if (res != 0) {
-                            char errmsg[64];
                             // Show path (up to 28 chars) and error code
                             int plen = strlen(load_fname);
                             if (plen > 28) {
