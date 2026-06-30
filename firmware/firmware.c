@@ -1961,16 +1961,21 @@ int main() {
                 }
             } else if (choice == 3) {
                 reg_virt_kbd_0 = 0x00410000; // Hold OPTION (F8)
-                load_system_roms();
+                // sio_init() MUST precede load_system_roms(): the latter releases the core
+                // from reset internally, and with a disk attached the OS issues D1: boot
+                // commands immediately. Initialising SIO *after* the release wiped the
+                // firmware's SIO state mid-transaction -> the boot read was lost and the
+                // disk boot stalled (only with a disk attached). Matches cold_boot_atari().
                 sio_init();
+                load_system_roms();
                 booted = true;
                 overlay(0);
                 sio_delay(400);              // Wait for boot process to read OPTION
                 reg_virt_kbd_0 = 0x00000000; // Release OPTION
             } else if (choice == 4) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
+                sio_init();                  // before load_system_roms() releases the core (see choice 3)
                 load_system_roms();
-                sio_init();
                 booted = true;
                 overlay(0);
             } else if (choice == 5) {
