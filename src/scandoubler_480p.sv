@@ -50,6 +50,12 @@ module scandoubler_480p #(
     input  wire        sof_in,      // VIDEO_START_OF_FIELD
     input  wire        pixce,       // VIDEO_PIXCE pixel strobe
 
+    // SIO activity flags (sys_clk domain; 2-FF synced to clk_core inside). Drawn as small
+    // blocks into the captured Atari picture on the clk_core CAPTURE side — deliberately NOT
+    // on the clk_pix/TMDS readout path (that approach has no HDMI timing margin).
+    input  wire        sio_act_in,  // disk data streaming  (mirrors LED2)
+    input  wire        sio_cmd_in,  // SIO command frame    (mirrors LED4)
+
     // HDMI (clk_pix = 57.375 MHz = 2*clk_core; 720-line mode)
     input  wire        clk_pix,
     input  wire [1:0]  scanline_level,  // 0=off, 1=25%, 2=50%, 3=75% brightness of the dim line
@@ -76,6 +82,39 @@ localparam [10:0] H_SYNC_S = 11'd1096, H_SYNC_E = 11'd1176;
 // 2-FF sync into clk_core (slow config; a rare 1-frame transient while adjusting is harmless).
 reg [7:0] h_off_s1, h_off_core;
 always_ff @(posedge clk_core) begin h_off_s1 <= h_offset; h_off_core <= h_off_s1; end
+
+// ── SIO activity indicator (capture side, clk_core) ──────────────────────────────
+// 2-FF sync the two slow (~19 ms) sys_clk activity flags into clk_core, then draw two small
+// lettered blocks at the BOTTOM-LEFT of the SOURCE picture: "D" = disk data streaming
+// (green), "S" = SIO command frame (white), each a filled 7×9 block with a 5×7 black glyph.
+// Substituting the captured colour code costs only comparators + a tiny font ROM on wdata's
+// D input — all in the timing-rich 28.6875 MHz domain, nowhere near the HDMI serializer.
+reg sio_act_s1, sio_act_core, sio_cmd_s1, sio_cmd_core;
+always_ff @(posedge clk_core) begin
+    sio_act_s1 <= sio_act_in;  sio_act_core <= sio_act_s1;
+    sio_cmd_s1 <= sio_cmd_in;  sio_cmd_core <= sio_cmd_s1;
+end
+localparam [7:0] SIO_Y0  = 8'd226, SIO_Y1  = 8'd234;   // shared 9-row band (rows 0..239)
+localparam [8:0] DBLK_X0 = 9'd8,   DBLK_X1 = 9'd14;    // "D" block, 7 cols (cols 0..351)
+localparam [8:0] SBLK_X0 = 9'd18,  SBLK_X1 = 9'd24;    // "S" block, 7 cols
+localparam [7:0] SIO_COL_DATA = 8'hCA;                 // green (#6bde42)
+localparam [7:0] SIO_COL_CMD  = 8'h0F;                 // white (#ffffff)
+localparam [7:0] SIO_COL_INK  = 8'h00;                 // letter ink (black)
+// 5×7 glyphs, row 0 = top; bit 4 = leftmost column.
+function automatic [4:0] glyph_D(input [2:0] r);
+    case (r)
+        3'd0: glyph_D = 5'b11110; 3'd1: glyph_D = 5'b10001; 3'd2: glyph_D = 5'b10001;
+        3'd3: glyph_D = 5'b10001; 3'd4: glyph_D = 5'b10001; 3'd5: glyph_D = 5'b10001;
+        default: glyph_D = 5'b11110;
+    endcase
+endfunction
+function automatic [4:0] glyph_S(input [2:0] r);
+    case (r)
+        3'd0: glyph_S = 5'b01110; 3'd1: glyph_S = 5'b10001; 3'd2: glyph_S = 5'b10000;
+        3'd3: glyph_S = 5'b01110; 3'd4: glyph_S = 5'b00001; 3'd5: glyph_S = 5'b10001;
+        default: glyph_S = 5'b01110;
+    endcase
+endfunction
 localparam [9:0]  V_ACT = 10'd720,  V_SYNC = 10'd6;         // VSync at top (vy 0..5)
 localparam [9:0]  V_SAFETY = 10'd800;                       // safety wrap if a SOF is missed (>786)
 localparam [10:0] PIC_X0 = 11'(H_PIC_OFFSET);
@@ -97,6 +136,19 @@ wire [11:0] waddr = {wrow[2:0], wcol};   // 8 slots x 512 cols
 reg        we;
 reg [7:0]  wdata;
 
+// SIO indicator decode (combinational, from the registered wcol/wrow + synced flags).
+wire [8:0] dbx = wcol - DBLK_X0;            // 0..6 within "D" block (valid when d_box)
+wire [8:0] sbx = wcol - SBLK_X0;            // 0..6 within "S" block
+wire [7:0] gby = wrow - SIO_Y0;             // 0..8 within the shared band
+wire [2:0] grow = gby[2:0] - 3'd1;          // glyph row 0..6 (valid when gby in 1..7)
+wire       d_box = sio_act_core && (wrow >= SIO_Y0) && (wrow <= SIO_Y1) && (wcol >= DBLK_X0) && (wcol <= DBLK_X1);
+wire       s_box = sio_cmd_core && (wrow >= SIO_Y0) && (wrow <= SIO_Y1) && (wcol >= SBLK_X0) && (wcol <= SBLK_X1);
+wire       in_gy = (gby >= 8'd1) && (gby <= 8'd7);
+wire [4:0] drow_bits = glyph_D(grow);
+wire [4:0] srow_bits = glyph_S(grow);
+wire       d_ink = in_gy && (dbx >= 9'd1) && (dbx <= 9'd5) && drow_bits[3'd5 - dbx[2:0]];
+wire       s_ink = in_gy && (sbx >= 9'd1) && (sbx <= 9'd5) && srow_bits[3'd5 - sbx[2:0]];
+
 always_ff @(posedge clk_core or negedge rst_n) begin
     if (!rst_n) begin
         de_d <= 1'b0; sof_d <= 1'b0; wcol <= 9'd0; acol <= 10'd0; wrow <= 8'd0; we <= 1'b0; wdata <= 8'd0;
@@ -111,7 +163,11 @@ always_ff @(posedge clk_core or negedge rst_n) begin
         end else if (pixce && de_in) begin
             // skip the first h_off_core active pixels, then capture SRC_COLS columns
             if ((acol >= {2'b0, h_off_core}) && (wcol < SRC_COLS)) begin
-                wdata <= colour_in;
+                // Capture-side SIO indicator: inside the "D"/"S" block draw the glyph (ink)
+                // over the block colour while its activity flag is set; else the real pixel.
+                if (d_box)      wdata <= d_ink ? SIO_COL_INK : SIO_COL_DATA;
+                else if (s_box) wdata <= s_ink ? SIO_COL_INK : SIO_COL_CMD;
+                else            wdata <= colour_in;
                 we    <= 1'b1;
                 wcol  <= wcol + 9'd1;
             end

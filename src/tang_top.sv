@@ -1223,6 +1223,10 @@ wire       hdmi_hs, hdmi_vs, hdmi_de;
 
 // Genlocked scandoubler: Atari video (clk_core) -> 4-line ring -> standard 480p59.94
 // (clk_pix=27 MHz), 2x2 upscale + pillarbox, Altirra palette on readout.
+// Capture-side SIO activity inputs — declared here (the source flags are defined further
+// down); assigned just after sio_data_act below. Explicit wires avoid the implicit-net
+// forward-reference (a phantom 1-bit net shadowing the 22-bit sio_cmd_stretch reg).
+wire sio_ind_data, sio_ind_cmd;
 scandoubler_480p scandoubler (
     .clk_core  (clk_core),
     .rst_n     (hdmi_rst_n),
@@ -1230,6 +1234,8 @@ scandoubler_480p scandoubler (
     .de_in     (~video_blank),
     .sof_in    (video_sof),
     .pixce     (video_pixce),
+    .sio_act_in(sio_ind_data),       // capture-side SIO activity blocks (clk_core domain)
+    .sio_cmd_in(sio_ind_cmd),
     .clk_pix   (clk_pix),
     .scanline_level(scanline_level),
     .h_offset(h_offset),
@@ -1447,6 +1453,9 @@ end
 reg [24:0] sysblink = 25'd0;
 always_ff @(posedge sys_clk) sysblink <= sysblink + 25'd1;
 wire sio_data_act = (sio_tx_stretch != 0) || (sio_rx_stretch != 0);
+// Feed the capture-side indicator (declared up at the scandoubler instantiation).
+assign sio_ind_data = sio_data_act;
+assign sio_ind_cmd  = (sio_cmd_stretch != 0);
 
 assign leds_n = ~{ sysblink[24], (sio_cmd_stretch != 0), roms_loaded, sio_data_act };
 
