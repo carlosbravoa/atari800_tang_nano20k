@@ -57,7 +57,8 @@ while True:
     if mpu.pc == SIOV:                # emulate a disk sector read + RTS
         sec = mpu.memory[0x030A] | (mpu.memory[0x030B] << 8)
         data = read_sector(sec)
-        for k in range(128): mpu.memory[0x0600+k] = data[k]
+        dbuf = mpu.memory[0x0304] | (mpu.memory[0x0305] << 8)   # DBUFLO/HI (v2: buffer not page 6)
+        for k in range(128): mpu.memory[(dbuf + k) & 0xFFFF] = data[k]
         lo = mpu.memory[0x0100 + ((mpu.sp + 1) & 0xFF)]
         hi = mpu.memory[0x0100 + ((mpu.sp + 2) & 0xFF)]
         mpu.sp = (mpu.sp + 2) & 0xFF

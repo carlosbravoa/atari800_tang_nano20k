@@ -1447,12 +1447,20 @@ static void cold_boot_atari(void) {
 // keep servicing SIO so the boot loader's sector reads are answered during boot.
 static void cold_boot_xex(void) {
     reg_virt_kbd_0 = 0x00410000;                    // hold OPTION (disable BASIC)
-    sio_init();
-    *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
-    reg_romload_ctrl = 1;
-    delay(20);
-    reg_romload_ctrl = 0;
-    sio_delay(600);                                 // serve boot reads while OPTION held
+    sio_init();                                     // SIO ready before the core is released
+    // Use the SAME reliable sequence as the "Boot OS" menu item, which boots an attached
+    // .xex correctly. load_system_roms() holds the core in reset for the full ROM reload
+    // (a long, clean hold) and sets COLDST=1, then releases. The previous short
+    // reg_romload_ctrl pulse (delay 20) left the attach-auto-boot intermittently stuck while
+    // "Boot OS" always worked (HW-observed 2026-06-30: attach->stuck, Hard->stuck, Boot OS->loads).
+    load_system_roms();
+    // CRITICAL: hide the OSD before servicing the boot. The overlay MASKS inputs to the core
+    // while it is on, so the held OPTION (reg_virt_kbd_0) never reaches the Atari and BASIC is
+    // NOT disabled -> the .xex boots to the BASIC blue screen / loads with BASIC resident in
+    // $A000-$BFFF and garbles. The "Boot OS" menu item works only because it calls overlay(0)
+    // before its sio_delay(). Mirror that here.
+    overlay(0);
+    sio_delay(600);                                 // serve boot reads while OPTION held + UNMASKED
     reg_virt_kbd_0 = 0x00000000;                    // release OPTION
 }
 
