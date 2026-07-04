@@ -1,5 +1,17 @@
 # Known issues
 
+## FIXED: mode-8 fine scrolling stuttered (Ninja Commando / Draconus marquees)
+
+Big-letter marquee scrollers (ANTIC mode 8 / GRAPHICS 3 with horizontal fine scroll)
+moved in coarse 4-colour-clock jumps instead of gliding smoothly — on photos this read
+as per-scanline "shear" of the moving band. Root cause: an upstream Atari800_MiSTer
+ANTIC bug — HSCROL bit 1 was applied twice in the mode-8 pixel path (DMA fetch timing
+*and* an extra shifter phase-select), summing to one full pixel period, i.e. no visible
+effect. Fixed here (one line in `antic.vhdl`, `enable_shift` slow-shift case) and
+hardware-verified 2026-07-04: Ninja Commando's title marquee now scrolls smoothly.
+Only display lists using mode 8 *with* horizontal scrolling are affected by the change;
+all other modes are bit-identical. (Current MiSTer still has this bug.)
+
 ## Some PAL vertical-scrolling games glitch (this is an NTSC-only machine)
 
 A few demanding titles show garbled sprites, a jumpy/jittery image, or freezes **during
