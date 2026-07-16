@@ -23,7 +23,9 @@
 #include "ff.h"			/* Declarations of FatFs API */
 #include "diskio.h"		/* Declarations of device I/O functions */
 
+#ifndef HOST_FATFS_TEST     /* host harness (test/fatfs_host) uses libc instead */
 #include "../picorv32.h"
+#endif
 
 /*--------------------------------------------------------------------------
 
