@@ -29,17 +29,23 @@ BAUD = 115200
 def find_port(explicit):
     if explicit:
         return explicit
-    cands = list(serial.tools.list_ports.comports())
-    # Prefer anything that looks like the Sipeed BL616 CDC; else single port wins
-    for p in cands:
-        text = f"{p.description} {p.manufacturer or ''}".lower()
-        if any(k in text for k in ("sipeed", "bl616", "jtag", "debug")):
-            return p.device
+    cands = sorted(serial.tools.list_ports.comports(), key=lambda p: p.device)
+    if not cands:
+        sys.exit("No serial ports found — is the board connected?")
     if len(cands) == 1:
         return cands[0].device
-    sys.exit("Can't auto-pick a port — use -p. Candidates:\n" +
-             "\n".join(f"  {p.device}  {p.description}" for p in cands) if cands
-             else "No serial ports found — is the board connected?")
+    # The BL616 enumerates FT2232-style: two ports with the same VID:PID —
+    # interface 0 = JTAG, interface 1 = the UART. Pick the SECOND of a pair.
+    for i in range(len(cands) - 1):
+        a, b = cands[i], cands[i + 1]
+        if (a.vid, a.pid) == (b.vid, b.pid) and a.vid is not None:
+            return b.device
+    for p in cands:
+        text = f"{p.description} {p.manufacturer or ''}".lower()
+        if any(k in text for k in ("sipeed", "bl616", "jtag", "debug", "serial")):
+            return p.device
+    listing = "\n".join(f"  {p.device}  {p.description}" for p in cands)
+    sys.exit("Can't auto-pick a port — use -p. Candidates:\n" + listing)
 
 
 def cmd_ports(_):
