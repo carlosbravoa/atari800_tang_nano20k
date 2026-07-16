@@ -1925,6 +1925,18 @@ void test_sdram(void) {
     for(;;);
 }
 
+// BL616 USB-C serial bridge — minimal test responder (protocol v1 comes later).
+// The PC opens the board's CDC serial port at 115200: firmware uart_printf logs
+// stream out via the simpleuart TX (pin 70); this poll answers ENQ (0x05) from
+// the PC with "A8OK" — proving the PC->firmware direction end-to-end.
+static void bridge_poll(void) {
+    uint32_t v = reg_blrx;
+    if (!(v & 0x100)) return;        // bit 8 = byte pending
+    reg_blrx = 0;                    // ack (clears valid + overrun)
+    if ((v & 0xFF) == 0x05)
+        uart_printf("A8OK\n");
+}
+
 // Stack canary at the very bottom of the stack region (= _ebss, no heap in this
 // firmware). The linker guarantees >= 4 KB between _ebss and STACK_TOP; if the
 // stack ever reaches the canary it has (nearly) collided with the top of bss —
@@ -2107,6 +2119,7 @@ int main() {
             for (;;) {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
+                bridge_poll();
                 int r = joy_choice(8, 9, &choice, OSD_KEY_CODE);
                 if (r == 1) break;
                 int j1, j2;
@@ -2224,6 +2237,7 @@ int main() {
             sio_poll();
             frame_rate_sample();   // reads reg_video_diag (a register, NOT SDRAM) — safe
             uart_keyboard_poll();
+            bridge_poll();
         }
     }
 }

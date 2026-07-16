@@ -26,6 +26,7 @@ int atoi(const char *str);
 #define reg_textdisp       (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv    (*(volatile uint32_t*)0x02000010)
 #define reg_uart_data      (*(volatile uint32_t*)0x02000014)
+#define reg_blrx           (*(volatile uint32_t*)0x020000c0)  // BL616 bridge RX: {seq,overrun,valid,data}; write = ack
 #define reg_spimaster_byte (*(volatile uint32_t*)0x02000020)
 #define reg_spimaster_word (*(volatile uint32_t*)0x02000024)
 #define reg_spimaster_cs   (*(volatile uint32_t*)0x02000028)

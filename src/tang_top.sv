@@ -49,6 +49,10 @@ module tang_top (
     output wire        flash_spi_wp_n,
     output wire        flash_spi_hold_n,
 
+    // BL616 UART bridge (PC serial over the onboard USB-C; BL616 CDC <-> UART)
+    input  wire        bl616_uart_rx,  // pin 69 (BL616 TX -> FPGA)
+    output wire        bl616_uart_tx,  // pin 70 (FPGA -> BL616 RX); idles high (mark)
+
     // Embedded SDRAM (GW2AR-18 on-chip)
     output wire        O_sdram_clk,
     output wire        O_sdram_cke,
@@ -842,9 +846,11 @@ iosys_picorv32 #(
     .flash_spi_wp_n(flash_spi_wp_n),
     .flash_spi_hold_n(flash_spi_hold_n),
 
-    // UART RX is mapped to pin 53 (usb_dp)
+    // UART RX is mapped to pin 53 (usb_dp) — keyboard frames (SW decode path).
+    // UART TX goes to the BL616 (USB-C CDC serial) = live firmware logs on the PC.
     .uart_rx(usb_dp),
-    .uart_tx(),
+    .uart_tx(bl616_uart_tx),
+    .bl616_rx(bl616_uart_rx),
 
     // Virtual Keyboard outputs
     .virt_kbd_mod_out(virt_kbd_mod),

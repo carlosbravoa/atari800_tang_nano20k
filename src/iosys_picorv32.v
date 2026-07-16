@@ -74,6 +74,7 @@ module iosys_picorv32 #(
     // UART
     input uart_rx,
     output uart_tx,
+    input bl616_rx,     // BL616 UART TX (pin 69) -> PC->firmware serial bridge RX
 
     // SD card
     output sd_clk,
@@ -240,6 +241,54 @@ wire        siocmd_a_sel = mem_valid && (mem_addr == 32'h0200_00ac);
 wire        siocmd_b_sel = mem_valid && (mem_addr == 32'h0200_00b0);
 assign      siocmd_ack   = siocmd_b_sel && (|mem_wstrb);
 
+// ── BL616 USB-C serial bridge: RX-only receiver (PC -> firmware) ─────────────
+// Fixed 115200 8N1 (27 MHz / 234). The simpleuart stays whole for the keyboard
+// (RX) and PC logs (TX); this is the independent PC->firmware direction.
+//   0x0200_00c0 (R): {8'b0, seq[7:0], 6'b0, overrun, valid, data[7:0]}
+//                (W): ack — clears valid + overrun
+localparam BLRX_DIV = 9'd234;
+wire        blrx_sel = mem_valid && (mem_addr == 32'h0200_00c0);
+reg  [1:0]  blrx_sync  = 2'b11;
+reg  [7:0]  blrx_shift = 8'd0;
+reg  [3:0]  blrx_bit   = 4'd0;      // 0=idle 1=start-centre 2..9=data 10=stop-centre
+reg  [8:0]  blrx_tick  = 9'd0;
+reg  [7:0]  blrx_data  = 8'd0;
+reg  [7:0]  blrx_seq   = 8'd0;
+reg         blrx_valid = 1'b0;
+reg         blrx_over  = 1'b0;
+always @(posedge clk) begin
+    blrx_sync <= {blrx_sync[0], bl616_rx};
+    if (!resetn) begin
+        blrx_bit <= 4'd0; blrx_valid <= 1'b0; blrx_over <= 1'b0; blrx_seq <= 8'd0;
+    end else begin
+        case (blrx_bit)
+        4'd0:  if (!blrx_sync[1]) begin blrx_bit <= 4'd1; blrx_tick <= BLRX_DIV >> 1; end
+        4'd1:  if (blrx_tick == 9'd0) begin              // centre of start bit
+                   if (!blrx_sync[1]) begin blrx_bit <= 4'd2; blrx_tick <= BLRX_DIV; end
+                   else blrx_bit <= 4'd0;                // glitch — re-arm
+               end else blrx_tick <= blrx_tick - 9'd1;
+        4'd10: if (blrx_tick == 9'd0) begin              // centre of stop bit
+                   if (blrx_sync[1]) begin               // stop valid -> latch byte
+                       if (blrx_valid) blrx_over <= 1'b1;
+                       blrx_data  <= blrx_shift;
+                       blrx_valid <= 1'b1;
+                       blrx_seq   <= blrx_seq + 8'd1;
+                   end
+                   blrx_bit <= 4'd0;
+               end else blrx_tick <= blrx_tick - 9'd1;
+        default: if (blrx_tick == 9'd0) begin            // data bits, LSB first
+                   blrx_shift <= {blrx_sync[1], blrx_shift[7:1]};
+                   blrx_tick  <= BLRX_DIV;
+                   blrx_bit   <= blrx_bit + 4'd1;
+               end else blrx_tick <= blrx_tick - 9'd1;
+        endcase
+        if (blrx_sel && (|mem_wstrb)) begin              // firmware ack (last wins)
+            blrx_valid <= 1'b0;
+            blrx_over  <= 1'b0;
+        end
+    end
+end
+
 assign sio_reg_sel = mem_valid && (mem_addr[31:5] == 27'h0100_004);
 assign sio_reg_addr = mem_addr[6:2];
 assign sio_reg_wdata = mem_wdata[7:0];
@@ -262,7 +311,7 @@ assign mem_ready = bram_ready || ram_ready || textdisp_reg_char_sel || simpleuar
             (spiflash_reg_byte_sel || spiflash_reg_word_sel) && !spiflash_reg_wait ||
             spiflash_reg_ctrl_sel || sio_ready || virt_kbd_reg0_sel || virt_kbd_reg1_sel ||
             cart_reg_sel || sio_cap_idx_sel || sio_cap_data_sel || siocmd_a_sel || siocmd_b_sel ||
-            video_opts_sel || h_offset_sel || ram_select_sel;
+            video_opts_sel || h_offset_sel || ram_select_sel || blrx_sel;
 
 // ── BUS-STALL DETECTOR (diagnostic) ──────────────────────────────────────────
 // The CPU hangs if mem_valid stays high but mem_ready never asserts. Classify a
@@ -278,7 +327,7 @@ wire any_sel_dbg = bram_sel || ram_sel || textdisp_reg_char_sel || simpleuart_re
             romload_reg_ctrl_sel || romload_reg_data_sel || joystick_reg_sel ||
             time_reg_sel || cycle_reg_sel || id_reg_sel ||
             spiflash_reg_byte_sel || spiflash_reg_word_sel || spiflash_reg_ctrl_sel ||
-            sio_reg_sel || virt_kbd_reg0_sel || virt_kbd_reg1_sel || cart_reg_sel;
+            sio_reg_sel || virt_kbd_reg0_sel || virt_kbd_reg1_sel || cart_reg_sel || blrx_sel;
 reg        dbg_stall_undec = 1'b0;
 reg        dbg_stall_peri  = 1'b0;
 reg        dbg_stall_ram   = 1'b0;
@@ -304,7 +353,8 @@ assign mem_rdata = bram_ready ? bram_rdata :
         ram_ready ? ram_rdata :
         joystick_reg_sel ? {4'b0, joy2, 4'b0, joy1} :
         simpleuart_reg_div_sel ? simpleuart_reg_div_do :
-        simpleuart_reg_dat_sel ? simpleuart_reg_dat_do : 
+        simpleuart_reg_dat_sel ? simpleuart_reg_dat_do :
+        blrx_sel ? {8'b0, blrx_seq, 6'b0, blrx_over, blrx_valid, blrx_data} : 
         time_reg_sel ? time_reg :
         cycle_reg_sel ? cycle_reg :
         id_reg_sel ? {16'b0, CORE_ID} :
