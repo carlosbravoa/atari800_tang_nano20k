@@ -1,5 +1,28 @@
 # Known issues
 
+## FIXED (v2.4): disk writes were unreliable — ERROR 139, corrupted disks, could damage the SD card
+
+Writing to mounted disks (SAVE from DOS/BASIC, formatting) was broken in several
+stacked ways: writes to D2: failed with ERROR 139, "successful" writes could leave the
+disk image's filesystem inconsistent, and — worst — long write sessions could corrupt
+the **SD card's own FAT filesystem** (in extreme cases wiping it). Root causes, all
+fixed in v2.4 and verified on hardware + a host-side FatFs test suite (`test/fatfs_host/`):
+
+- the SIO write handler performed the slow SD write *before* sending the data-frame ACK,
+  blowing the OS's ACK window → retry storms and half-applied multi-sector operations;
+- a read-only mounted image failed writes with a bare NAK instead of reporting
+  write-protect (now: auto-clear of PC-inherited read-only attributes, "(RO)" marker,
+  status write-protect bit, error 144);
+- mounting the same image on both drives created two write handles on one file
+  (illegal in FatFs, can corrupt the volume — now the second mount is forced read-only);
+- an out-of-range sector number made the firmware allocate the gap on the SD card
+  (one bad sector number grew a 92 KB ATR to 8+ MB — now rejected like a real drive);
+- a firmware stack overflow could corrupt filesystem state during deep menu operations
+  (stack usage reduced; a canary now flags it on the OSD debug line).
+
+If your SD card was damaged by an earlier version: reformat it (full FAT32) and recopy
+your files. v2.4 also adds DOS FORMAT support and OSD "New blank disk" creation.
+
 ## FIXED: mode-8 fine scrolling stuttered (Ninja Commando / Draconus marquees)
 
 Big-letter marquee scrollers (ANTIC mode 8 / GRAPHICS 3 with horizontal fine scroll)

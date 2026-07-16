@@ -59,6 +59,10 @@ the keyboard alone covers everything.
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation, two drives** — mount `.atr` and raw `.xfd` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
+- **Reliable disk writes** (v2.4) — SAVE/write from DOS works on both drives: correct SIO data-frame ACK timing, out-of-range-sector protection, and write-protection honored end-to-end (a PC-inherited read-only attribute is auto-cleared when possible; otherwise the drive shows **"(RO)"**, reports write-protect in its status, and writes return error 144 like a real protected disk)
+- **DOS disk formatting** (v2.4) — the SIO FORMAT commands are implemented, so DOS 2.5's "Format disk" (and friends) work on mounted images
+- **New blank disk from the OSD** (v2.4) — each drive menu can create a fresh 90K ATR (`BLANKnn.ATR`) on the SD card and mount it; format it from DOS and you have a writable disk without ever touching a PC
+- **Safe double-mounts** (v2.4) — mounting the same image on D1: *and* D2: automatically makes the second mount read-only (two write handles on one file can corrupt the SD card's filesystem)
 - **Cartridge loading** — `.car` (50 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 4 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
 - **`.xex` executables** (v2.0) — boot Atari binary-load programs directly from the SD card: a baked-in 6502 loader is served as a virtual boot disk on D1:, handling the multi-segment `$FFFF`/INITAD/RUNAD format
 - **Hardware SIO command capture** (v2.0) — the 5-byte SIO command frame is assembled in the FPGA, so disk loading no longer depends on the firmware polling in time
@@ -75,6 +79,8 @@ the keyboard alone covers everything.
 | Dual-POKEY stereo (OSD toggle, default mono) | ✅ Working |
 | HDMI video — genlocked line-buffer, 1056×720 (3× integer), low-latency, no jitter/tear | ✅ Working |
 | CRT scanlines (OFF/25/50/75 %) + horizontal position — live OSD options | ✅ Working |
+| Disk writes — SAVE/format from DOS, both drives | ✅ Working (v2.4) |
+| New blank disk (OSD) + DOS FORMAT support | ✅ Working (v2.4) |
 | `.xex` executable loading (virtual-disk 6502 loader) | ✅ Working |
 | Hardware SIO command-frame capture | ✅ Working |
 | HDMI audio (48 kHz PCM) | ✅ Working |
