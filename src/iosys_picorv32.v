@@ -168,10 +168,10 @@ reg [31:0] ram_rdata;
 // Firmware EXECUTES from BSRAM so its instruction fetches never touch SDRAM —
 // this is the whole point (ends CPU↔ANTIC SDRAM contention).
 wire        lowregion_sel = mem_valid && mem_addr[31:23] == 0;
-wire        bram_sel = lowregion_sel && (mem_addr[22:14] < 9'd3);   // < 48 KB
-wire        ram_sel  = lowregion_sel && (mem_addr[22:14] >= 9'd3);  // SDRAM (Atari mem)
+wire        bram_sel = lowregion_sel && (mem_addr[22:14] < 9'd4);   // < 64 KB
+wire        ram_sel  = lowregion_sel && (mem_addr[22:14] >= 9'd4);  // SDRAM (Atari mem)
 
-// ── Firmware BSRAM boot RAM (48 KB, byte-laned, $readmemh-initialised) ────────
+// ── Firmware BSRAM boot RAM (64 KB, byte-laned, $readmemh-initialised) ────────
 wire [31:0] bram_rdata;
 wire        bram_ready;
 fw_bram #(

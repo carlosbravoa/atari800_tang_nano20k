@@ -4,10 +4,10 @@
 .global _start
 .type _start, @function
 
-# Firmware runs from a 32 KB BSRAM region [0x0000 .. 0x7FFF]. Stack grows DOWN
-# from the top of that region. Must match baremetal.ld RAM LENGTH (32K) and the
-# BSRAM depth (BRAM_DEPTH=8192 words). Keep text+rodata+data+bss below the stack.
-.equ    STACK_TOP, 0xC000        # top of 48 KB BSRAM
+# Firmware runs from a 64 KB BSRAM region [0x0000 .. 0xFFFF]. Stack grows DOWN
+# from the top of that region. Must match baremetal.ld RAM LENGTH (64K) and the
+# BSRAM depth (BRAM_DEPTH=16384 words). Keep text+rodata+data+bss below the stack.
+.equ    STACK_TOP, 0x10000       # top of 64 KB BSRAM
 
 _start:
     li  sp,STACK_TOP    # load stack pointer

@@ -12,7 +12,7 @@
  */
 MEMORY
 {
-    RAM (RWX): ORIGIN = 0x00000, LENGTH = 48K
+    RAM (RWX): ORIGIN = 0x00000, LENGTH = 64K
 }
 ENTRY(_start)
 SECTIONS
@@ -69,7 +69,8 @@ SECTIONS
     } >RAM
 }
 
-/* Guard: text+data+bss must leave at least 4 KB of stack below STACK_TOP (0xC000).
+/* Guard: text+data+bss must leave at least 4 KB of stack below STACK_TOP (0x10000).
  * Without this, a growing image silently eats the stack and the firmware corrupts
- * its own globals at runtime (symptom: "cannot init sd" + hang at boot). */
-ASSERT(_ebss <= 0xB000, "firmware too large: less than 4 KB left for the stack")
+ * its own globals at runtime (symptom: "cannot init sd" + hang at boot; the
+ * 2026-07 disk-write corruption was this class). */
+ASSERT(_ebss <= 0xF000, "firmware too large: less than 4 KB left for the stack")

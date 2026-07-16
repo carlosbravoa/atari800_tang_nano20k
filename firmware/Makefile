@@ -28,7 +28,7 @@ else
 endif
 
 # BSRAM boot-RAM depth in 32-bit words (48 KB = 12288 words = 24 BSRAM blocks).
-BRAM_DEPTH = 12288
+BRAM_DEPTH = 16384
 BRAM_DIR   = ../src
 BRAM_HEX   = $(BRAM_DIR)/fw_lane0.hex
 
