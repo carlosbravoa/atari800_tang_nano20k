@@ -19,7 +19,7 @@ SRCS := start.S firmware.c picorv32.c spi_sd.c spiflash.c \
 	fatfs/diskio.c fatfs/ff.c fatfs/ffunicode.c
 OBJS := $(SRCS:.c=.o)
 OBJS := $(OBJS:.S=.o)
-HDRS := $(wildcard *.h)
+HDRS := $(wildcard *.h) $(wildcard fatfs/*.h)
 
 ifeq ($(VERBOSE),1)
   Q =

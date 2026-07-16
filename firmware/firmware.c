@@ -76,6 +76,7 @@ int file_len;		// number of files on this page
 #define ATR_DRIVES 2            // D1: (0x31) and D2: (0x32)
 FIL atr_file[ATR_DRIVES];
 bool atr_mounted[ATR_DRIVES] = {false, false};
+bool atr_readonly[ATR_DRIVES] = {false, false};  // write-open failed even after AM_RDO strip
 uint16_t atr_sector_size[ATR_DRIVES] = {128, 128};
 // Byte offset of sector 1 in the image: 16 for .atr (header), 0 for raw .xfd.
 uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16};
@@ -553,19 +554,40 @@ int mount_atr(char *filepath, int slot) {
         xex_active = false;
     }
 
+    atr_readonly[slot] = false;
     int r = f_open(&atr_file[slot], filepath, FA_READ | FA_WRITE);
     if (r != FR_OK) {
-        // Try read-only if write access fails
+        // Most common cause: FAT read-only attribute inherited from a PC copy.
+        // Strip it and retry before giving up on write access.
+        f_chmod(filepath, 0, AM_RDO);
+        r = f_open(&atr_file[slot], filepath, FA_READ | FA_WRITE);
+    }
+    if (r != FR_OK) {
+        // Fall back to read-only, but LOUDLY: the slot is flagged, the menu shows
+        // "(RO)", STATUS reports write-protect, and writes return 'E' (error 144) —
+        // never a silent mount whose writes then fail as a bare error 139.
         r = f_open(&atr_file[slot], filepath, FA_READ);
         if (r != FR_OK) {
-            uart_printf("Failed to open ATR file %s, error %d\n", filepath, r);
+            uart_printf("atr open %s %d\n", filepath, r);
             return r;
         }
-        uart_printf("ATR file opened read-only\n");
-    } else {
-        uart_printf("ATR file opened read-write\n");
+        atr_readonly[slot] = true;
+        uart_printf("atr RO\n");
     }
-    
+
+    // VOLUME-CORRUPTION GUARD: the same file open for WRITE on both slots is
+    // illegal in FatFs with FF_FS_LOCK=0 (two FILs with divergent cluster/size
+    // state write inconsistent FAT/dir updates -> can destroy the whole volume,
+    // HW-confirmed 2026-07: SD card FAT wiped after same-ATR-on-D1+D2 testing).
+    // Detect by start cluster and demote THIS mount to read-only.
+    if (!atr_readonly[slot] && atr_mounted[1 - slot] &&
+        atr_file[slot].obj.sclust == atr_file[1 - slot].obj.sclust) {
+        f_close(&atr_file[slot]);
+        r = f_open(&atr_file[slot], filepath, FA_READ);
+        if (r != FR_OK) return r;
+        atr_readonly[slot] = true;
+    }
+
     char *ext = strrchr(filepath, '.');
     if (ext && strcasecmp(ext, ".xfd") == 0) {
         // .xfd = raw sector dump, no header. Geometry inferred from file size.
@@ -578,14 +600,16 @@ int mount_atr(char *filepath, int slot) {
         } else if (fsz >= 128 && (fsz % 128) == 0) {
             atr_sector_size[slot] = 128;
         } else {
-            uart_printf("Unsupported XFD size: %u\n", (unsigned)fsz);
+            uart_printf("bad xfd %d\n", (int)fsz);
             message("Unsupported .xfd size", 1);
             f_close(&atr_file[slot]);
             return -3;
         }
         atr_hdr_off[slot] = 0;
-        uart_printf("Mounted XFD D%d: %s, sector size: %d\n", slot+1, filepath, atr_sector_size[slot]);
+        uart_printf("XFD D%d %s ss %d\n", slot+1, filepath, atr_sector_size[slot]);
         atr_mounted[slot] = true;
+        if (atr_readonly[slot])
+            message("Disk is read-only\nWrites will fail (144)", 1);
         return 0;
     }
 
@@ -594,7 +618,7 @@ int mount_atr(char *filepath, int slot) {
     unsigned int br;
     r = f_read(&atr_file[slot], header, 16, &br);
     if (r != FR_OK || br != 16) {
-        uart_printf("Failed to read ATR header, error %d\n", r);
+        uart_printf("atr hdr err %d\n", r);
         f_close(&atr_file[slot]);
         return -1;
     }
@@ -602,21 +626,23 @@ int mount_atr(char *filepath, int slot) {
     // Verify magic
     uint16_t magic = header[0] | (header[1] << 8);
     if (magic != 0x0296) {
-        uart_printf("Invalid ATR magic: %04x\n", magic);
+        uart_printf("atr magic %w\n", magic);
         f_close(&atr_file[slot]);
         return -2;
     }
 
     atr_sector_size[slot] = header[4] | (header[5] << 8);
     if (atr_sector_size[slot] != 128 && atr_sector_size[slot] != 256) {
-        uart_printf("Unsupported sector size: %d\n", atr_sector_size[slot]);
+        uart_printf("bad ss %d\n", atr_sector_size[slot]);
         f_close(&atr_file[slot]);
         return -3;
     }
     atr_hdr_off[slot] = 16;
 
-    uart_printf("Mounted ATR D%d: %s, sector size: %d\n", slot+1, filepath, atr_sector_size[slot]);
+    uart_printf("ATR D%d %s ss %d\n", slot+1, filepath, atr_sector_size[slot]);
     atr_mounted[slot] = true;
+    if (atr_readonly[slot])
+        message("Disk is read-only\nWrites will fail (144)", 1);
     return 0;
 }
 
@@ -640,17 +666,21 @@ int atr_read_sector(int slot, uint32_t sector_num, uint8_t *buf, int *sector_len
     }
     
     *sector_len = len;
-    
+
+    // Out-of-range = error like a real drive. CRITICAL: never f_lseek past
+    // EOF — on a writable FIL FatFs ALLOCATES the gap (one stray sector
+    // number grew an ATR 92 KB -> 8.4 MB and dirtied the volume; host-proven).
+    if (sector_num == 0 || offset + len > f_size(&atr_file[slot])) return -5;
+
     int r = f_lseek(&atr_file[slot], offset);
     if (r != FR_OK) {
-        uart_printf("Read sector seek failed for sector %d (offset %d)\n", sector_num, offset);
         return r;
     }
     
     unsigned int br;
     r = f_read(&atr_file[slot], buf, len, &br);
     if (r != FR_OK || br != len) {
-        uart_printf("Read sector read failed for sector %d, got %d bytes\n", sector_num, br);
+        uart_printf("rd fail %d got %d\n", sector_num, br);
         return -2;
     }
 
@@ -667,7 +697,7 @@ int mount_xex(char *filepath) {
     }
     int r = f_open(&xex_file, filepath, FA_READ);
     if (r != FR_OK) {
-        uart_printf("xex: open '%s' failed %d\n", filepath, r);
+        uart_printf("xex open %s %d\n", filepath, r);
         message("Cannot open XEX file", 1);
         return r;
     }
@@ -692,7 +722,7 @@ int mount_xex(char *filepath) {
     }
     atr_sector_size[0] = 128;   // virtual disk is single density
     xex_active = true;
-    uart_printf("xex: '%s' mounted, %u bytes\n", filepath, (unsigned)xex_len);
+    uart_printf("xex %s %d\n", filepath, (int)xex_len);
     return 0;
 }
 
@@ -736,20 +766,96 @@ int atr_write_sector(int slot, uint32_t sector_num, const uint8_t *buf, int len)
         }
     }
     
+    // same out-of-range guard as atr_read_sector (see comment there)
+    if (sector_num == 0 || offset + len > f_size(&atr_file[slot])) return -5;
+
     int r = f_lseek(&atr_file[slot], offset);
     if (r != FR_OK) {
-        uart_printf("Write sector seek failed for sector %d (offset %d)\n", sector_num, offset);
         return r;
     }
     
     unsigned int bw;
     r = f_write(&atr_file[slot], buf, len, &bw);
     if (r != FR_OK || bw != len) {
-        uart_printf("Write sector write failed for sector %d, wrote %d bytes\n", sector_num, bw);
+        uart_printf("wr fail %d bw %d\n", sector_num, bw);
         return -2;
     }
-    
+
     f_sync(&atr_file[slot]);
+    return 0;
+}
+
+// SIO FORMAT: zero-fill the mounted image's whole data area (a freshly formatted
+// disk from the drive's point of view; DOS then writes its own FS structures).
+// Sequential f_write with a single f_sync — per-sector sync would take ~700x longer.
+int atr_format(int slot) {
+    if (!atr_mounted[slot] || atr_readonly[slot]) return -1;
+    uint32_t base = atr_hdr_off[slot];
+    uint32_t total = f_size(&atr_file[slot]);
+    if (total < base) return -1;
+    uint32_t remaining = total - base;
+    if (f_lseek(&atr_file[slot], base) != FR_OK) return -2;
+    uint8_t zeros[128];
+    memset(zeros, 0, sizeof(zeros));
+    while (remaining > 0) {
+        unsigned int chunk = remaining > 128 ? 128 : remaining;
+        unsigned int bw;
+        if (f_write(&atr_file[slot], zeros, chunk, &bw) != FR_OK || bw != chunk) {
+            return -3;
+        }
+        remaining -= chunk;
+    }
+    if (f_sync(&atr_file[slot]) != FR_OK) return -4;
+    return 0;
+}
+
+// Create a fresh 90K single-density ATR in the root dir under the first free
+// BLANK01.ATR..BLANK99.ATR name, zero-filled (= unformatted; DOS's format works —
+// SIO FORMAT is implemented), and mount it on `slot`. Returns 0 with the bare
+// filename in out_name (>= 16 bytes), -1 = no free name, -2 = failed (stage and
+// FatFs code left in cba_stage/cba_err for the status line).
+// Uses atr_file[slot] as the scratch FIL and sio_sector_buf as the zero buffer —
+// NO large stack objects: FF_USE_LFN=2 already stacks ~530 B per path op and the
+// stack region is down to ~4.1 KB. (SIO is not serviced inside this call, so
+// borrowing sio_sector_buf is safe.) A disk mounted on the slot is detached first.
+int cba_stage, cba_err;
+int create_blank_atr(int slot, char *out_name) {
+    char path[16];
+    strcpy(path, "/BLANK00.ATR");
+    if (atr_mounted[slot]) {          // free the slot's FIL for use as scratch
+        f_close(&atr_file[slot]);
+        atr_mounted[slot] = false;
+    }
+    FIL *f = &atr_file[slot];
+    int r = FR_EXIST;
+    for (int i = 1; i < 100 && r == FR_EXIST; i++) {
+        path[6] = '0' + i / 10;
+        path[7] = '0' + i % 10;
+        r = f_open(f, path, FA_CREATE_NEW | FA_WRITE);
+    }
+    cba_stage = 1; cba_err = r;
+    if (r == FR_EXIST) return -1;
+    if (r != FR_OK) return -2;
+    uint8_t *buf = sio_sector_buf;
+    memset(buf, 0, 128);
+    buf[0] = 0x96; buf[1] = 0x02;   // ATR magic
+    buf[2] = 0x80; buf[3] = 0x16;   // 5760 paragraphs = 92160 bytes (720 x 128)
+    buf[4] = 128;                   // sector size
+    unsigned int bw;
+    cba_stage = 2;
+    r = f_write(f, buf, 16, &bw);
+    if (r != FR_OK || bw != 16) { cba_err = r; f_close(f); return -2; }
+    memset(buf, 0, 16);             // header bytes done — body is all zeros
+    cba_stage = 3;
+    for (int s = 0; s < 720; s++) {
+        r = f_write(f, buf, 128, &bw);
+        if (r != FR_OK || bw != 128) { cba_err = r; f_close(f); return -2; }
+    }
+    f_close(f);
+    cba_stage = 4;
+    cba_err = mount_atr(path, slot);
+    if (cba_err != 0) return -2;
+    strcpy(out_name, path + 1);     // bare name for the menu line
     return 0;
 }
 
@@ -845,30 +951,10 @@ int menu_loadrom(int *choice, int carts, int slot) {
                         // Otherwise mount as an .atr / .xfd disk image into the drive
                         int res = mount_atr(load_fname, slot);
                         if (res != 0) {
-                            // Show path (up to 28 chars) and error code
-                            int plen = strlen(load_fname);
-                            if (plen > 28) {
-                                // show tail of path
-                                uart_printf("Cannot mount ATR '%s', err=%d\n", load_fname, res);
-                                char tmp[32];
-                                strncpy(tmp, load_fname + plen - 24, 24);
-                                tmp[24] = '\0';
-                                // format: "...tail err=N"
-                                char msg2[48];
-                                strncpy(msg2, "...", 48);
-                                strncat(msg2, tmp, 48);
-                                strncat(msg2, "\nerr=", 48);
-                                // append number
-                                int n = res < 0 ? -res : res;
-                                char num[8]; int ni = 6; num[7] = '\0';
-                                if (n == 0) { num[6] = '0'; ni = 6; }
-                                else { while (n > 0) { num[ni--] = '0' + (n % 10); n /= 10; } ni++; }
-                                strncat(msg2, num + ni, 48);
-                                message(msg2, 1);
-                            } else {
-                                uart_printf("Cannot mount ATR '%s', err=%d\n", load_fname, res);
-                                message("Cannot mount ATR\nerr check UART", 1);
-                            }
+                            uart_printf("mount %s err %d\n", load_fname, res);
+                            cursor(2, 24);   // row 27 hides behind the logo
+                            printf("Mount failed e%d  ", res);
+                            delay(1500);
                             break;
                         }
                         return 0; // Success
@@ -1087,7 +1173,7 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
     
     while (idx < len + 1) {
         if ((time_millis() - start_time) > 1000) { // 1 second timeout
-            uart_printf("Timeout waiting for data frame at index %d\n", idx);
+            uart_printf("rx timeout idx %d\n", idx);
             return -1;
         }
         if (!sio_rx_empty()) {
@@ -1096,7 +1182,7 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
             uint8_t cmd_count = (rx_val >> 8) & 0x7F;
             
             if (cmd_count != 0) {
-                uart_printf("Error: got cmd_count=%d during data frame rx\n", cmd_count);
+                uart_printf("cmd during rx idx %d\n", cmd_count);
                 return -2;
             }
             
@@ -1108,7 +1194,7 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
                 if (checksum == byte) {
                     return 0; // Success
                 } else {
-                    uart_printf("Checksum error: calculated %02x, got %02x\n", checksum, byte);
+                    uart_printf("data cksum %b != %b\n", checksum, byte);
                     return -3;
                 }
             }
@@ -1132,7 +1218,7 @@ void sio_process_command(void) {
     // Verify checksum of command frame (end-around carry, same as the Atari)
     uint8_t calc_sum = sio_checksum(sio_cmd_buf, 4);
     if (calc_sum != checksum) {
-        uart_printf("SIO Command Checksum Error: got %02x, calculated %02x\n", checksum, calc_sum);
+        uart_printf("cmd cksum %b != %b\n", checksum, calc_sum);
         dbg_sio_err_count++;
         return;
     }
@@ -1156,7 +1242,6 @@ void sio_process_command(void) {
 
     switch (cmd) {
         case 0x53: { // Status command
-            uart_printf("SIO STATUS\n");
             dbg_sio_status_count++;
             // 1. Send ACK (with command-to-ACK SIO delay)
             delay_us(250);
@@ -1168,6 +1253,9 @@ void sio_process_command(void) {
             status_block[0] = 0x10; // Drive active (bit 4)
             if (atr_sector_size[slot] == 256) {
                 status_block[0] |= 0x20; // Double density (bit 5)
+            }
+            if (atr_readonly[slot]) {
+                status_block[0] |= 0x08; // Write protected (bit 3)
             }
             
             status_block[1] = 0xFF; // Hardware status
@@ -1199,7 +1287,7 @@ void sio_process_command(void) {
         }
         
         case 0x52: { // Read sector command
-            uart_printf("SIO READ SECTOR %d\n", sector);
+            uart_printf("SIO RD %d\n", sector);
             dbg_sio_read_count++;
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = 128;
@@ -1236,7 +1324,7 @@ void sio_process_command(void) {
                 sio_tx_byte(sum);
                 sio_wait_tx_empty();
             } else {
-                uart_printf("Read sector %d failed, sending Error\n", sector);
+                uart_printf("rd %d fail\n", sector);
                 dbg_last_sio_status = r;
                 dbg_sio_err_count++;
                 delay_us(250);
@@ -1247,48 +1335,101 @@ void sio_process_command(void) {
         
         case 0x57:   // Write sector command (with verify)
         case 0x50: { // Write sector command (without verify)
-            uart_printf("SIO WRITE SECTOR %d\n", sector);
+            uart_printf("SIO WR %d\n", sector);
             dbg_sio_write_count++;
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = (atr_sector_size[slot] == 128 || sector <= 3) ? 128 : 256;
-            
+
             // Send ACK (with command-to-ACK SIO delay)
             delay_us(250);
             sio_tx_byte(0x41); // 'A'
             sio_wait_tx_empty();
-            
+
             // Read data frame from computer
             int r = sio_rx_data_frame(sector_buf, sector_len);
             if (r == 0) {
-                int wr = atr_write_sector(slot, sector, sector_buf, sector_len);
+                // Data frame verified: ACK it IMMEDIATELY — the computer's window for
+                // this ACK is tight (sub-16 ms), and the SD write + f_sync below can
+                // take tens of ms (FAT update, card GC). Doing the write before the
+                // ACK made the OS time out and retry, leaving multi-sector operations
+                // (data+VTOC+directory) half-applied = a corrupted filesystem. The
+                // slow operation belongs between ACK and 'C'/'E', which is what the
+                // long OS timeout is for.
+                delay_us(250);
+                sio_tx_byte(0x41); // 'A'
+                sio_wait_tx_empty();
+
+                int wr = atr_readonly[slot] ? -9
+                          : atr_write_sector(slot, sector, sector_buf, sector_len);
+                delay_us(250);
                 if (wr == 0) {
-                    // Send ACK for data frame (with data-to-ACK SIO delay)
-                    delay_us(250);
-                    sio_tx_byte(0x41); // 'A'
-                    sio_wait_tx_empty();
-                    
-                    delay_us(250);
-                    // Send Complete
                     sio_tx_byte(0x43); // 'C'
                 } else {
-                    uart_printf("Write sector %d failed, sending NAK\n", sector);
+                    // Post-ACK failures report 'E' (OS error 144), like a real drive
+                    // with a write-protected/failing disk. NAK is only valid in the
+                    // ACK slot.
+                    uart_printf("wr %d fail %d\n", sector, wr);
                     dbg_last_sio_status = wr;
                     dbg_sio_err_count++;
-                    delay_us(250);
-                    sio_tx_byte(0x4E); // 'N' (NAK)
+                    sio_tx_byte(0x45); // 'E'
                 }
             } else {
-                uart_printf("Receiving data frame for sector %d failed (error %d), sending NAK\n", sector, r);
+                uart_printf("rx frame sec %d err %d\n", sector, r);
                 dbg_last_sio_status = r;
                 dbg_sio_err_count++;
                 delay_us(250);
-                sio_tx_byte(0x4E); // 'N' (NAK)
+                sio_tx_byte(0x4E); // 'N' (NAK) — asks the OS to resend the frame
             }
+            break;
+        }
+
+        case 0x21:   // Format disk (image's own geometry)
+        case 0x22: { // Format enhanced/medium density (1050 ED only)
+            uart_printf("SIO FORMAT %b\n", cmd);
+            dbg_sio_write_count++;
+            uint8_t *sector_buf = sio_sector_buf;
+            int sector_len = (atr_sector_size[slot] == 256) ? 256 : 128;
+            uint32_t data_size = atr_mounted[slot]
+                ? f_size(&atr_file[slot]) - atr_hdr_off[slot] : 0;
+            // NAK what we can't do: empty/read-only drive, or 0x22 on a non-ED
+            // image (DOS 2.5 probes 0x22 and falls back to 0x21 on NAK).
+            if (!atr_mounted[slot] || atr_readonly[slot] ||
+                (cmd == 0x22 && data_size != 1040u * 128u)) {
+                dbg_last_sio_status = -9;
+                dbg_sio_err_count++;
+                delay_us(250);
+                sio_tx_byte(0x4E); // 'N'
+                break;
+            }
+            delay_us(250);
+            sio_tx_byte(0x41); // 'A'
+            sio_wait_tx_empty();
+
+            // Zero-fill the image (may take seconds — the OS format timeout is long).
+            int r = atr_format(slot);
+            if (r != 0) {
+                uart_printf("Format failed (%d)\n", r);
+                dbg_last_sio_status = r;
+                dbg_sio_err_count++;
+            }
+            // 'C'/'E' + data frame: the bad-sector table, all $FF = no bad sectors.
+            // The frame is sent after 'E' too — the OS reads it either way.
+            memset(sector_buf, 0xFF, sector_len);
+            uint8_t sum = sio_checksum(sector_buf, sector_len);
+            delay_us(250);
+            sio_tx_byte(r == 0 ? 0x43 : 0x45); // 'C' / 'E'
+            sio_wait_tx_empty();
+            delay_us(250);
+            for (int i = 0; i < sector_len; i++) {
+                sio_tx_byte(sector_buf[i]);
+            }
+            sio_tx_byte(sum);
+            sio_wait_tx_empty();
             break;
         }
         
         default:
-            uart_printf("SIO Unknown Command: %02x\n", cmd);
+            uart_printf("SIO? %b\n", cmd);
             dbg_sio_err_count++;
             delay_us(250);
             sio_tx_byte(0x4E); // 'N' (NAK)
@@ -1465,24 +1606,29 @@ static void cold_boot_xex(void) {
 }
 
 // Per-drive object menu (entered by selecting "Dn: <name>" on the main menu).
-// Returns 0 = nothing, 1 = disk attached (*sel_idx names it), 2 = detached.
+// Returns 0 = nothing, 1 = disk attached (*sel_idx names it), 2 = detached,
+// 3 = XEX attached, 4 = new blank disk created+attached (name already copied
+// into cur_name — no *sel_idx).
 int menu_drive(int slot, char *cur_name, int *sel_idx) {
     int choice = 0;
     while (1) {
         clear();
         cursor(2, 9);
-        printf("D%d: %s", slot + 1, cur_name);
+        printf("D%d: %s%s", slot + 1, cur_name,
+               (atr_mounted[slot] && atr_readonly[slot]) ? " (RO)" : "");
         cursor(2, 11);
         print("1) Attach (.atr/.xfd/.xex)...");
         cursor(2, 12);
-        print("2) Detach");
+        print("2) New blank disk (90K)");
         cursor(2, 13);
+        print("3) Detach");
+        cursor(2, 14);
         print("<< Back");
         delay(300);
         for (;;) {
             uart_keyboard_poll();
             sio_poll();
-            if (joy_choice(11, 3, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(11, 4, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     delay(300);
                     int r = menu_loadrom(sel_idx, 0, slot);
@@ -1490,6 +1636,31 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
                     if (r == 3) return 3;   // XEX attached — caller cold-boots it
                     break;                  // backed out — redraw
                 } else if (choice == 1) {
+                    // Unformatted image: DOS's "Format disk" works on it (SIO
+                    // FORMAT is implemented) — no PC needed for a writable disk.
+                    // Diagnostics print at row 24: the status line (row 27) is
+                    // hidden behind the logo overlay (HW-observed).
+                    cursor(2, 24);
+                    print("Creating disk...");
+                    char newname[16];
+                    int r = create_blank_atr(slot, newname);
+                    if (r == 0) {
+                        strncpy(cur_name, newname, 16);
+                        cur_name[15] = '\0';
+                        return 4;           // attached, cur_name updated in place
+                    }
+                    // The slot's previous disk was detached (its FIL is the
+                    // scratch) — reflect that in the shown name.
+                    strncpy(cur_name, "None", 16);
+                    cursor(2, 24);
+                    if (r == -1) {
+                        print("No free name    ");
+                    } else {
+                        printf("Create fail st%d e%d    ", cba_stage, cba_err);
+                    }
+                    delay(2500);
+                    break;                  // redraw
+                } else if (choice == 2) {
                     if (slot == 0 && xex_active) {   // detach a mounted XEX from D1:
                         f_close(&xex_file);
                         xex_active = false;
@@ -1754,7 +1925,19 @@ void test_sdram(void) {
     for(;;);
 }
 
+// Stack canary at the very bottom of the stack region (= _ebss, no heap in this
+// firmware). The linker guarantees >= 4 KB between _ebss and STACK_TOP; if the
+// stack ever reaches the canary it has (nearly) collided with the top of bss —
+// which holds the FatFs volume pointer, atr_mounted[], the OSD cursor... (=
+// exactly the "everything FS goes weird after a write" corruption pattern).
+// Checked on every main-menu paint: '!' appended to the SIO debug line.
+extern char _ebss[];
+#define STACK_CANARY_MAGIC 0x53544B21u   // "STK!"
+static inline void stack_canary_arm(void)  { *(volatile uint32_t *)_ebss = STACK_CANARY_MAGIC; }
+static inline int  stack_canary_dead(void) { return *(volatile uint32_t *)_ebss != STACK_CANARY_MAGIC; }
+
 int main() {
+    stack_canary_arm();
     delay(200); // Give SD card time to stabilize power on startup
     CORE_ID = reg_core_id;
     overlay(1);
@@ -1815,7 +1998,7 @@ int main() {
         cursor(2, 4);
         printf("OS/BASIC.ROM loading failed.");
         cursor(2, 5);
-        printf("Combined ErrCode: 0x%w", rom_ok);
+        printf("ErrCode: 0x%w", rom_ok);
         cursor(2, 6);
         printf("  Op code: %d (1=OpOS, 2=RdOS,", rom_ok >> 8);
         cursor(2, 7);
@@ -1824,7 +2007,7 @@ int main() {
         printf("  FS Error: %d (9=NoFile, 5=NoPath)", rom_ok & 0xFF);
         
         cursor(2, 10);
-        printf("Listing root directory:");
+        printf("Root dir:");
         DIR dir;
         FILINFO fno;
         int r = f_opendir(&dir, "/");
@@ -1883,9 +2066,11 @@ int main() {
             print("=== Tang Atari 800 ===");
 
             cursor(2, 8);
-            printf("1) D1: %s", mounted_atr_name[0]);
+            printf("1) D1: %s%s", mounted_atr_name[0],
+                   (atr_mounted[0] && atr_readonly[0]) ? " (RO)" : "");
             cursor(2, 9);
-            printf("2) D2: %s", mounted_atr_name[1]);
+            printf("2) D2: %s%s", mounted_atr_name[1],
+                   (atr_mounted[1] && atr_readonly[1]) ? " (RO)" : "");
             cursor(2, 10);
             printf("3) Cart: %s", mounted_cart_name);
             cursor(2, 11);
@@ -1900,6 +2085,17 @@ int main() {
             print("8) Options\n");
             cursor(2, 16);
             print("9) Return to Atari (F12)\n");
+
+            // SIO triage line (uart_tx is unwired on HW — this is the only way to
+            // see which branch failed): last device+cmd+sector, last status, err
+            // count, and each slot's mounted flag. sio_cmd_buf[0] persists after
+            // dispatch = the last serviced command's device byte.
+            cursor(1, 25);
+            printf("d%b c%b s%d st%d e%d m%d%d", sio_cmd_buf[0],
+                   dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status,
+                   dbg_sio_err_count, atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0);
+            if (stack_canary_dead())
+                print("!");   // stack hit bottom = bss corruption likely
 
             cursor(2, 26);
             print("Enter:Select   V:");
