@@ -2046,6 +2046,95 @@ static void bridge_cmd_put(void) {
     uart_printf("put %s %d\n", path, (int)size);
 }
 
+// ── KEY injection: ASCII -> (HID keycode, shift) on the ATARI layout ─────────
+// The HID->matrix table in usb_to_atari800.sv is positional by Atari matrix
+// code (letters prove it: A=63, L=0 = POKEY KBCODE), so symbols use the HID
+// code whose matrix slot is the Atari key that PRODUCES the char:
+//   Atari '-'=KBCODE 14 -> HID 0x2F('[')   '='=15 -> 0x30(']')
+//   '+'=6 -> 0x34(''')   '*'=7 -> 0x31('\')   '<'=54 -> 0x2D   '>'=55 -> 0x2E
+// Shifted chars follow the ATARI key legends (e.g. '"' = SHIFT+2, '@' = SHIFT+8).
+#define KSH 0x80                              // shift flag in the table
+static const uint8_t ascii2hid[95] = {
+    /* 0x20 ' ' */ 0x2C,        /* ! */ 0x1E|KSH, /* " */ 0x1F|KSH,
+    /* # */ 0x20|KSH, /* $ */ 0x21|KSH, /* % */ 0x22|KSH, /* & */ 0x23|KSH,
+    /* ' */ 0x24|KSH, /* ( */ 0x26|KSH, /* ) */ 0x27|KSH,
+    /* * */ 0x31,     /* + */ 0x34,     /* , */ 0x36, /* - */ 0x2F,
+    /* . */ 0x37,     /* / */ 0x38,
+    /* 0-9 */ 0x27,0x1E,0x1F,0x20,0x21,0x22,0x23,0x24,0x25,0x26,
+    /* : */ 0x33|KSH, /* ; */ 0x33,     /* < */ 0x2D, /* = */ 0x30,
+    /* > */ 0x2E,     /* ? */ 0x38|KSH, /* @ */ 0x25|KSH,
+    /* A-Z */ 0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
+              0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,
+              0x1C,0x1D,
+    /* [ */ 0x36|KSH, /* \ */ 0x34|KSH, /* ] */ 0x37|KSH,
+    /* ^ */ 0x31|KSH, /* _ */ 0x2F|KSH, /* ` */ 0,
+    /* a-z (Atari default caps: same keys as A-Z) */
+              0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
+              0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,
+              0x1C,0x1D,
+    /* { */ 0, /* | */ 0x30|KSH, /* } */ 0, /* ~ */ 0
+};
+
+// getc that keeps the machine alive while waiting — for open-ended typing
+// sessions where the next keystroke may be seconds away. Safe with the 1-byte
+// RX register: per-char acks mean at most one byte is ever in flight.
+static int blrx_getc_serviced(uint32_t timeout_ms) {
+    uint32_t start = time_millis();
+    for (;;) {
+        uint32_t v = reg_blrx;
+        if (v & 0x100) { reg_blrx = 0; return (int)(v & 0xFF); }
+        if (time_millis() - start > timeout_ms) return -1;
+        sio_poll();
+        uart_keyboard_poll();
+        {   // F12/S2 pressed on the REAL keyboard: the user wants the OSD —
+            // yield: end the live session so the main loop can open the menu.
+            int j1, j2;
+            joy_get(&j1, &j2);
+            if ((j1 & 0x8) || (j1 & 0x200)) return -2;
+        }
+    }
+}
+
+// Press one char on the virtual keyboard (blocking ~55 ms; SIO stays alive).
+// Typing reaches the core only while the OSD overlay is OFF (inputs are
+// masked while the menu is open) — same rule as the OPTION-hold boot inject.
+static void bridge_type_char(uint8_t c) {
+    uint8_t e;
+    if (c == '\n' || c == '\r') e = 0x28;             // RETURN
+    else if (c == 0x08 || c == 0x7F) e = 0x2A;         // Backspace
+    else if (c == 0x09) e = 0x2B;                      // Tab
+    else if (c == 0x1B) e = 0x29;                      // Esc
+    else if (c < 0x20 || c > 0x7E) return;             // unmappable -> skip
+    else { e = ascii2hid[c - 0x20]; if (!e) return; }
+    uint32_t mod = (e & KSH) ? 0x02 : 0x00;            // left shift
+    reg_virt_kbd_0 = ((uint32_t)(e & 0x7F) << 8) | mod;
+    sio_delay(30);
+    reg_virt_kbd_0 = 0;
+    sio_delay(25);
+}
+
+// 0x07 TYPE: len16LE -> '+', then per char: byte in, '+' out; ends with 'K'.
+// Per-character flow control: typing (~55 ms/char) dwarfs the ack round-trip,
+// and the 1-byte RX register cannot absorb streaming ahead.
+static void bridge_cmd_type(void) {
+    bridge_quiet = 1;
+    int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
+    if (l0 < 0 || l1 < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+    uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
+    int live = (len == 0xFFFF);      // live session: until 0x00, SIO serviced
+    bridge_putc('+');
+    for (uint32_t i = 0; live || i < len; i++) {
+        int c = live ? blrx_getc_serviced(120000) : blrx_getc(3000);
+        if (c == -2) { bridge_quiet = 0; bridge_putc('M'); return; }  // menu
+        if (c < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+        if (live && c == 0x00) break;
+        bridge_type_char((uint8_t)c);
+        bridge_putc('+');
+    }
+    bridge_quiet = 0;
+    bridge_putc('K');
+}
+
 static void bridge_poll(void) {
     uint32_t v = reg_blrx;
     if (!(v & 0x100)) return;        // bit 8 = byte pending
@@ -2063,6 +2152,7 @@ static void bridge_poll(void) {
         if (xex_active) { f_close(&xex_file); xex_active = false; }
         bridge_putc('+');
         break;
+    case 0x07: bridge_cmd_type(); break;
     default: break;                  // tolerate stray bytes
     }
 }

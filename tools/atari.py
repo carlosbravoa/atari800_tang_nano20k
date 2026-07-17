@@ -14,6 +14,10 @@ Usage:
   atari.py reset [--warm] [-p P]     # eject virtual .xex + cold boot (--warm =
                                      #   warm start; --keep = don't eject)
   atari.py eject [-p P]              # just eject the virtual .xex from D1:
+  atari.py type FILE|- [-p P]        # paste text as keystrokes (BASIC listings;
+                                     #   ~18 chars/s; OSD must be closed)
+  atari.py kbd [-p P]                # LIVE keyboard: type on the PC, it lands
+                                     #   on the Atari; Ctrl-] exits
 
 Protocol (firmware bridge v1): single-byte commands. PUT = 0x01 nlen name
 size32LE, '+' ack, raw 256-byte chunks each ack'd '+', then sum16LE -> 'K'/'E'.
@@ -184,6 +188,72 @@ def cmd_reset(args):
         print("warm start requested" if args.warm else "cold boot requested")
 
 
+def cmd_type(args):
+    import os
+    if args.file == "-":
+        text = sys.stdin.read()
+    else:
+        text = open(args.file, "r", encoding="utf-8", errors="replace").read()
+    text = text.replace("\r\n", "\n")
+    data = text.encode("ascii", "replace")
+    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
+        s.reset_input_buffer()
+        s.write(b"\x07")
+        time.sleep(0.05)
+        s.write(len(data).to_bytes(2, "little"))
+        _expect(s, b"+", "type start")
+        for i, b in enumerate(data):
+            s.write(bytes([b]))
+            _expect(s, b"+", f"char {i}", timeout=5)
+            if sys.stdout.isatty():
+                sys.stdout.write(f"\rtyping… {i+1}/{len(data)}")
+                sys.stdout.flush()
+        _expect(s, b"K", "type end")
+        print("\ndone — check the screen")
+
+
+def cmd_kbd(args):
+    import os, select, termios, tty
+    print("live keyboard -> Atari  (Ctrl-] to exit; F12 on the Atari keyboard "
+          "opens its menu and ends the session)")
+    ended_by_menu = False
+    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
+        s.reset_input_buffer()
+        s.write(b"\x07")
+        time.sleep(0.05)
+        s.write(b"\xff\xff")                # live session sentinel
+        _expect(s, b"+", "session start")
+        fd = sys.stdin.fileno()
+        old_t = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            while True:
+                r, _, _ = select.select([fd, s.fileno()], [], [])
+                if s.fileno() in r:          # unsolicited byte = firmware event
+                    b = s.read(1)
+                    if b == b"M":
+                        ended_by_menu = True
+                        break
+                    continue
+                ch = os.read(fd, 1)
+                if ch == b"\x1d":            # Ctrl-]
+                    break
+                if ch == b"\r":
+                    ch = b"\n"
+                s.write(ch)
+                r = _expect(s, b"+M", "key", timeout=5)
+                if r == b"M":
+                    ended_by_menu = True
+                    break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_t)
+        if not ended_by_menu:
+            s.write(b"\x00")
+            _expect(s, b"K", "session end")
+    print("\nsession closed" +
+          (" — OSD menu opened on the Atari" if ended_by_menu else ""))
+
+
 def cmd_eject(args):
     with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
         s.reset_input_buffer()
@@ -213,6 +283,11 @@ def main():
     sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_reset)
     sp = sub.add_parser("eject")
     sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_eject)
+    sp = sub.add_parser("type")
+    sp.add_argument("file", help="text file to type, or - for stdin")
+    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_type)
+    sp = sub.add_parser("kbd")
+    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_kbd)
     args = ap.parse_args()
     args.fn(args)
 
