@@ -64,6 +64,8 @@ the keyboard alone covers everything.
 - **New blank disk from the OSD** (v2.4) — each drive menu can create a fresh 90K ATR (`BLANKnn.ATR`) on the SD card and mount it; format it from DOS and you have a writable disk without ever touching a PC
 - **Safe double-mounts** (v2.4) — mounting the same image on D1: *and* D2: automatically makes the second mount read-only (two write handles on one file can corrupt the SD card's filesystem)
 - **PC Link over the board's own USB-C** (v2.5) — the onboard BL616's serial port is wired to the firmware: with `tools/atari.py` on the PC you can **send files to the SD card** (auto-foldered into `/PC`), **push-and-boot `.xex` builds** (`atari.py run` = a ~5-second compile-run loop for cross-development), **paste text as keystrokes** (`type` — BASIC listings straight from your editor), use a **live remote keyboard** (`kbd` — every PC keystroke lands on the Atari; F12 on the real keyboard hands control back), **reset/eject remotely** (no reaching into the case), and **watch live firmware logs** (`log`). No extra hardware — same cable that powers the board. Flashing is unaffected
+- **Remote telemetry & debugging** (v2.6) — `status` (boot stage, mounts, SIO counters), `screen` (a text dump of the Atari's display read from its own memory), `peek`/`poke` (inspect/modify Atari RAM live), boot-stage log markers, and the bridge answers everywhere — even at the ROM-failure screen, which can be rescued remotely by sending the ROM files over the cable
+- **Desktop app** (v2.6) — `tools/atari_gui.py`: everything above in a Linux/Windows GUI — progress bars, a paste-to-BASIC box, a live-keyboard zone, and a live log pane
 - **Firmware headroom ×5** (v2.5) — the PicoRV32 boot RAM now uses its full 64 KB (was 48), quintupling stack headroom (the tightness behind the v2.4-era corruption class) and leaving room for future features
 - **Cartridge loading** — `.car` (50 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 4 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
 - **`.xex` executables** (v2.0) — boot Atari binary-load programs directly from the SD card: a baked-in 6502 loader is served as a virtual boot disk on D1:, handling the multi-segment `$FFFF`/INITAD/RUNAD format
@@ -83,6 +85,7 @@ the keyboard alone covers everything.
 | CRT scanlines (OFF/25/50/75 %) + horizontal position — live OSD options | ✅ Working |
 | Disk writes — SAVE/format from DOS, both drives | ✅ Working (v2.4) |
 | PC Link: send / run / type / kbd / reset over USB-C | ✅ Working (v2.5) |
+| PC Link telemetry: status / screen / peek / poke + desktop app | ✅ Working (v2.6) |
 | New blank disk (OSD) + DOS FORMAT support | ✅ Working (v2.4) |
 | `.xex` executable loading (virtual-disk 6502 loader) | ✅ Working |
 | Hardware SIO command-frame capture | ✅ Working |
@@ -246,34 +249,70 @@ openFPGALoader -b tangnano20k -f impl/atari800_tn20k/impl/pnr/atari800_tn20k.fs
 ## PC Link (serial bridge over the USB-C)
 
 The same USB-C cable that powers/flashes the board carries a serial port (the onboard
-BL616 bridges it to the FPGA). `tools/atari.py` (needs `pip install pyserial`) talks to
-the firmware over it:
+BL616 bridges it to the FPGA). Two ways to use it — a CLI and a desktop app — both in
+`tools/` and sharing the same protocol library.
+
+### Setup (once)
+
+```bash
+pip install pyserial
+sudo apt install python3-tk     # GUI only; Windows python.org builds include Tk
+sudo modprobe ftdi_sio          # Linux, if no /dev/ttyUSB* appears (make permanent
+                                #   with: echo ftdi_sio | sudo tee /etc/modules-load.d/ftdi_sio.conf)
+```
+
+Windows: the FTDI VCP driver arrives via Windows Update automatically. The tools
+auto-pick the right port (the board shows up as a pair; the second one is the bridge).
+
+### CLI — `tools/atari.py`
 
 ```bash
 python3 tools/atari.py ping                 # is the bridge alive? -> A8OK
-python3 tools/atari.py log                  # tail live firmware logs (boot, SIO, ...)
+python3 tools/atari.py log                  # tail live firmware logs (boot, SIO…)
 python3 tools/atari.py send GAME.ATR        # -> /PC/GAME.ATR on the SD card
 python3 tools/atari.py send X.XEX DEMOS/X.XEX   # explicit folder (auto-created)
 python3 tools/atari.py run  build/demo.xex  # push + boot it (make-run dev loop)
 python3 tools/atari.py type listing.bas     # paste as keystrokes (~18 chars/s)
-python3 tools/atari.py kbd                  # LIVE keyboard: type on the PC;
-                                            #   Ctrl-] exits, F12 on the Atari
-                                            #   keyboard opens the OSD instead
+python3 tools/atari.py kbd                  # LIVE keyboard (Ctrl-] exits; F12 on
+                                            #   the Atari opens its OSD instead)
 python3 tools/atari.py eject                # pop the virtual .xex from D1:
 python3 tools/atari.py reset [--warm]       # eject + cold boot (or warm start)
+python3 tools/atari.py status               # boot stage, mounts, SIO counters
+python3 tools/atari.py screen               # TEXT DUMP OF THE ATARI'S SCREEN
+python3 tools/atari.py peek 0x12 3          # hex-dump Atari memory (jiffy clock!)
+python3 tools/atari.py poke 0x2C8 0x35      # write Atari memory (pink border)
 ```
 
-Notes:
-- **Linux**: if no `/dev/ttyUSB*` appears, `sudo modprobe ftdi_sio` (the board
-  enumerates as an FTDI pair — the **second** port is the bridge; the tool auto-picks).
-  Add `ftdi_sio` to `/etc/modules-load.d/` to make it permanent.
-- Typing (`type`/`kbd`) reaches the machine only while the OSD menu is **closed**
-  (same masking rule as the physical keyboard). Characters map to the **Atari**
-  keyboard layout, so `"`, `@`, `(`, `)` etc. come out as written.
-- Transfers run ~11 KB/s (115200 baud); the Atari keeps running (disks stay live)
-  during them. Close `log`/`kbd` before using the Gowin programmer.
-- A remotely-booted `.xex` shows up on the menu's `D1:` line and can be detached
-  there like any disk.
+### Desktop app — `tools/atari_gui.py` (Linux/Windows)
+
+```bash
+python3 tools/atari_gui.py
+```
+
+- **Connect** (port auto-detected) — the status shows `A8OK` when the machine answers.
+- **Send file… / Run .xex…** with a progress bar; the destination folder defaults to
+  `/PC` (change the field for e.g. `GAMES`). A remotely-run `.xex` appears on the
+  OSD's `D1:` line and can be detached from either side.
+- **Log tab** — live firmware output (boot chatter, SIO activity); saveable.
+- **Type tab** — write or load a BASIC listing, click *Type it on the Atari*.
+- **Live Keys tab** — click the box and type: every keystroke lands on the Atari
+  (Backspace/Esc/Tab/Enter included). Press F12 on the real keyboard to take the
+  machine back — the app detaches cleanly.
+- The app heals a Gowin-IDE gotcha automatically (the IDE's globally-exported
+  `LD_LIBRARY_PATH` ships an old `libtcl` that breaks Tk apps).
+
+### Notes
+
+- Typing reaches the machine only while the OSD menu is **closed** (same masking rule
+  as the physical keyboard). Characters map to the **Atari** keyboard layout.
+- Transfers run ~11 KB/s; the Atari keeps running (disks stay live) during them.
+  Firmware SDRAM access is Atari-first by design — measured: zero impact on machine
+  timing even under continuous `peek` load.
+- Close `log`/`kbd`/the app before using the Gowin programmer.
+- Debugging a boot problem: `status` names the boot stage; `log` shows stage markers
+  (`boot: sd ok` → `boot: roms 0` → `boot: running`). The ROM-failure screen is
+  bridge-reachable — you can `send` the missing ROMs and press a key to retry.
+  Total serial silence = the machine never reached firmware at all.
 
 ## Keyboard-less OSD Navigation
 
