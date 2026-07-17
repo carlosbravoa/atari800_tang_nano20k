@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""atari.py — PC side of the Tang Nano 20K Atari serial bridge (BL616 USB-C CDC).
-
-The board's own USB-C exposes a serial port (the BL616 bridges it to the FPGA).
-Firmware logs stream out continuously; `ping` proves the PC->firmware direction.
+"""atari.py — CLI for the Tang Nano 20K Atari PC Link (BL616 USB-C serial).
 
 Usage:
   atari.py ports                     # list candidate serial ports
@@ -11,285 +8,165 @@ Usage:
   atari.py send FILE [NAME] [-p P]   # copy FILE to the SD, default /PC/<name>;
                                      #   NAME may include folders: GAMES/X.ATR
   atari.py run  FILE.XEX [-p P]      # send + boot it (the make-run dev loop)
-  atari.py reset [--warm] [-p P]     # eject virtual .xex + cold boot (--warm =
-                                     #   warm start; --keep = don't eject)
-  atari.py eject [-p P]              # just eject the virtual .xex from D1:
-  atari.py type FILE|- [-p P]        # paste text as keystrokes (BASIC listings;
-                                     #   ~18 chars/s; OSD must be closed)
+  atari.py type FILE|- [-p P]        # paste text as keystrokes (~18 chars/s;
+                                     #   OSD must be closed)
   atari.py kbd [-p P]                # LIVE keyboard: type on the PC, it lands
                                      #   on the Atari; Ctrl-] exits
+  atari.py eject [-p P]              # just eject the virtual .xex from D1:
+  atari.py reset [--warm] [-p P]     # eject virtual .xex + cold boot (--warm =
+                                     #   warm start; --keep = don't eject)
 
-Protocol (firmware bridge v1): single-byte commands. PUT = 0x01 nlen name
-size32LE, '+' ack, raw 256-byte chunks each ack'd '+', then sum16LE -> 'K'/'E'.
-RUN = 0x02 nlen name. COLD/WARM = 0x03/0x04.
-
-Needs: pip install pyserial. Baud is fixed at 115200 (firmware side is fixed).
-Close this tool before using the Gowin programmer, just in case the interfaces
-share more than expected (they shouldn't - JTAG is separate).
+Protocol implementation lives in atari_link.py (shared with the desktop app,
+atari_gui.py). Needs: pip install pyserial.
+Linux: sudo modprobe ftdi_sio if no /dev/ttyUSB* appears.
 """
 import argparse
 import sys
-import time
 
-try:
-    import serial
-    import serial.tools.list_ports
-except ImportError:
-    sys.exit("pyserial required:  pip install pyserial")
-
-BAUD = 115200
+from atari_link import (AtariLink, LinkError, MenuTakeover,
+                        list_ports, sd_name, BAUD)
 
 
-def find_port(explicit):
-    if explicit:
-        return explicit
-    cands = sorted(serial.tools.list_ports.comports(), key=lambda p: p.device)
-    if not cands:
-        sys.exit("No serial ports found — is the board connected?")
-    if len(cands) == 1:
-        return cands[0].device
-    # The BL616 enumerates FT2232-style: two ports with the same VID:PID —
-    # interface 0 = JTAG, interface 1 = the UART. Pick the SECOND of a pair.
-    for i in range(len(cands) - 1):
-        a, b = cands[i], cands[i + 1]
-        if (a.vid, a.pid) == (b.vid, b.pid) and a.vid is not None:
-            return b.device
-    for p in cands:
-        text = f"{p.description} {p.manufacturer or ''}".lower()
-        if any(k in text for k in ("sipeed", "bl616", "jtag", "debug", "serial")):
-            return p.device
-    listing = "\n".join(f"  {p.device}  {p.description}" for p in cands)
-    sys.exit("Can't auto-pick a port — use -p. Candidates:\n" + listing)
+def _progress(name):
+    def cb(done, total):
+        pct = done * 100 // total
+        if sys.stdout.isatty():
+            sys.stdout.write(f"\r{name}: {done}/{total} bytes ({pct}%)")
+            sys.stdout.flush()
+        elif pct % 25 == 0:
+            print(f"{name}: {pct}%")
+    return cb
 
 
-def cmd_ports(_):
-    for p in serial.tools.list_ports.comports():
+def cmd_ports(args):
+    for p in list_ports():
         print(f"{p.device}  {p.description}  [{p.manufacturer or '?'}]")
 
 
+def cmd_ping(args):
+    with AtariLink(args.port) as l:
+        if l.ping():
+            print("A8OK — bridge is alive (both directions)")
+        else:
+            sys.exit("no reply — check the Atari is booted and the port is right")
+
+
 def cmd_log(args):
-    port = find_port(args.port)
-    print(f"— tailing {port} @ {BAUD} (Ctrl-C to stop) —")
-    with serial.Serial(port, BAUD, timeout=0.5) as s:
+    with AtariLink(args.port, timeout=0.5) as l:
+        print(f"— tailing {l.port} @ {BAUD} (Ctrl-C to stop) —")
         try:
             while True:
-                data = s.read(4096)
-                if data:
-                    sys.stdout.write(data.decode("ascii", "replace"))
+                d = l.read_log()
+                if d:
+                    sys.stdout.write(d.decode("ascii", "replace"))
                     sys.stdout.flush()
         except KeyboardInterrupt:
             print("\n— stopped —")
 
 
-def cmd_ping(args):
-    port = find_port(args.port)
-    with serial.Serial(port, BAUD, timeout=2) as s:
-        s.reset_input_buffer()
-        s.write(b"\x05")               # ENQ
-        deadline = time.time() + 2
-        buf = b""
-        while time.time() < deadline:
-            buf += s.read(64)
-            if b"A8OK" in buf:
-                print("A8OK — bridge is alive (both directions)")
-                return
-        sys.exit(f"no reply (got {buf!r}) — check the Atari is booted and the "
-                 f"port is right; firmware logs should appear with 'atari.py log'")
-
-
-def _expect(s, want, what, timeout=3):
-    # Scan for the reply byte; skip interleaved log bytes (transfers mute the
-    # firmware logs, but boot chatter etc. can still be in flight).
-    deadline = time.time() + timeout
-    skipped = b""
-    while time.time() < deadline:
-        b = s.read(1)
-        if b:
-            if b in want:
-                return b
-            skipped += b
-            if b"-" in skipped:
-                sys.exit(f"{what}: firmware refused (got {skipped!r})")
-    sys.exit(f"{what}: timeout (skipped {skipped!r})")
-
-
-def _sd_name(path, override):
-    import os
-    # Default destination: /PC/<basename> — keeps pushed files in one folder.
-    # An explicit NAME may include subfolders ("GAMES/X.ATR"); the firmware
-    # creates missing directories.
-    name = override or ("PC/" + os.path.basename(path))
-    name = name.upper().lstrip("/")
-    if len(name) > 63:
-        sys.exit(f"path too long for the bridge: {name}")
-    return name
-
-
-def _put(s, data, name):
-    s.reset_input_buffer()
-    # command byte first, then a beat: the firmware's RX register holds ONE
-    # byte, and it enters its tight read loop only after dispatching the
-    # command from its main loop.
-    s.write(bytes([0x01]))
-    time.sleep(0.05)
-    s.write(bytes([len(name)]) + name.encode("ascii") +
-            len(data).to_bytes(4, "little"))
-    _expect(s, b"+", "open")
-    sent = 0
-    while sent < len(data):
-        chunk = data[sent:sent + 256]
-        s.write(chunk)
-        _expect(s, b"+", f"chunk @{sent}", timeout=5)
-        sent += len(chunk)
-        pct = sent * 100 // len(data)
-        if sys.stdout.isatty():
-            sys.stdout.write(f"\r{name}: {sent}/{len(data)} bytes ({pct}%)")
-            sys.stdout.flush()
-        elif pct % 25 == 0 and (sent - len(chunk)) * 100 // len(data) != pct:
-            print(f"{name}: {pct}%")
-    s.write((sum(data) & 0xFFFF).to_bytes(2, "little"))
-    r = _expect(s, b"KE", "checksum")
-    print()
-    if r == b"E":
-        sys.exit("checksum mismatch — file deleted on the Atari side, retry")
-    print(f"OK — /{name} on the SD card")
-
-
 def cmd_send(args):
     data = open(args.file, "rb").read()
-    name = _sd_name(args.file, args.name)
-    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
-        _put(s, data, name)
+    name = sd_name(args.file, args.name)
+    with AtariLink(args.port) as l:
+        l.send(data, name, _progress(name))
+    print(f"\nOK — /{name} on the SD card")
 
 
 def cmd_run(args):
     data = open(args.file, "rb").read()
-    if data[:2] != b"\xff\xff":
-        sys.exit("not a .xex (missing $FFFF header) — refusing to boot it")
-    name = _sd_name(args.file, args.name)
-    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
-        _put(s, data, name)
-        s.write(bytes([0x02]))
-        time.sleep(0.05)
-        s.write(bytes([len(name)]) + name.encode("ascii"))
-        _expect(s, b"+", "run")
-        print("booting it on the Atari…")
-
-
-def cmd_reset(args):
-    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
-        s.reset_input_buffer()
-        if not args.keep:
-            s.write(b"\x06")               # eject the virtual .xex first, or a
-            _expect(s, b"+", "eject")      # cold boot just re-boots it (like a
-        time.sleep(0.05)                    # real disk left in drive 1)
-        s.write(b"\x04" if args.warm else b"\x03")
-        _expect(s, b"+", "reset")
-        print("warm start requested" if args.warm else "cold boot requested")
+    name = sd_name(args.file, args.name)
+    with AtariLink(args.port) as l:
+        l.run(data, name, _progress(name))
+    print("\nbooting it on the Atari…")
 
 
 def cmd_type(args):
-    import os
-    if args.file == "-":
-        text = sys.stdin.read()
-    else:
-        text = open(args.file, "r", encoding="utf-8", errors="replace").read()
-    text = text.replace("\r\n", "\n")
-    data = text.encode("ascii", "replace")
-    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
-        s.reset_input_buffer()
-        s.write(b"\x07")
-        time.sleep(0.05)
-        s.write(len(data).to_bytes(2, "little"))
-        _expect(s, b"+", "type start")
-        for i, b in enumerate(data):
-            s.write(bytes([b]))
-            _expect(s, b"+", f"char {i}", timeout=5)
-            if sys.stdout.isatty():
-                sys.stdout.write(f"\rtyping… {i+1}/{len(data)}")
-                sys.stdout.flush()
-        _expect(s, b"K", "type end")
-        print("\ndone — check the screen")
+    text = sys.stdin.read() if args.file == "-" else \
+        open(args.file, "r", encoding="utf-8", errors="replace").read()
+    with AtariLink(args.port) as l:
+        l.type_text(text, _progress("typing"))
+    print("\ndone — check the screen")
 
 
 def cmd_kbd(args):
-    import os, select, termios, tty
+    import os
+    import select
+    import termios
+    import tty
     print("live keyboard -> Atari  (Ctrl-] to exit; F12 on the Atari keyboard "
           "opens its menu and ends the session)")
     ended_by_menu = False
-    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
-        s.reset_input_buffer()
-        s.write(b"\x07")
-        time.sleep(0.05)
-        s.write(b"\xff\xff")                # live session sentinel
-        _expect(s, b"+", "session start")
+    with AtariLink(args.port) as l:
+        sess = l.kbd_session()
         fd = sys.stdin.fileno()
         old_t = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
             while True:
-                r, _, _ = select.select([fd, s.fileno()], [], [])
-                if s.fileno() in r:          # unsolicited byte = firmware event
-                    b = s.read(1)
-                    if b == b"M":
-                        ended_by_menu = True
+                r, _, _ = select.select([fd, l.ser.fileno()], [], [])
+                try:
+                    if l.ser.fileno() in r:
+                        sess.poll_takeover()
+                        continue
+                    ch = os.read(fd, 1)
+                    if ch == b"\x1d":          # Ctrl-]
                         break
-                    continue
-                ch = os.read(fd, 1)
-                if ch == b"\x1d":            # Ctrl-]
-                    break
-                if ch == b"\r":
-                    ch = b"\n"
-                s.write(ch)
-                r = _expect(s, b"+M", "key", timeout=5)
-                if r == b"M":
+                    sess.send_key(ch.decode("latin1"))
+                except MenuTakeover:
                     ended_by_menu = True
                     break
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_t)
-        if not ended_by_menu:
-            s.write(b"\x00")
-            _expect(s, b"K", "session end")
+        sess.end()
     print("\nsession closed" +
           (" — OSD menu opened on the Atari" if ended_by_menu else ""))
 
 
 def cmd_eject(args):
-    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
-        s.reset_input_buffer()
-        s.write(b"\x06")
-        _expect(s, b"+", "eject")
-        print("virtual .xex ejected from D1:")
+    with AtariLink(args.port) as l:
+        l.eject()
+    print("virtual .xex ejected from D1:")
+
+
+def cmd_reset(args):
+    with AtariLink(args.port) as l:
+        l.reset(warm=args.warm, keep=args.keep)
+    print("warm start requested" if args.warm else "cold boot requested")
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("ports", cmd_ports), ("log", cmd_log), ("ping", cmd_ping)):
+
+    def add(name, fn, *extra):
         sp = sub.add_parser(name)
+        for e in extra:
+            e(sp)
         sp.add_argument("-p", "--port", default=None)
         sp.set_defaults(fn=fn)
-    sp = sub.add_parser("send")
-    sp.add_argument("file"); sp.add_argument("name", nargs="?", default=None)
-    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_send)
-    sp = sub.add_parser("run")
-    sp.add_argument("file"); sp.add_argument("name", nargs="?", default=None)
-    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_run)
-    sp = sub.add_parser("reset")
-    sp.add_argument("--warm", action="store_true")
-    sp.add_argument("--keep", action="store_true",
-                    help="don't eject the virtual .xex before resetting")
-    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_reset)
-    sp = sub.add_parser("eject")
-    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_eject)
-    sp = sub.add_parser("type")
-    sp.add_argument("file", help="text file to type, or - for stdin")
-    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_type)
-    sp = sub.add_parser("kbd")
-    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_kbd)
+
+    add("ports", cmd_ports)
+    add("ping", cmd_ping)
+    add("log", cmd_log)
+    add("send", cmd_send, lambda sp: sp.add_argument("file"),
+        lambda sp: sp.add_argument("name", nargs="?", default=None))
+    add("run", cmd_run, lambda sp: sp.add_argument("file"),
+        lambda sp: sp.add_argument("name", nargs="?", default=None))
+    add("type", cmd_type,
+        lambda sp: sp.add_argument("file", help="text file, or - for stdin"))
+    add("kbd", cmd_kbd)
+    add("eject", cmd_eject)
+    add("reset", cmd_reset,
+        lambda sp: sp.add_argument("--warm", action="store_true"),
+        lambda sp: sp.add_argument("--keep", action="store_true",
+                                   help="don't eject the virtual .xex first"))
+
     args = ap.parse_args()
-    args.fn(args)
+    try:
+        args.fn(args)
+    except LinkError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":
