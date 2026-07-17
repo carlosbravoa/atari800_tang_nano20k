@@ -12,11 +12,36 @@ Threading: one worker thread owns the serial connection and consumes a job
 queue; when idle it drains firmware log bytes. The Tk main loop never touches
 the port. UI updates flow back through a queue polled with root.after().
 """
+import glob
 import os
 import queue
 import sys
 import threading
 import time
+
+
+def _sanitize_ld_path():
+    """The Gowin IDE setup often exports LD_LIBRARY_PATH=<IDE>/lib globally,
+    which makes python load Gowin's libtcl (old, with a baked-in script path
+    that only exists inside the IDE) — breaking every Tk app on the machine.
+    If any LD_LIBRARY_PATH entry ships a libtcl/libtk, re-exec ourselves with
+    those entries removed before tkinter ever loads."""
+    if os.environ.get("_ATARI_GUI_REEXEC") == "1" or os.name == "nt":
+        return
+    llp = os.environ.get("LD_LIBRARY_PATH", "")
+    if not llp:
+        return
+    keep = [d for d in llp.split(":")
+            if d and not (glob.glob(os.path.join(d, "libtcl8*")) or
+                          glob.glob(os.path.join(d, "libtk8*")))]
+    if ":".join(keep) != llp:
+        env = dict(os.environ)
+        env["LD_LIBRARY_PATH"] = ":".join(keep)
+        env["_ATARI_GUI_REEXEC"] = "1"
+        os.execve(sys.executable, [sys.executable] + sys.argv, env)
+
+
+_sanitize_ld_path()
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
@@ -408,7 +433,36 @@ class App:
         self.root.after(150, self.root.destroy)
 
 
+def _fix_tcl_env():
+    """Defend tkinter against the Gowin IDE: it exports TCL_LIBRARY/TK_LIBRARY
+    and puts its own libtcl on LD_LIBRARY_PATH, whose baked-in default script
+    path (/tools/apps/tcl8.6.5/...) doesn't exist outside the IDE. Point the
+    env vars at real system script dirs — an explicit TCL_LIBRARY overrides
+    even a wrong compiled-in default."""
+    import glob
+    probes = {
+        "TCL_LIBRARY": ("init.tcl", ["/usr/share/tcltk/tcl8*",
+                                     "/usr/lib/tcl8*", "/usr/share/tcl8*"]),
+        "TK_LIBRARY":  ("tk.tcl",   ["/usr/share/tcltk/tk8*",
+                                     "/usr/lib/tk8*", "/usr/share/tk8*"]),
+    }
+    for var, (probe, patterns) in probes.items():
+        v = os.environ.get(var)
+        if v and os.path.isfile(os.path.join(v, probe)):
+            continue                       # already valid
+        for pat in patterns:
+            hits = [d for d in sorted(glob.glob(pat))
+                    if os.path.isfile(os.path.join(d, probe))]
+            if hits:
+                os.environ[var] = hits[-1]
+                break
+        else:
+            if v:
+                del os.environ[var]        # invalid and no replacement: drop
+
+
 def main():
+    _fix_tcl_env()
     root = tk.Tk()
     try:
         ttk.Style().theme_use("clam")

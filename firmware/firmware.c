@@ -2115,6 +2115,12 @@ static void bridge_type_char(uint8_t c) {
     sio_delay(30);
     reg_virt_kbd_0 = 0;
     sio_delay(25);
+    // After RETURN the OS/BASIC is busy processing the line (tokenizing a
+    // long BASIC line takes >55 ms) and the keyboard buffer holds ONE char —
+    // typing two chars into that window loses the first (HW-observed: pasted
+    // lines lost their first digit after long predecessors). Let it settle.
+    if (e == 0x28)
+        sio_delay(250);
 }
 
 // 0x07 TYPE: len16LE -> '+', then per char: byte in, '+' out; ends with 'K'.
