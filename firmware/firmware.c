@@ -1940,6 +1940,10 @@ void test_sdram(void) {
 static FIL bridge_file;
 int bridge_req = 0;                     // 1 = run xex, 2 = cold boot, 3 = warm
 char bridge_req_path[68];               // full path, subfolders allowed
+// OSD drive/cart display names — global so the bridge keeps the menu truthful
+// when it mounts/ejects behind the menu's back (remote RUN/eject).
+char mounted_atr_name[ATR_DRIVES][16] = {"None", "None"};
+char mounted_cart_name[16] = "None";
 int bridge_quiet = 0;                   // mute uart_printf during transfers: the
                                         // protocol acks share the TX channel
 
@@ -2149,7 +2153,11 @@ static void bridge_poll(void) {
     case 0x03: bridge_req = 2; bridge_putc('+'); break;
     case 0x04: bridge_req = 3; bridge_putc('+'); break;
     case 0x06:                       // EJECT the virtual .xex boot disk (D1:)
-        if (xex_active) { f_close(&xex_file); xex_active = false; }
+        if (xex_active) {
+            f_close(&xex_file);
+            xex_active = false;
+            strncpy(mounted_atr_name[0], "None", 16);
+        }
         bridge_putc('+');
         break;
     case 0x07: bridge_cmd_type(); break;
@@ -2286,8 +2294,6 @@ int main() {
 
     bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
     int f9_prev = 0;             // F9 soft-reset hotkey edge detector
-    char mounted_atr_name[ATR_DRIVES][16] = {"None", "None"};
-    char mounted_cart_name[16] = "None";
     if (booted) overlay(0);      // hide OSD immediately on auto-boot
 
     for (;;) {
@@ -2464,8 +2470,13 @@ int main() {
                 if (r == 1) {
                     // PC tool validates the $FFFF header before sending, so
                     // mount_xex's blocking failure popups are not expected here.
-                    if (mount_xex(bridge_req_path) == 0)
+                    if (mount_xex(bridge_req_path) == 0) {
+                        char *base = strrchr(bridge_req_path, '/');
+                        strncpy(mounted_atr_name[0],
+                                base ? base + 1 : bridge_req_path, 16);
+                        mounted_atr_name[0][15] = '\0';
                         cold_boot_xex();
+                    }
                 } else if (r == 2) {
                     cold_boot_atari();
                 } else {
