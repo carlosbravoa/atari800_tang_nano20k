@@ -50,8 +50,8 @@ module tang_top (
     output wire        flash_spi_hold_n,
 
     // BL616 UART bridge (PC serial over the onboard USB-C; BL616 CDC <-> UART)
-    input  wire        bl616_uart_rx,  // pin 69 (BL616 TX -> FPGA)
-    output wire        bl616_uart_tx,  // pin 70 (FPGA -> BL616 RX); idles high (mark)
+    input  wire        bl616_uart_rx,  // pin 70 (BL616 -> FPGA), per SNESTang
+    output wire        bl616_uart_tx,  // pin 69 (FPGA -> BL616); idles high (mark)
 
     // Embedded SDRAM (GW2AR-18 on-chip)
     output wire        O_sdram_clk,

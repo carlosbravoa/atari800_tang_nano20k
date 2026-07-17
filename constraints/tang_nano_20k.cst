@@ -143,9 +143,10 @@ IO_PORT "flash_spi_hold_n" IO_TYPE=LVCMOS33 PULL_MODE=UP;
 
 
 // BL616 UART bridge — the onboard USB-C's CDC serial (BL616) wired to the FPGA.
-// Pin 69 = BL616 TX -> FPGA RX; pin 70 = FPGA TX -> BL616 RX. TX idles high (UART
-// mark), which is indistinguishable from an unconnected pin to the BL616 boot ROM.
-IO_LOC  "bl616_uart_rx" 69;
+// Direction proven by SNESTang (same board/iosys): FPGA RX = pin 70 (BL616 -> FPGA),
+// FPGA TX = pin 69 (FPGA -> BL616). (The old "69=TX driven by BL616" note used the
+// FPGA's perspective.) TX idles high (UART mark) = invisible to the BL616 boot ROM.
+IO_LOC  "bl616_uart_rx" 70;
 IO_PORT "bl616_uart_rx" PULL_MODE=UP IO_TYPE=LVCMOS33;
-IO_LOC  "bl616_uart_tx" 70;
+IO_LOC  "bl616_uart_tx" 69;
 IO_PORT "bl616_uart_tx" PULL_MODE=UP IO_TYPE=LVCMOS33;
