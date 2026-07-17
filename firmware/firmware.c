@@ -1939,7 +1939,9 @@ void test_sdram(void) {
 
 static FIL bridge_file;
 int bridge_req = 0;                     // 1 = run xex, 2 = cold boot, 3 = warm
-char bridge_req_path[36];
+char bridge_req_path[68];               // full path, subfolders allowed
+int bridge_quiet = 0;                   // mute uart_printf during transfers: the
+                                        // protocol acks share the TX channel
 
 static void bridge_putc(uint8_t c) { reg_uart_data = c; }
 
@@ -1954,6 +1956,18 @@ static int blrx_getc(uint32_t timeout_ms) {
 
 // FS half of PUT — kept protocol-free so test/fatfs_host extracts and
 // exercises them against a disk image before any hardware run.
+// Create every missing directory along "/A/B/NAME" (mkdir /A, then /A/B).
+int bridge_mkdirs(char *path) {
+    for (char *p = path + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            FRESULT r = f_mkdir(path);
+            *p = '/';
+            if (r != FR_OK && r != FR_EXIST) return -1;
+        }
+    }
+    return 0;
+}
 int bridge_put_open(const char *path) {
     return f_open(&bridge_file, path, FA_CREATE_ALWAYS | FA_WRITE);
 }
@@ -1966,10 +1980,10 @@ int bridge_put_close(void) {
     return f_close(&bridge_file) == FR_OK ? 0 : -1;
 }
 
-// nlen + name -> "/NAME" (max 31 chars, leading '/' tolerated); 0 = ok
+// nlen + name -> "/PATH/NAME" (max 63 chars, subfolders + leading '/' ok)
 static int bridge_read_name(char *path) {
     int nlen = blrx_getc(1000);
-    if (nlen <= 0 || nlen > 31) return -1;
+    if (nlen <= 0 || nlen > 63) return -1;
     int k = 0;
     path[k++] = '/';
     for (int i = 0; i < nlen; i++) {
@@ -1983,16 +1997,19 @@ static int bridge_read_name(char *path) {
 }
 
 static void bridge_cmd_put(void) {
-    char path[36];
+    char path[68];
     uint8_t buf[256];
-    if (bridge_read_name(path)) { bridge_putc('-'); return; }
+    bridge_quiet = 1;
+    if (bridge_read_name(path)) { bridge_quiet = 0; bridge_putc('-'); return; }
     uint32_t size = 0;
     for (int i = 0; i < 4; i++) {
         int c = blrx_getc(1000);
-        if (c < 0) { bridge_putc('-'); return; }
+        if (c < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
         size |= (uint32_t)c << (8 * i);
     }
-    if (bridge_put_open(path)) { bridge_putc('-'); return; }
+    if (bridge_mkdirs(path) || bridge_put_open(path)) {
+        bridge_quiet = 0; bridge_putc('-'); return;
+    }
     bridge_putc('+');
     uint16_t sum = 0;
     uint32_t left = size;
@@ -2000,19 +2017,25 @@ static void bridge_cmd_put(void) {
         unsigned int chunk = left > 256 ? 256 : left;
         for (unsigned int i = 0; i < chunk; i++) {
             int c = blrx_getc(2000);
-            if (c < 0) { bridge_put_close(); f_unlink(path); bridge_putc('-'); return; }
+            if (c < 0) { bridge_put_close(); f_unlink(path);
+                         bridge_quiet = 0; bridge_putc('-'); return; }
             buf[i] = (uint8_t)c;
             sum += (uint8_t)c;
         }
         if (bridge_put_chunk(buf, chunk)) {
-            bridge_put_close(); f_unlink(path); bridge_putc('-'); return;
+            bridge_put_close(); f_unlink(path);
+            bridge_quiet = 0; bridge_putc('-'); return;
         }
         left -= chunk;
-        bridge_putc('+');
         sio_poll();                 // Atari runs live behind the transfer
+        // '+' is the LAST thing before the tight getc loop: it tells the PC
+        // "stream now" — anything slow must happen BEFORE it (the RX register
+        // holds ONE byte; bytes arriving while we're busy would be lost).
+        bridge_putc('+');
     }
     int c0 = blrx_getc(1000), c1 = blrx_getc(1000);
     int cr = bridge_put_close();
+    bridge_quiet = 0;
     if (c0 < 0 || c1 < 0 || cr != 0 ||
         (uint16_t)(c0 | (c1 << 8)) != sum) {
         f_unlink(path);
@@ -2036,6 +2059,10 @@ static void bridge_poll(void) {
         break;
     case 0x03: bridge_req = 2; bridge_putc('+'); break;
     case 0x04: bridge_req = 3; bridge_putc('+'); break;
+    case 0x06:                       // EJECT the virtual .xex boot disk (D1:)
+        if (xex_active) { f_close(&xex_file); xex_active = false; }
+        bridge_putc('+');
+        break;
     default: break;                  // tolerate stray bytes
     }
 }

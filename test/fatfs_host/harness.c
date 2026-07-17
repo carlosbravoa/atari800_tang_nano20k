@@ -255,10 +255,13 @@ int main(int argc, char **argv) {
 
     if (!strcmp(cmd, "s_put")) {               /* serial-bridge PUT semantics */
         /* Chunked create-overwrite through the firmware's bridge_put_* trio,
-         * exactly as bridge_cmd_put drives them, then read-back verify. */
-        const char *path = argv[3];
+         * exactly as bridge_cmd_put drives them (incl. auto-mkdir of missing
+         * folders along the path), then read-back verify. */
+        char path[68];
+        strncpy(path, argv[3], sizeof path - 1); path[sizeof path - 1] = 0;
         for (int pass = 0; pass < 2; pass++) {     /* second pass = overwrite */
             uint32_t size = 92176 - (uint32_t)pass * 12345;
+            if (bridge_mkdirs(path)) die("mkdirs");
             if (bridge_put_open(path)) die("put open");
             uint8_t buf[256];
             uint32_t left = size, off = 0;

@@ -92,7 +92,7 @@ fresh $IMG 64
 # 11. serial-bridge PUT: chunked create + overwrite + verify (firmware bridge_put_*)
 fresh $IMG 64
 ./fatfs_host $IMG put a.atr /KEEP.ATR > /dev/null
-./fatfs_host $IMG s_put /PUSHED.XEX > /dev/null; check "s_put          " $? $IMG
+./fatfs_host $IMG s_put /PC/DEEP/PUSHED.XEX > /dev/null; check "s_put          " $? $IMG
 
 # 8. INFORMATIONAL: the pre-guard bug — two raw write-FILs on one file.
 #    Not a pass/fail gate; prints whether fsck sees damage (it demonstrates

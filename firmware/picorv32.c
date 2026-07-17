@@ -160,7 +160,9 @@ int uart_print(const char *s) {
    return 0;
 }
 
+extern int bridge_quiet;   // serial-bridge transfers own the TX channel
 int uart_printf(const char *fmt,...) {
+   if (bridge_quiet) return 0;
    va_list ap;
    va_start(ap, fmt);
    _printf(fmt, ap, 1);
