@@ -15,6 +15,11 @@ Usage:
   atari.py eject [-p P]              # just eject the virtual .xex from D1:
   atari.py reset [--warm] [-p P]     # eject virtual .xex + cold boot (--warm =
                                      #   warm start; --keep = don't eject)
+  atari.py status [-p P]             # firmware status line (boot stage, mounts,
+                                     #   SIO counters, stack canary)
+  atari.py screen [-p P]             # text dump of the Atari's screen (GR.0)
+  atari.py peek ADDR [LEN] [-p P]    # hex dump of Atari memory (e.g. 0x58 16)
+  atari.py poke ADDR B [B...] [-p P] # write bytes into Atari memory
 
 Protocol implementation lives in atari_link.py (shared with the desktop app,
 atari_gui.py). Needs: pip install pyserial.
@@ -122,6 +127,36 @@ def cmd_kbd(args):
           (" — OSD menu opened on the Atari" if ended_by_menu else ""))
 
 
+def cmd_status(args):
+    with AtariLink(args.port) as l:
+        print(l.status())
+
+
+def cmd_screen(args):
+    with AtariLink(args.port) as l:
+        print(l.screen())
+
+
+def cmd_peek(args):
+    addr = int(args.addr, 0)
+    length = int(args.len, 0)
+    with AtariLink(args.port) as l:
+        data = l.peek(addr, length)
+    for off in range(0, len(data), 16):
+        row = data[off:off + 16]
+        hexs = " ".join(f"{b:02x}" for b in row)
+        text = "".join(chr(b) if 32 <= b < 127 else "." for b in row)
+        print(f"{addr + off:04x}  {hexs:<48}  {text}")
+
+
+def cmd_poke(args):
+    addr = int(args.addr, 0)
+    data = bytes(int(b, 0) for b in args.bytes)
+    with AtariLink(args.port) as l:
+        l.poke(addr, data)
+    print(f"{len(data)} byte(s) written at {addr:#06x}")
+
+
 def cmd_eject(args):
     with AtariLink(args.port) as l:
         l.eject()
@@ -157,6 +192,12 @@ def main():
         lambda sp: sp.add_argument("file", help="text file, or - for stdin"))
     add("kbd", cmd_kbd)
     add("eject", cmd_eject)
+    add("status", cmd_status)
+    add("screen", cmd_screen)
+    add("peek", cmd_peek, lambda sp: sp.add_argument("addr"),
+        lambda sp: sp.add_argument("len", nargs="?", default="64"))
+    add("poke", cmd_poke, lambda sp: sp.add_argument("addr"),
+        lambda sp: sp.add_argument("bytes", nargs="+"))
     add("reset", cmd_reset,
         lambda sp: sp.add_argument("--warm", action="store_true"),
         lambda sp: sp.add_argument("--keep", action="store_true",

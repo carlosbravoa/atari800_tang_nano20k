@@ -11,6 +11,7 @@
 uint32_t CORE_ID;
 
 void uart_keyboard_poll(void);
+static void bridge_poll(void);   // serial bridge servicing (defined below)
 
 #define OPTION_FILE "/atari.ini"
 #define OPTION_INVALID 2
@@ -256,6 +257,7 @@ void message(char *msg, int center) {
         joy_get(&joy1, &joy2);
         if ((joy1 & 0x1) || (joy1 & 0x100) || (joy2 & 0x1) || (joy2 & 0x100))
             break;
+        bridge_poll();
     }
     delay(300);
 }
@@ -887,6 +889,7 @@ int menu_loadrom(int *choice, int carts, int slot) {
             while (1) {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
+                bridge_poll();
                 int r = joy_choice(TOPLINE, file_len, &active, OSD_KEY_CODE);
                 int j1, j2;
                 joy_get(&j1, &j2);
@@ -1628,6 +1631,7 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
         for (;;) {
             uart_keyboard_poll();
             sio_poll();
+            bridge_poll();
             if (joy_choice(11, 4, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     delay(300);
@@ -1704,6 +1708,7 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
         for (;;) {
             uart_keyboard_poll();
             sio_poll();
+            bridge_poll();
             if (joy_choice(11, 3, &choice, OSD_KEY_CODE) == 1) {
                 if (choice == 0) {
                     delay(300);
@@ -1944,6 +1949,8 @@ char bridge_req_path[68];               // full path, subfolders allowed
 // when it mounts/ejects behind the menu's back (remote RUN/eject).
 char mounted_atr_name[ATR_DRIVES][16] = {"None", "None"};
 char mounted_cart_name[16] = "None";
+int bridge_boot_stage = 0;   // 0 start, 1 sd ok, 2 options, 3 roms tried, 4 running
+int bridge_rom_ok = -1;
 int bridge_quiet = 0;                   // mute uart_printf during transfers: the
                                         // protocol acks share the TX channel
 
@@ -2145,9 +2152,66 @@ static void bridge_cmd_type(void) {
     bridge_putc('K');
 }
 
+// 0x08 STATUS: one parseable text line — the OSD debug line, remotely.
+static void bridge_cmd_status(void) {
+    extern char _ebss[];
+    uart_printf("ST u:%d bs:%d rom:%d x:%d m:%d%d c:%b s:%d st:%d e:%d cn:%d\n",
+                (int)time_millis(), bridge_boot_stage, bridge_rom_ok,
+                xex_active ? 1 : 0,
+                atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0,
+                dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status,
+                (int)dbg_sio_err_count,
+                (*(volatile uint32_t *)_ebss != 0x53544B21u) ? 1 : 0);
+}
+
+// 0x09 PEEK addr16 len16 -> '+', raw bytes, sum16. Reads ATARI memory through
+// the SDRAM window — screen RAM, zero page, anything (remote eyes).
+static void bridge_cmd_peek(void) {
+    bridge_quiet = 1;
+    int a0 = blrx_getc(1000), a1 = blrx_getc(1000);
+    int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
+    uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
+    if (a0 < 0 || a1 < 0 || l0 < 0 || l1 < 0 || len > 1024) {
+        bridge_quiet = 0; bridge_putc('-'); return;
+    }
+    uint32_t addr = (uint32_t)a0 | ((uint32_t)a1 << 8);
+    bridge_putc('+');
+    uint16_t sum = 0;
+    for (uint32_t i = 0; i < len; i++) {
+        uint8_t b = *(volatile uint8_t *)(0x00200000u + ((addr + i) & 0xFFFFu));
+        bridge_putc(b);
+        sum += b;
+    }
+    bridge_putc(sum & 0xFF);
+    bridge_putc(sum >> 8);
+    bridge_quiet = 0;
+}
+
+// 0x0A POKE addr16 len16 bytes -> '+' ... 'K'. Remote writes into Atari memory.
+static void bridge_cmd_poke(void) {
+    bridge_quiet = 1;
+    int a0 = blrx_getc(1000), a1 = blrx_getc(1000);
+    int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
+    uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
+    if (a0 < 0 || a1 < 0 || l0 < 0 || l1 < 0 || len > 256) {
+        bridge_quiet = 0; bridge_putc('-'); return;
+    }
+    uint32_t addr = (uint32_t)a0 | ((uint32_t)a1 << 8);
+    bridge_putc('+');                // in the tight loop from here — stream
+    for (uint32_t i = 0; i < len; i++) {
+        int c = blrx_getc(2000);
+        if (c < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+        *(volatile uint8_t *)(0x00200000u + ((addr + i) & 0xFFFFu)) = (uint8_t)c;
+    }
+    bridge_quiet = 0;
+    bridge_putc('K');
+}
+
 static void bridge_poll(void) {
-    uint32_t v = reg_blrx;
-    if (!(v & 0x100)) return;        // bit 8 = byte pending
+    static int busy = 0;             // re-entry guard: bridge_poll is called from
+    uint32_t v = reg_blrx;           // many wait loops, incl. ones a command's own
+    if (busy || !(v & 0x100)) return;// helpers may reach (e.g. message())
+    busy = 1;
     reg_blrx = 0;                    // ack (clears valid + overrun)
     switch (v & 0xFF) {
     case 0x05: uart_printf("A8OK\n"); break;
@@ -2167,8 +2231,12 @@ static void bridge_poll(void) {
         bridge_putc('+');
         break;
     case 0x07: bridge_cmd_type(); break;
+    case 0x08: bridge_cmd_status(); break;
+    case 0x09: bridge_cmd_peek(); break;
+    case 0x0A: bridge_cmd_poke(); break;
     default: break;                  // tolerate stray bytes
     }
+    busy = 0;
 }
 
 // Stack canary at the very bottom of the stack region (= _ebss, no heap in this
@@ -2199,10 +2267,14 @@ int main() {
                 mounted = 1;
                 break;
             }
+            bridge_poll();           // stay reachable while waiting for the card
         }
         if (!mounted)
             message("Insert SD card and press any key", 1);
     }
+
+    bridge_boot_stage = 1;
+    uart_printf("boot: sd ok\n");
 
     // load_option() is the first real SD access (f_mount above is lazy). On a warm
     // reset the card is mid-state and this first read can fail transiently — retry with
@@ -2224,6 +2296,8 @@ int main() {
     apply_machine_options();   // set RAM_SELECT before the core is released below
     sio_init();
 
+    bridge_boot_stage = 2;
+
     // Auto-load system ROMs on boot. On a warm reset (S1) the SD card is left
     // mid-state and FatFs reads can fail transiently (e.g. FR_INT_ERR on the 2nd
     // file). Retry with a full unmount/re-mount (resets FatFs state + forces a
@@ -2237,6 +2311,9 @@ int main() {
         if (f_mount(&fs, "", 0) != FR_OK) { delay(80); continue; }
         rom_ok = load_system_roms();
     }
+    bridge_boot_stage = 3;
+    bridge_rom_ok = rom_ok;
+    uart_printf("boot: roms %d\n", rom_ok);
     if (rom_ok != 0) {
         clear();
         cursor(2, 2);
@@ -2295,9 +2372,15 @@ int main() {
             int joy1, joy2;
             joy_get(&joy1, &joy2);
             if (joy1 || joy2) break;
+            bridge_poll();           // reachable at the fail screen: a PC can
+            uart_keyboard_poll();    // even send the ROMs and retry remotely
         }
     }
 
+    if (rom_ok == 0) {
+        bridge_boot_stage = 4;
+        uart_printf("boot: running\n");
+    }
     bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
     int f9_prev = 0;             // F9 soft-reset hotkey edge detector
     if (booted) overlay(0);      // hide OSD immediately on auto-boot

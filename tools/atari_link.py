@@ -24,6 +24,13 @@ import serial.tools.list_ports
 BAUD = 115200
 
 
+def _screencode_to_ascii(c):
+    """Atari internal screen code -> printable ASCII (inverse video ignored)."""
+    c &= 0x7F
+    a = c + 32 if c < 64 else (c - 64 if c < 96 else c)
+    return chr(a) if 32 <= a < 127 else "."
+
+
 class LinkError(Exception):
     pass
 
@@ -194,6 +201,66 @@ class AtariLink:
         self.ser.write(b"\xff\xff")
         self._expect(b"+", "session start")
         return KbdSession(self)
+
+    def status(self, timeout=3):
+        """One parseable status line from the firmware (0x08)."""
+        self.ser.reset_input_buffer()
+        self.ser.write(b"\x08")
+        deadline = time.time() + timeout
+        buf = b""
+        while time.time() < deadline:
+            buf += self.ser.read(64)
+            if b"ST " in buf and b"\n" in buf[buf.index(b"ST "):]:
+                line = buf[buf.index(b"ST "):]
+                return line[:line.index(b"\n")].decode("ascii", "replace")
+        raise LinkError("status: no reply")
+
+    def peek(self, addr, length):
+        """Read Atari memory (0x09): returns `length` bytes from `addr`."""
+        if not 0 < length <= 1024:
+            raise LinkError("peek length 1..1024")
+        self._cmd(0x09)
+        self.ser.write(addr.to_bytes(2, "little") + length.to_bytes(2, "little"))
+        self._expect(b"+", "peek")
+        data = b""
+        deadline = time.time() + 5
+        while len(data) < length + 2 and time.time() < deadline:
+            data += self.ser.read(length + 2 - len(data))
+        if len(data) < length + 2:
+            raise LinkError(f"peek: short read ({len(data)}/{length + 2})")
+        payload, sum_rx = data[:length], int.from_bytes(data[length:], "little")
+        if sum(payload) & 0xFFFF != sum_rx:
+            raise LinkError("peek: checksum mismatch")
+        return payload
+
+    def poke(self, addr, data):
+        """Write bytes into Atari memory (0x0A)."""
+        if not 0 < len(data) <= 256:
+            raise LinkError("poke length 1..256")
+        self._cmd(0x0A)
+        self.ser.write(addr.to_bytes(2, "little") +
+                       len(data).to_bytes(2, "little"))
+        self._expect(b"+", "poke")
+        self.ser.write(bytes(data))
+        self._expect(b"K", "poke end")
+
+    def screen(self):
+        """Text dump of the Atari's screen (GR.0 assumed): 24 lines x 40 cols,
+        read from screen RAM via SAVMSC ($58/59). The AI-eyes command."""
+        savmsc = int.from_bytes(self.peek(0x58, 2), "little")
+        raw = self.peek(savmsc, 960)
+        lines = []
+        for row in range(24):
+            lines.append("".join(_screencode_to_ascii(c)
+                                 for c in raw[row * 40:(row + 1) * 40]))
+        return "\n".join(lines)
+
+    def alive(self):
+        """Is the 6502 running? Watch the OS jiffy counter (RTCLOK $12-14)."""
+        a = self.peek(0x12, 3)
+        time.sleep(0.1)
+        b = self.peek(0x12, 3)
+        return a != b
 
     def read_log(self, max_bytes=4096):
         """Drain any pending firmware log bytes (non-blocking-ish)."""
