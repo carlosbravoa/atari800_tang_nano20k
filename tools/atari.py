@@ -5,9 +5,16 @@ The board's own USB-C exposes a serial port (the BL616 bridges it to the FPGA).
 Firmware logs stream out continuously; `ping` proves the PC->firmware direction.
 
 Usage:
-  atari.py ports                # list candidate serial ports
-  atari.py log  [-p PORT]       # tail firmware logs (Ctrl-C to stop)
-  atari.py ping [-p PORT]       # send ENQ, expect "A8OK" back
+  atari.py ports                     # list candidate serial ports
+  atari.py log  [-p PORT]            # tail firmware logs (Ctrl-C to stop)
+  atari.py ping [-p PORT]            # send ENQ, expect "A8OK" back
+  atari.py send FILE [NAME] [-p P]   # copy FILE to the SD root (default: same name)
+  atari.py run  FILE.XEX [-p P]      # send + boot it (the make-run dev loop)
+  atari.py reset [--warm] [-p P]     # cold boot (or warm start with --warm)
+
+Protocol (firmware bridge v1): single-byte commands. PUT = 0x01 nlen name
+size32LE, '+' ack, raw 256-byte chunks each ack'd '+', then sum16LE -> 'K'/'E'.
+RUN = 0x02 nlen name. COLD/WARM = 0x03/0x04.
 
 Needs: pip install pyserial. Baud is fixed at 115200 (firmware side is fixed).
 Close this tool before using the Gowin programmer, just in case the interfaces
@@ -83,6 +90,75 @@ def cmd_ping(args):
                  f"port is right; firmware logs should appear with 'atari.py log'")
 
 
+def _expect(s, want, what, timeout=3):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        b = s.read(1)
+        if b:
+            if b in want:
+                return b
+            sys.exit(f"{what}: unexpected reply {b!r}")
+    sys.exit(f"{what}: timeout")
+
+
+def _sd_name(path, override):
+    import os
+    name = override or os.path.basename(path)
+    name = name.upper()
+    if len(name) > 31:
+        sys.exit(f"name too long for the bridge: {name}")
+    return name
+
+
+def _put(s, data, name):
+    s.reset_input_buffer()
+    s.write(bytes([0x01, len(name)]) + name.encode("ascii") +
+            len(data).to_bytes(4, "little"))
+    _expect(s, b"+", "open")
+    sent = 0
+    while sent < len(data):
+        chunk = data[sent:sent + 256]
+        s.write(chunk)
+        _expect(s, b"+", f"chunk @{sent}", timeout=5)
+        sent += len(chunk)
+        pct = sent * 100 // len(data)
+        sys.stdout.write(f"\r{name}: {sent}/{len(data)} bytes ({pct}%)")
+        sys.stdout.flush()
+    s.write((sum(data) & 0xFFFF).to_bytes(2, "little"))
+    r = _expect(s, b"KE", "checksum")
+    print()
+    if r == b"E":
+        sys.exit("checksum mismatch — file deleted on the Atari side, retry")
+    print(f"OK — /{name} on the SD card")
+
+
+def cmd_send(args):
+    data = open(args.file, "rb").read()
+    name = _sd_name(args.file, args.name)
+    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
+        _put(s, data, name)
+
+
+def cmd_run(args):
+    data = open(args.file, "rb").read()
+    if data[:2] != b"\xff\xff":
+        sys.exit("not a .xex (missing $FFFF header) — refusing to boot it")
+    name = _sd_name(args.file, args.name)
+    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
+        _put(s, data, name)
+        s.write(bytes([0x02, len(name)]) + name.encode("ascii"))
+        _expect(s, b"+", "run")
+        print("booting it on the Atari…")
+
+
+def cmd_reset(args):
+    with serial.Serial(find_port(args.port), BAUD, timeout=1) as s:
+        s.reset_input_buffer()
+        s.write(b"\x04" if args.warm else b"\x03")
+        _expect(s, b"+", "reset")
+        print("warm start requested" if args.warm else "cold boot requested")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -91,6 +167,15 @@ def main():
         sp = sub.add_parser(name)
         sp.add_argument("-p", "--port", default=None)
         sp.set_defaults(fn=fn)
+    sp = sub.add_parser("send")
+    sp.add_argument("file"); sp.add_argument("name", nargs="?", default=None)
+    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_send)
+    sp = sub.add_parser("run")
+    sp.add_argument("file"); sp.add_argument("name", nargs="?", default=None)
+    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_run)
+    sp = sub.add_parser("reset")
+    sp.add_argument("--warm", action="store_true")
+    sp.add_argument("-p", "--port", default=None); sp.set_defaults(fn=cmd_reset)
     args = ap.parse_args()
     args.fn(args)
 

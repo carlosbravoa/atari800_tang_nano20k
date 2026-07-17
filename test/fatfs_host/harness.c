@@ -28,6 +28,7 @@ bool xex_active = false;
 FIL xex_file;
 static uint8_t sio_sector_buf[256];
 int cba_stage, cba_err;
+FIL bridge_file;
 
 /* ── firmware shims ──────────────────────────────────────────────────────── */
 static int uart_printf(const char *fmt, ...) {
@@ -248,6 +249,42 @@ int main(int argc, char **argv) {
             printf("FAIL: image GREW %u -> %u bytes (f_lseek-extends bug)\n",
                    (unsigned)size_before, (unsigned)size_after);
             return 1;
+        }
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_put")) {               /* serial-bridge PUT semantics */
+        /* Chunked create-overwrite through the firmware's bridge_put_* trio,
+         * exactly as bridge_cmd_put drives them, then read-back verify. */
+        const char *path = argv[3];
+        for (int pass = 0; pass < 2; pass++) {     /* second pass = overwrite */
+            uint32_t size = 92176 - (uint32_t)pass * 12345;
+            if (bridge_put_open(path)) die("put open");
+            uint8_t buf[256];
+            uint32_t left = size, off = 0;
+            while (left) {
+                unsigned int chunk = left > 256 ? 256 : left;
+                for (unsigned int i = 0; i < chunk; i++)
+                    buf[i] = (uint8_t)((off + i) * 13 + pass);
+                if (bridge_put_chunk(buf, chunk)) die("put chunk");
+                off += chunk; left -= chunk;
+            }
+            if (bridge_put_close()) die("put close");
+            FIL f; UINT br;
+            if (f_open(&f, path, FA_READ)) die("verify open");
+            if (f_size(&f) != size) { printf("FAIL: size %u != %u\n",
+                (unsigned)f_size(&f), (unsigned)size); return 1; }
+            uint8_t rb[256]; off = 0;
+            while (off < size) {
+                unsigned int chunk = size - off > 256 ? 256 : size - off;
+                if (f_read(&f, rb, chunk, &br) || br != chunk) die("verify read");
+                for (unsigned int i = 0; i < chunk; i++)
+                    if (rb[i] != (uint8_t)((off + i) * 13 + pass)) {
+                        printf("FAIL: byte %u pass %d\n", off + i, pass); return 1;
+                    }
+                off += chunk;
+            }
+            f_close(&f);
         }
         return 0;
     }

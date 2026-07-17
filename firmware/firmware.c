@@ -1925,16 +1925,119 @@ void test_sdram(void) {
     for(;;);
 }
 
-// BL616 USB-C serial bridge — minimal test responder (protocol v1 comes later).
-// The PC opens the board's CDC serial port at 115200: firmware uart_printf logs
-// stream out via the simpleuart TX (pin 70); this poll answers ENQ (0x05) from
-// the PC with "A8OK" — proving the PC->firmware direction end-to-end.
+// ── BL616 USB-C serial bridge — protocol v1 (PC tool: tools/atari.py) ────────
+// Single-byte commands, PC paces all transfers; replies are raw bytes.
+//   0x05 ENQ                        -> "A8OK\n"
+//   0x01 PUT  nlen name size32LE    -> '+' | '-'; then '+' per 256-byte chunk;
+//        finally sum16LE from PC    -> 'K' | 'E' (mismatch deletes the file)
+//   0x02 RUN  nlen name             -> '+' | '-'; mounts the .xex + cold-boots
+//   0x03 COLD                       -> '+'  (like the menu's Hard Reset)
+//   0x04 WARM                       -> '+'  (like F9)
+// RUN/COLD/WARM are queued (bridge_req) and executed by the booted background
+// loop, where main's machine state is in scope. PUT runs inline and services
+// sio_poll() between chunks so the Atari's disk I/O stays alive mid-transfer.
+
+static FIL bridge_file;
+int bridge_req = 0;                     // 1 = run xex, 2 = cold boot, 3 = warm
+char bridge_req_path[36];
+
+static void bridge_putc(uint8_t c) { reg_uart_data = c; }
+
+static int blrx_getc(uint32_t timeout_ms) {
+    uint32_t start = time_millis();
+    for (;;) {
+        uint32_t v = reg_blrx;
+        if (v & 0x100) { reg_blrx = 0; return (int)(v & 0xFF); }
+        if (time_millis() - start > timeout_ms) return -1;
+    }
+}
+
+// FS half of PUT — kept protocol-free so test/fatfs_host extracts and
+// exercises them against a disk image before any hardware run.
+int bridge_put_open(const char *path) {
+    return f_open(&bridge_file, path, FA_CREATE_ALWAYS | FA_WRITE);
+}
+int bridge_put_chunk(const uint8_t *buf, unsigned int len) {
+    unsigned int bw;
+    if (f_write(&bridge_file, buf, len, &bw) != FR_OK || bw != len) return -1;
+    return 0;
+}
+int bridge_put_close(void) {
+    return f_close(&bridge_file) == FR_OK ? 0 : -1;
+}
+
+// nlen + name -> "/NAME" (max 31 chars, leading '/' tolerated); 0 = ok
+static int bridge_read_name(char *path) {
+    int nlen = blrx_getc(1000);
+    if (nlen <= 0 || nlen > 31) return -1;
+    int k = 0;
+    path[k++] = '/';
+    for (int i = 0; i < nlen; i++) {
+        int c = blrx_getc(1000);
+        if (c < 0) return -1;
+        if (i == 0 && c == '/') continue;
+        path[k++] = (char)c;
+    }
+    path[k] = '\0';
+    return 0;
+}
+
+static void bridge_cmd_put(void) {
+    char path[36];
+    uint8_t buf[256];
+    if (bridge_read_name(path)) { bridge_putc('-'); return; }
+    uint32_t size = 0;
+    for (int i = 0; i < 4; i++) {
+        int c = blrx_getc(1000);
+        if (c < 0) { bridge_putc('-'); return; }
+        size |= (uint32_t)c << (8 * i);
+    }
+    if (bridge_put_open(path)) { bridge_putc('-'); return; }
+    bridge_putc('+');
+    uint16_t sum = 0;
+    uint32_t left = size;
+    while (left > 0) {
+        unsigned int chunk = left > 256 ? 256 : left;
+        for (unsigned int i = 0; i < chunk; i++) {
+            int c = blrx_getc(2000);
+            if (c < 0) { bridge_put_close(); f_unlink(path); bridge_putc('-'); return; }
+            buf[i] = (uint8_t)c;
+            sum += (uint8_t)c;
+        }
+        if (bridge_put_chunk(buf, chunk)) {
+            bridge_put_close(); f_unlink(path); bridge_putc('-'); return;
+        }
+        left -= chunk;
+        bridge_putc('+');
+        sio_poll();                 // Atari runs live behind the transfer
+    }
+    int c0 = blrx_getc(1000), c1 = blrx_getc(1000);
+    int cr = bridge_put_close();
+    if (c0 < 0 || c1 < 0 || cr != 0 ||
+        (uint16_t)(c0 | (c1 << 8)) != sum) {
+        f_unlink(path);
+        bridge_putc('E');
+        return;
+    }
+    bridge_putc('K');
+    uart_printf("put %s %d\n", path, (int)size);
+}
+
 static void bridge_poll(void) {
     uint32_t v = reg_blrx;
     if (!(v & 0x100)) return;        // bit 8 = byte pending
     reg_blrx = 0;                    // ack (clears valid + overrun)
-    if ((v & 0xFF) == 0x05)
-        uart_printf("A8OK\n");
+    switch (v & 0xFF) {
+    case 0x05: uart_printf("A8OK\n"); break;
+    case 0x01: bridge_cmd_put(); break;
+    case 0x02:
+        if (bridge_read_name(bridge_req_path) == 0) { bridge_req = 1; bridge_putc('+'); }
+        else bridge_putc('-');
+        break;
+    case 0x03: bridge_req = 2; bridge_putc('+'); break;
+    case 0x04: bridge_req = 3; bridge_putc('+'); break;
+    default: break;                  // tolerate stray bytes
+    }
 }
 
 // Stack canary at the very bottom of the stack region (= _ebss, no heap in this
@@ -2238,6 +2341,24 @@ int main() {
             frame_rate_sample();   // reads reg_video_diag (a register, NOT SDRAM) — safe
             uart_keyboard_poll();
             bridge_poll();
+            if (bridge_req) {        // deferred bridge actions (RUN/COLD/WARM)
+                int r = bridge_req;
+                bridge_req = 0;
+                if (r == 1) {
+                    // PC tool validates the $FFFF header before sending, so
+                    // mount_xex's blocking failure popups are not expected here.
+                    if (mount_xex(bridge_req_path) == 0)
+                        cold_boot_xex();
+                } else if (r == 2) {
+                    cold_boot_atari();
+                } else {
+                    reg_virt_kbd_0 = 0x00000000;
+                    *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // warm start
+                    reg_romload_ctrl = 1;
+                    delay(20);
+                    reg_romload_ctrl = 0;
+                }
+            }
         }
     }
 }
