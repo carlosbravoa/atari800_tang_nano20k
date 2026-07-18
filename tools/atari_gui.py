@@ -249,6 +249,8 @@ class App:
         pb.pack(fill="x")
         ttk.Button(pb, text="Save as .txt…",
                    command=self._prn_save).pack(side="left")
+        ttk.Button(pb, text="Save as PDF…",
+                   command=self._prn_pdf).pack(side="left")
         ttk.Button(pb, text="Print…", command=self._prn_print).pack(side="left")
         ttk.Button(pb, text="Clear", command=self._prn_clear).pack(side="left")
         ttk.Label(pb, text="LPRINT / AtariWriter output lands here").pack(
@@ -417,6 +419,18 @@ class App:
             defaultextension=".txt", title="Save printer output")
         if path:
             open(path, "w").write(self._prn_text())
+
+    def _prn_pdf(self):
+        text = self._prn_text()
+        if not text.strip():
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".pdf", title="Save as 820-style PDF")
+        if path:
+            from dotmatrix_pdf import text_to_pdf
+            pages = text_to_pdf(text, path)
+            self._log_append(f"\n[app] PDF saved: {path} ({pages} page(s), "
+                             f"5x7 dot matrix)\n")
 
     def _prn_print(self):
         import subprocess
