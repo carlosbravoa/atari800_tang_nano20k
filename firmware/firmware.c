@@ -12,6 +12,7 @@ uint32_t CORE_ID;
 
 void uart_keyboard_poll(void);
 static void bridge_poll(void);   // serial bridge servicing (defined below)
+extern int bridge_quiet;         // transfers own the serial TX channel (defined below)
 
 #define OPTION_FILE "/atari.ini"
 #define OPTION_INVALID 2
@@ -1207,6 +1208,80 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
     return -4;
 }
 
+// ── P: printer emulation (device 0x40 / P1:) — one-way Atari->PC text ───────
+// STATUS + WRITE, 820/825-style (frame length by AUX1: N=40, S=29, D=21).
+// Payload is forwarded to the PC serial as "PRN: ..." lines: ATASCII EOL ($9B)
+// ends a line; frames without an EOL are continuations (80-col AtariWriter
+// lines span two frames), so the prefix is emitted only at line start.
+// Zero idle cost: this only runs when the Atari actually prints.
+static int prn_line_open = 0;
+static char prn_buf[240];
+static int prn_len = 0;
+// Printer text is BUFFERED and flushed only while the serial channel is free
+// (bridge_quiet==0): a print job landing inside a transfer/typing session must
+// not corrupt the protocol stream — and must not be lost either (both
+// HW-observed 2026-07-18). Called from bridge_poll (runs in every loop).
+static void prn_append(const char *t) {
+    while (*t && prn_len < (int)sizeof(prn_buf) - 1)
+        prn_buf[prn_len++] = *t++;
+}
+static void prn_flush(void) {
+    if (prn_len == 0 || bridge_quiet)
+        return;
+    prn_buf[prn_len] = '\0';
+    uart_printf("%s", prn_buf);
+    prn_len = 0;
+}
+static void sio_printer(uint8_t cmd, uint8_t aux1) {
+    uint8_t *buf = sio_sector_buf;
+    switch (cmd) {
+    case 0x53: {                                   // STATUS
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        uint8_t st[4] = {0x00, aux1, 0xE0, 0x00};
+        uint8_t sum = sio_checksum(st, 4);
+        delay_us(250);
+        sio_tx_byte(0x43); sio_wait_tx_empty();
+        delay_us(250);
+        for (int i = 0; i < 4; i++) sio_tx_byte(st[i]);
+        sio_tx_byte(sum); sio_wait_tx_empty();
+        break;
+    }
+    case 0x57: {                                   // WRITE one frame
+        int len = (aux1 == 'S') ? 29 : (aux1 == 'D') ? 21 : 40;
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();    // ACK command
+        int r = sio_rx_data_frame(buf, len);
+        delay_us(250);
+        if (r != 0) { sio_tx_byte(0x4E); break; }  // NAK: OS resends
+        sio_tx_byte(0x41); sio_wait_tx_empty();    // ACK data
+        delay_us(250);
+        sio_tx_byte(0x43);                         // Complete
+        dbg_sio_write_count++;
+        int eol = 0;
+        char line[44];
+        int k = 0;
+        for (int i = 0; i < len; i++) {
+            uint8_t c = buf[i];
+            if (c == 0x9B) { eol = 1; break; }
+            c &= 0x7F;                             // strip inverse video
+            line[k++] = (c >= 32 && c < 127) ? (char)c : ' ';
+        }
+        line[k] = '\0';
+        if (!prn_line_open) prn_append("PRN: ");
+        prn_append(line);
+        prn_line_open = !eol;
+        if (eol) prn_append("\n");
+        prn_flush();                    // prints now if the channel is free
+        break;
+    }
+    default:
+        delay_us(250);
+        sio_tx_byte(0x4E);
+        break;
+    }
+}
+
 void sio_process_command(void) {
     // NOTE: auto-baud tuning removed (T2) — it read reg_sio_divisor, which is a
     // *different* (measured-receive) register than the TX divisor it writes, and
@@ -1226,12 +1301,27 @@ void sio_process_command(void) {
         return;
     }
     
+    // P1: printer (device 0x40) — one-way Atari->PC text channel
+    if (device == 0x40) {
+        dbg_last_sio_cmd = cmd;
+        sio_wait_cmd_high();
+        sio_printer(cmd, aux1);
+        return;
+    }
+
     // Respond to D1:/D2: (Device IDs 0x31/0x32)
     if (device != 0x31 && device != 0x32) {
         return;
     }
     int slot = device - 0x31;
-    
+
+    // An EMPTY drive slot stays SILENT — no drive on the bus. Answering 'E' to
+    // the OS's boot probe makes it loop "BOOT ERROR" instead of falling through
+    // to BASIC (HW-hit 2026-07-18 when the sio_poll mounted-gate moved to make
+    // the printer reachable; the gate belongs per-device, not globally).
+    if (!atr_mounted[slot] && !(slot == 0 && xex_active))
+        return;
+
     uint16_t sector = aux1 | (aux2 << 8);
     dbg_last_sio_cmd = cmd;
     dbg_last_sio_sector = sector;
@@ -1450,7 +1540,7 @@ void sio_process_command(void) {
 // timing lives in hardware so a busy firmware loop can no longer miss a command.
 static uint8_t sio_hw_last_seq = 0;
 static void sio_poll_hwcapture(void) {
-    if (!atr_mounted[0] && !atr_mounted[1] && !xex_active) return;
+    // (no mounted-gate: the P: printer must answer even with no disks attached)
 
     uint32_t b = reg_siocmd_b;
     uint8_t status = (b >> 8) & 0xff;        // b0=ready b1=error b2=active b3=overrun
@@ -2117,6 +2207,13 @@ static void bridge_type_char(uint8_t c) {
     else if (c == 0x1B) e = 0x29;                      // Esc
     else if (c < 0x20 || c > 0x7E) return;             // unmappable -> skip
     else { e = ascii2hid[c - 0x20]; if (!e) return; }
+    // OS same-key debounce (KEYDEL, ~3 jiffies): a re-press of the SAME key
+    // within ~50 ms of the previous press is ignored — doubled characters
+    // ("LL", "00") lost their second copy at our 55 ms cadence (HW-observed).
+    static uint8_t prev_e = 0;
+    if (e == prev_e)
+        sio_delay(45);
+    prev_e = e;
     uint32_t mod = (e & KSH) ? 0x02 : 0x00;            // left shift
     reg_virt_kbd_0 = ((uint32_t)(e & 0x7F) << 8) | mod;
     sio_delay(30);
@@ -2210,7 +2307,9 @@ static void bridge_cmd_poke(void) {
 static void bridge_poll(void) {
     static int busy = 0;             // re-entry guard: bridge_poll is called from
     uint32_t v = reg_blrx;           // many wait loops, incl. ones a command's own
-    if (busy || !(v & 0x100)) return;// helpers may reach (e.g. message())
+    if (busy) return;                // helpers may reach (e.g. message())
+    prn_flush();                     // deliver buffered printer text when free
+    if (!(v & 0x100)) return;
     busy = 1;
     reg_blrx = 0;                    // ack (clears valid + overrun)
     switch (v & 0xFF) {
