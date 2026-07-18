@@ -61,6 +61,8 @@ class Worker(threading.Thread):
         self.jobs = queue.Queue()
         self.link = None
         self.sess = None                 # live KbdSession (owned by this thread)
+        self._lbuf = ""                  # partial-line assembly for PRN routing
+        self._ltime = 0.0
         self.want_port = None
         self.stop_flag = False
 
@@ -77,6 +79,17 @@ class Worker(threading.Thread):
     # ── thread body ──────────────────────────────────────────────────────────
     def _emit(self, kind, *payload):
         self.ui_q.put((kind, payload))
+
+    def _route_log(self, text):
+        """Assemble lines; 'PRN: ' lines go to the Printer pane, rest to Log."""
+        self._lbuf += text
+        self._ltime = time.time()
+        while "\n" in self._lbuf:
+            line, self._lbuf = self._lbuf.split("\n", 1)
+            if line.startswith("PRN: "):
+                self._emit("prn", line[5:] + "\n")
+            else:
+                self._emit("log", line + "\n")
 
     def run(self):
         while not self.stop_flag:
@@ -118,7 +131,10 @@ class Worker(threading.Thread):
                             self._emit("kbd_takeover")
                             d = d.replace(b"M", b"", 1)
                         if d:
-                            self._emit("log", d.decode("ascii", "replace"))
+                            self._route_log(d.decode("ascii", "replace"))
+                    elif self._lbuf and time.time() - self._ltime > 0.5:
+                        self._emit("log", self._lbuf)   # flush stale partial
+                        self._lbuf = ""
                 except Exception:
                     self._emit("error", "connection lost")
                     self.link.close()
@@ -223,6 +239,20 @@ class App:
                    command=self._type_load).pack(side="left")
         ttk.Label(tb, text="(~18 chars/s; OSD must be closed)").pack(side="left",
                                                                      padx=6)
+
+        prnf = ttk.Frame(tabs)
+        tabs.add(prnf, text="Printer")
+        self.prn = scrolledtext.ScrolledText(prnf, height=12, state="disabled",
+                                             font=("monospace", 10))
+        self.prn.pack(fill="both", expand=True)
+        pb = ttk.Frame(prnf)
+        pb.pack(fill="x")
+        ttk.Button(pb, text="Save as .txt…",
+                   command=self._prn_save).pack(side="left")
+        ttk.Button(pb, text="Print…", command=self._prn_print).pack(side="left")
+        ttk.Button(pb, text="Clear", command=self._prn_clear).pack(side="left")
+        ttk.Label(pb, text="LPRINT / AtariWriter output lands here").pack(
+            side="left", padx=8)
 
         kbdf = ttk.Frame(tabs)
         tabs.add(kbdf, text="Live Keys")
@@ -379,6 +409,40 @@ class App:
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
 
+    def _prn_text(self):
+        return self.prn.get("1.0", "end-1c")
+
+    def _prn_save(self):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt", title="Save printer output")
+        if path:
+            open(path, "w").write(self._prn_text())
+
+    def _prn_print(self):
+        import subprocess
+        import tempfile
+        text = self._prn_text()
+        if not text.strip():
+            return
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
+        tmp.write(text)
+        tmp.close()
+        try:
+            if os.name == "nt":
+                os.startfile(tmp.name, "print")
+            else:
+                subprocess.run(["lpr", tmp.name], check=True)
+            self._log_append("\n[app] sent printer output to the system printer\n")
+        except Exception as e:
+            messagebox.showinfo(APP_TITLE,
+                                f"No system printer path ({e}).\n"
+                                f"Saved instead at: {tmp.name}")
+
+    def _prn_clear(self):
+        self.prn.configure(state="normal")
+        self.prn.delete("1.0", "end")
+        self.prn.configure(state="disabled")
+
     def _log_save(self):
         path = filedialog.asksaveasfilename(defaultextension=".log")
         if path:
@@ -404,6 +468,11 @@ class App:
                     self._set_actions_enabled(False)
                 elif kind == "log":
                     self._log_append(payload[0])
+                elif kind == "prn":
+                    self.prn.configure(state="normal")
+                    self.prn.insert("end", payload[0])
+                    self.prn.see("end")
+                    self.prn.configure(state="disabled")
                 elif kind == "busy":
                     self.busy_lbl.configure(text=payload[0])
                 elif kind == "done":
