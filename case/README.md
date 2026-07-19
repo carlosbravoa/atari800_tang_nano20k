@@ -7,10 +7,10 @@ GPIO pins).
 
 | | |
 |---|---|
-| ![assembly](img/assembly.png) | ![top](img/top_plan.png) |
-| Exploded preview (lid floating) | Top-down (lid off): Tang front, CH9350 middle, DB9 bodies in the rear bay |
-| ![base](img/base.png) | ![side](img/side_right.png) |
-| Base tray | +X wall: USB-C/SD (front), dual-USB stack (middle), DB9 (rear) |
+| ![assembly](img/assembly.png) | ![exploded](img/exploded.png) |
+| Exploded preview (lid floating) | Removable end caps pulling out of the open-ended tray |
+| ![cap](img/cap_usbc.png) | ![side](img/side_right.png) |
+| +X end cap (inside): USB-C/SD + dual-USB + DB9, clamp lips + hold-down ear | +X end: USB-C/SD (front), dual-USB (middle), DB9 (rear) |
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
 | −X wall: HDMI **low** (front) + DB9 (rear) — Tang is component-side-down | Side 3/4: DB9 port detail |
 | ![section](img/section.png) | ![styled](img/lid_styled.png) |
@@ -22,15 +22,20 @@ GPIO pins).
 
 ## What's here
 
+Print **four parts** — the two short walls are separate, removable **end caps**
+so the board can actually be fitted (see *Assembly* below):
+
 ```
 case/
 ├── tang_nano_20k_ch9350_case.scad   # the parametric model (edit this)
 ├── stl/
-│   ├── base.stl       # the tray that holds both boards (LED window + S1/S2
-│   │                  #   button holes are in the FLOOR; capture clips + feet)
-│   ├── lid.stl        # screw-down lid — plain cover (vents + branding)
-│   └── fitcheck.stl   # thin test frame — PRINT THIS FIRST
-└── img/               # rendered previews
+│   ├── base.stl          # open-ended tray (floor button/LED holes, feet,
+│   │                      #   rear vent grill; short ends are OPEN for the caps)
+│   ├── lid.stl           # screw-down lid — plain cover (vents + branding)
+│   ├── endcap_hdmi.stl   # -X end cap: HDMI + a DB9  (bolts on)
+│   ├── endcap_usbc.stl   # +X end cap: USB-C/SD + dual USB-A + a DB9  (bolts on)
+│   └── fitcheck.stl      # thin test frame (base + caps) — PRINT THIS FIRST
+└── img/                  # rendered previews
 ```
 
 ## ⚠️ Read this first — these are datasheet dimensions, not a measured fit
@@ -81,33 +86,35 @@ are on the other. To wire jumpers comfortably, the board sits **pins-up**, so th
   viewing window in the base FLOOR**. Four **feet** lift the case so they clear
   the desk (and the LEDs are visible).
 - **CH9350** stays component-side-up; its **stacked dual USB-A** (keyboard) exits
-  the **+X wall** above the board. So the +X wall carries USB-C + SD (front),
+  the **+X end cap** above the board. So the +X cap carries USB-C + SD (front),
   the dual-USB (middle) and a DB9 (rear), spaced along its length.
-- **DB9 joystick ports** — one panel-mount female D-sub on each side wall in the
+- **DB9 joystick ports** — one panel-mount female D-sub on each **end cap** in the
   **rear bay** behind the CH9350 (left = Joystick 1, right = Joystick 2). Each is
-  a D-shaped aperture + two 24.99 mm-pitch screw holes; bodies protrude into the
-  empty rear bay.
-- A small **cable-exit notch** in the back wall is handy for the
-  GND / 5 V / Pin-53 wires.
+  a D-shaped aperture + two 24.99 mm-pitch screw holes.
+- The back wall has a **ventilation grill** matching the lid; a **rear vent** and
+  no cable notch (power is USB-C; the GND/5V/Pin-53 links are internal jumpers).
 
-### How the boards are held
+### Removable end caps — how the board goes in
 
-The Tang is **captured in the base**, not the lid: it rests on two long-edge
-shelves and is held down by **clips that hook over its top edge**. Pressing a
-floor button drives the board *up into the clips*, so it can't pop out. The
-clips are placed to dodge the board features:
+The board has connectors on **both** short ends that hang *below* the flipped
+PCB, so it can't be dropped or slid into a closed box. The two short walls are
+therefore **separate bolt-on end caps**, each carrying that end's connector
+cutouts. Assembly:
 
-- **Long-edge clips** (`clip_x`, default `[10, 30]` mm from the HDMI end) stay in
-  the HDMI half — rigid hooks off the front wall, flexible fingers at the back —
-  clear of S1/S2 and the LED row, which are all at the USB-C end.
-- **USB-C-end hooks** (`clip_end`) hold the *button end* down via two small hooks
-  off the +X wall at the corners, missing the centred SD slot and not touching
-  S1/S2 (which sit ~3 mm inboard and below, in the floor).
+1. Wire the two **DB9** sockets and mount them to their end caps.
+2. Set the **Tang** onto the long-edge shelves (both ends open — nothing blocks
+   it) and drop the **CH9350** onto its shelf.
+3. Slide each **end cap** on over its connectors and drive **one M3 screw** down
+   through the cap's inner foot into the floor boss. Small **clamp lips** on each
+   cap hook the board's short-edge corners and hold it down (this replaces the
+   old snap clips, which were what stopped the board seating).
+4. Screw the **lid** on (4 corner screws). The lid also traps the cap tops.
 
-**Calibrate `clip_ov`** (and the positions above) to your board — the hooks must
-grab bare PCB edge and clear the header rows. The CH9350 rests on a perimeter
-shelf with locating ribs. See the **cutaway** for the connector-gap-below /
-pins-up-headroom-above stack.
+To service it, back out the lid + the two cap screws and the board lifts out.
+Everything is calibrate-able: `endcap_*`, `hdmi_*`/`usbc_*`/`sd_*` opening sizes.
+The connector openings are now sized to clear the **mating plug** (not just the
+board connector) since FDM holes print undersized — the first print needed every
+hole opened up, so they were all enlarged.
 
 The lid **screws down** with **4 × M3 self-tapping screws** into four external
 corner lugs (the interior is too packed for internal posts). The base lugs have
