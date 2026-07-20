@@ -869,6 +869,146 @@ int create_blank_atr(int slot, char *out_name) {
     return 0;
 }
 
+// ── H: hard-drive device — file API over /HDD (SIO device 0x72) ─────────────
+// Pure-FS half (host-suite tested). Two concurrent handles. Names are 8.3,
+// uppercased, sanitized; everything lives in /HDD on the SD card, so files
+// are PC-native (atari.py send/get shares the folder).
+#define HDD_HANDLES 2
+#define HDD_DIRBUF  1024
+static FIL hdd_fil[HDD_HANDLES];
+static uint8_t hdd_open_f[HDD_HANDLES];       // 0=free 1=file 2=dir-listing
+static char hdd_dirbuf[HDD_DIRBUF];
+static uint16_t hdd_dirlen, hdd_dirpos;
+
+// "NAME.EXT" -> "/HDD/NAME.EXT", uppercased, unsafe chars stripped. 0 = ok.
+int hdd_path(const char *name, char *out /*>=80*/) {
+    int k = 0;
+    const char *pfx = "/HDD/";
+    while (*pfx) out[k++] = *pfx++;
+    int n = 0, dots = 0;
+    for (const char *p = name; *p && n < 40; p++) {
+        char c = *p;
+        if (c >= 'a' && c <= 'z') c -= 32;
+        if (c == '.') {                 // 8.3 discipline: one dot, never leading
+            if (n == 0 || dots) continue;
+            dots = 1;
+            out[k++] = c; n++;
+        } else if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                   c == '_' || c == '-') {
+            out[k++] = c; n++;
+        } else if (c == ':') {          // tolerate a leading H:/H1: spec
+            k = 5; n = 0; dots = 0;
+        }
+        // anything else (incl. '/', spaces) is dropped: no traversal, no subdirs
+    }
+    out[k] = 0;
+    return n == 0 ? -1 : 0;
+}
+
+int hdd_open(const char *name, int mode, int h) {
+    if (h < 0 || h >= HDD_HANDLES) return -1;
+    if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
+    if (mode == 6) {                              // directory listing
+        DIR d; FILINFO fi;
+        f_mkdir("/HDD");
+        if (f_opendir(&d, "/HDD")) return -2;
+        hdd_dirlen = 0;
+        while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+            if (fi.fattrib & (AM_DIR | AM_HID | AM_SYS)) continue;
+            char line[48];
+            int L = 0;
+            const char *nm = fi.altname[0] ? fi.altname : fi.fname;
+            while (*nm && L < 14) {
+                char c = *nm++;
+                if (c >= 'a' && c <= 'z') c -= 32;
+                line[L++] = c;
+            }
+            while (L < 14) line[L++] = ' ';
+            unsigned sz = (unsigned)fi.fsize;
+            char num[12]; int ni = 0;
+            do { num[ni++] = '0' + sz % 10; sz /= 10; } while (sz);
+            while (ni) line[L++] = num[--ni];
+            line[L++] = 0x9B;                     // ATASCII EOL
+            if (hdd_dirlen + L + 20 > HDD_DIRBUF) break;
+            for (int i = 0; i < L; i++) hdd_dirbuf[hdd_dirlen++] = line[i];
+        }
+        f_closedir(&d);
+        const char *tail = "END OF DIRECTORY";
+        while (*tail) hdd_dirbuf[hdd_dirlen++] = *tail++;
+        hdd_dirbuf[hdd_dirlen++] = 0x9B;
+        hdd_dirpos = 0;
+        hdd_open_f[h] = 2;
+        return 0;
+    }
+    char path[80];
+    if (hdd_path(name, path)) return -3;
+    BYTE fm = (mode == 8) ? (FA_CREATE_ALWAYS | FA_WRITE)
+            : (mode == 9) ? (FA_OPEN_ALWAYS | FA_WRITE)
+            : FA_READ;
+    if (mode == 8 || mode == 9) f_mkdir("/HDD");
+    if (f_open(&hdd_fil[h], path, fm)) return -4;
+    if (mode == 9) f_lseek(&hdd_fil[h], f_size(&hdd_fil[h]));
+    hdd_open_f[h] = 1;
+    return 0;
+}
+
+int hdd_read(int h, uint8_t *buf, int len) {     // returns bytes read, <0 err
+    if (h < 0 || h >= HDD_HANDLES || !hdd_open_f[h]) return -1;
+    if (hdd_open_f[h] == 2) {
+        int got = 0;
+        while (got < len && hdd_dirpos < hdd_dirlen)
+            buf[got++] = hdd_dirbuf[hdd_dirpos++];
+        return got;
+    }
+    UINT br;
+    if (f_read(&hdd_fil[h], buf, len, &br)) return -2;
+    return (int)br;
+}
+
+int hdd_write(int h, const uint8_t *buf, int len) {
+    if (h < 0 || h >= HDD_HANDLES || hdd_open_f[h] != 1) return -1;
+    UINT bw;
+    if (f_write(&hdd_fil[h], buf, len, &bw) || (int)bw != len) return -2;
+    return 0;
+}
+
+int hdd_close(int h) {
+    if (h < 0 || h >= HDD_HANDLES) return -1;
+    int r = 0;
+    if (hdd_open_f[h] == 1 && f_close(&hdd_fil[h])) r = -2;
+    hdd_open_f[h] = 0;
+    return r;
+}
+
+// status: fills {err, flags(bit0 open, bit1 eof), avail_lo, avail_hi}
+void hdd_status(int h, uint8_t st[4]) {
+    st[0] = 1; st[1] = 0; st[2] = 0; st[3] = 0;   // err=1 (OK) by convention
+    if (h < 0 || h >= HDD_HANDLES || !hdd_open_f[h]) { st[0] = 133; return; }
+    uint32_t avail;
+    if (hdd_open_f[h] == 2) {
+        avail = hdd_dirlen - hdd_dirpos;
+    } else {
+        uint32_t sz = f_size(&hdd_fil[h]), pos = (uint32_t)f_tell(&hdd_fil[h]);
+        avail = sz > pos ? sz - pos : 0;
+    }
+    st[1] = 1 | (avail == 0 ? 2 : 0);
+    if (avail > 65535) avail = 65535;
+    st[2] = avail & 0xFF;
+    st[3] = avail >> 8;
+}
+
+int hdd_delete(const char *name) {
+    char path[80];
+    if (hdd_path(name, path)) return -1;
+    return f_unlink(path) == FR_OK ? 0 : -2;
+}
+
+int hdd_rename(const char *oldname, const char *newname) {
+    char po[80], pn[80];
+    if (hdd_path(oldname, po) || hdd_path(newname, pn)) return -1;
+    return f_rename(po, pn) == FR_OK ? 0 : -2;
+}
+
 // return 0: user chose a ROM (*choice), 1: no choice made, -1: error
 int menu_loadrom(int *choice, int carts, int slot) {
     int page = 0, pages, total;
@@ -1215,6 +1355,93 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
     return -4;
 }
 
+// ── H: SIO protocol (device 0x72) — CIO-shaped file ops over /HDD ───────────
+// O(0x4F): aux1=mode(4 rd/8 wr/9 app/6 dir) aux2=handle; 64B name frame.
+// R(0x52): aux1=len(1..128) aux2=handle -> data frame len bytes (caller sizes
+//          via STATUS avail; short reads are an error by design).
+// W(0x57): aux1=len aux2=handle; data frame.
+// C(0x43): aux2=handle.   S(0x53): aux2=handle -> {err,flags,avail16}.
+// X(0x58): aux1=32 rename ("OLD,NEW" frame) / 33 delete (name frame).
+// Unknown commands: SILENT (boot-glitch lesson — never answer what you don't know).
+static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
+    uint8_t *buf = sio_sector_buf;
+    int h = aux2 & 0x03;
+    switch (cmd) {
+    case 0x4F: {                                   // OPEN
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        buf[63] = 0;
+        int r = hdd_open((char *)buf, aux1, h);
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
+        break;
+    }
+    case 0x52: {                                   // READ
+        int len = aux1 ? aux1 : 128;
+        if (len > 128) len = 128;
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        int got = hdd_read(h, buf, len);
+        delay_us(250);
+        if (got != len) { sio_tx_byte(0x45); break; }   // undersized = error
+        sio_tx_byte(0x43); sio_wait_tx_empty();
+        uint8_t sum = sio_checksum(buf, len);
+        delay_us(250);
+        for (int i = 0; i < len; i++) sio_tx_byte(buf[i]);
+        sio_tx_byte(sum); sio_wait_tx_empty();
+        break;
+    }
+    case 0x57: {                                   // WRITE
+        int len = aux1 ? aux1 : 128;
+        if (len > 128) len = 128;
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        if (sio_rx_data_frame(buf, len)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        int r = hdd_write(h, buf, len);
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
+        break;
+    }
+    case 0x43: {                                   // CLOSE
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        int r = hdd_close(h);
+        delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
+        break;
+    }
+    case 0x53: {                                   // STATUS
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        uint8_t st[4];
+        hdd_status(h, st);
+        uint8_t sum = sio_checksum(st, 4);
+        delay_us(250); sio_tx_byte(0x43); sio_wait_tx_empty();
+        delay_us(250);
+        for (int i = 0; i < 4; i++) sio_tx_byte(st[i]);
+        sio_tx_byte(sum); sio_wait_tx_empty();
+        break;
+    }
+    case 0x58: {                                   // XIO: 32 rename, 33 delete
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        buf[63] = 0;
+        int r = -1;
+        if (aux1 == 33) r = hdd_delete((char *)buf);
+        else if (aux1 == 32) {
+            char *comma = strchr((char *)buf, ',');
+            if (comma) { *comma = 0; r = hdd_rename((char *)buf, comma + 1); }
+        }
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
+        break;
+    }
+    default:
+        break;                                     // SILENT on unknowns
+    }
+}
+
 // ── P: printer emulation (device 0x40 / P1:) — one-way Atari->PC text ───────
 // STATUS + WRITE, 820/825-style (frame length by AUX1: N=40, S=29, D=21).
 // Payload is forwarded to the PC serial as "PRN: ..." lines: ATASCII EOL ($9B)
@@ -1308,6 +1535,14 @@ void sio_process_command(void) {
         return;
     }
     
+    // H: hard-drive file device (0x72)
+    if (device == 0x72) {
+        dbg_last_sio_cmd = cmd;
+        sio_wait_cmd_high();
+        sio_hdd(cmd, aux1, aux2);
+        return;
+    }
+
     // P1: printer (device 0x40) — one-way Atari->PC text channel
     if (device == 0x40) {
         dbg_last_sio_cmd = cmd;

@@ -30,6 +30,12 @@ FIL xex_file;
 static uint8_t sio_sector_buf[256];
 int cba_stage, cba_err;
 FIL bridge_file;
+#define HDD_HANDLES 2
+#define HDD_DIRBUF  1024
+FIL hdd_fil[HDD_HANDLES];
+uint8_t hdd_open_f[HDD_HANDLES];
+char hdd_dirbuf[HDD_DIRBUF];
+uint16_t hdd_dirlen, hdd_dirpos;
 
 /* ── firmware shims ──────────────────────────────────────────────────────── */
 static int uart_printf(const char *fmt, ...) {
@@ -290,6 +296,59 @@ int main(int argc, char **argv) {
             }
             f_close(&f);
         }
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_hdd")) {               /* H: device full lifecycle */
+        uint8_t st[4], buf[128];
+        /* create + write via handle 0 */
+        if (hdd_open("NOTES.TXT", 8, 0)) die("open w");
+        const char *msg = "HELLO FROM CIO LAND\x9bLINE TWO\x9b";
+        if (hdd_write(0, (const uint8_t *)msg, strlen(msg))) die("write");
+        if (hdd_close(0)) die("close w");
+        /* read back via handle 1 while handle 0 opens the DIRECTORY */
+        if (hdd_open("NOTES.TXT", 4, 1)) die("open r");
+        if (hdd_open("", 6, 0)) die("open dir");
+        hdd_status(1, st);
+        int avail = st[2] | (st[3] << 8);
+        if (avail != (int)strlen(msg)) { printf("FAIL: avail %d\n", avail); return 1; }
+        if (hdd_read(1, buf, avail) != avail) die("read");
+        if (memcmp(buf, msg, avail)) die("verify");
+        hdd_status(1, st);
+        if (!(st[1] & 2)) die("no EOF flag");
+        /* directory listing must mention the file */
+        hdd_status(0, st);
+        int dav = st[2] | (st[3] << 8);
+        if (dav <= 0 || dav > 1024) die("dir avail");
+        char dl[1025]; int got = 0;
+        while (got < dav) {
+            int n = hdd_read(0, (uint8_t *)dl + got, dav - got > 64 ? 64 : dav - got);
+            if (n <= 0) die("dir read");
+            got += n;
+        }
+        dl[got] = 0;
+        if (!strstr(dl, "NOTES.TXT")) { printf("FAIL: dir=%s\n", dl); return 1; }
+        hdd_close(0); hdd_close(1);
+        /* append */
+        if (hdd_open("NOTES.TXT", 9, 0)) die("open a");
+        if (hdd_write(0, (const uint8_t *)"MORE\x9b", 5)) die("append");
+        hdd_close(0);
+        if (hdd_open("NOTES.TXT", 4, 0)) die("reopen");
+        hdd_status(0, st);
+        if ((st[2] | (st[3] << 8)) != (int)strlen(msg) + 5) die("append size");
+        hdd_close(0);
+        /* rename + delete + sanitization */
+        if (hdd_rename("NOTES.TXT", "KEEP.TXT")) die("rename");
+        if (hdd_open("KEEP.TXT", 4, 0)) die("open renamed");
+        hdd_close(0);
+        if (hdd_delete("KEEP.TXT")) die("delete");
+        if (hdd_open("KEEP.TXT", 4, 0) == 0) die("ghost file");
+        char pp[80];
+        if (hdd_path("../../ETC/PASSWD", pp)) die("path rejected valid-ish");
+        if (strstr(pp, "..") || strchr(pp + 5, '/')) {
+            printf("FAIL: unsafe path %s\n", pp); return 1; }
+        if (hdd_path("H1:GAME.SAV", pp) || strcmp(pp, "/HDD/GAME.SAV")) {
+            printf("FAIL: spec path %s\n", pp); return 1; }
         return 0;
     }
 

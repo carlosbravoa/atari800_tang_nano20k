@@ -99,6 +99,10 @@ fresh $IMG 64
 for i in 1 2 3 4; do ./fatfs_host $IMG put a.atr /D$i.ATR > /dev/null; done
 ./fatfs_host $IMG s_fourslots > /dev/null; check "s_fourslots    " $? $IMG
 
+# 13. H: device: create/write/read/append/dir/rename/delete/sanitize
+fresh $IMG 64
+./fatfs_host $IMG s_hdd > /dev/null; check "s_hdd          " $? $IMG
+
 # 8. INFORMATIONAL: the pre-guard bug — two raw write-FILs on one file.
 #    Not a pass/fail gate; prints whether fsck sees damage (it demonstrates
 #    what the dup-mount guard protects against).
