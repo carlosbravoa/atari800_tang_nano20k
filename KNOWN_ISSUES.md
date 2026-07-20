@@ -1,5 +1,13 @@
 # Known issues
 
+## F12 (OSD menu) can be unresponsive while a PC serial session is engaged
+
+With the PC Link actively engaged (v2.5+; e.g. a live keyboard session or app
+connection), the F12 menu key on the physical keyboard sometimes doesn't open the
+OSD. Workaround: the S2 button on the board always works, and closing the PC
+session restores F12 immediately. Under investigation.
+
+
 ## FIXED (v2.4): disk writes were unreliable — ERROR 139, corrupted disks, could damage the SD card
 
 Writing to mounted disks (SAVE from DOS/BASIC, formatting) was broken in several
