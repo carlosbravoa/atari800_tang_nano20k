@@ -1425,10 +1425,10 @@ static void sio_net(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         delay_us(250);
         sio_tx_byte(0x41); sio_wait_tx_empty();
         if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();  // data ACK first (see H: OPEN)
         net_head = net_tail = 0;
         net_state_pc = 0;
         net_event(1, buf, 64);
-        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
         delay_us(250); sio_tx_byte(0x43);          // optimistic complete
         break;
     }
@@ -1446,8 +1446,8 @@ static void sio_net(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         delay_us(250);
         sio_tx_byte(0x41); sio_wait_tx_empty();
         if (sio_rx_data_frame(buf, len)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();  // data ACK first (see H: OPEN)
         net_event(3, buf, len);
-        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
         delay_us(250); sio_tx_byte(0x43);
         break;
     }
@@ -1508,9 +1508,13 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         delay_us(250);
         sio_tx_byte(0x41); sio_wait_tx_empty();
         if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        // ACK the data frame IMMEDIATELY — the OS's window for it is ~1-16 ms
+        // and the SD work below takes tens of ms. Slow work belongs between
+        // ACK and 'C'/'E' (the v2.4 disk-write lesson, re-hit here on HW:
+        // BASIC OPEN "H:" returned a timeout error). Same fix in WRITE/XIO.
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
         buf[63] = 0;
         int r = hdd_open((char *)buf, aux1, h);
-        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
         delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
         break;
     }
@@ -1535,8 +1539,8 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         delay_us(250);
         sio_tx_byte(0x41); sio_wait_tx_empty();
         if (sio_rx_data_frame(buf, len)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();  // data ACK first (see OPEN)
         int r = hdd_write(h, buf, len);
-        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
         delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
         break;
     }
@@ -1563,6 +1567,7 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         delay_us(250);
         sio_tx_byte(0x41); sio_wait_tx_empty();
         if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();  // data ACK first (see OPEN)
         buf[63] = 0;
         int r = -1;
         if (aux1 == 33) r = hdd_delete((char *)buf);
@@ -1570,7 +1575,6 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
             char *comma = strchr((char *)buf, ',');
             if (comma) { *comma = 0; r = hdd_rename((char *)buf, comma + 1); }
         }
-        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
         delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
         break;
     }
