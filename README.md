@@ -64,6 +64,7 @@ the keyboard alone covers everything.
 - **New blank disk from the OSD** (v2.4) — each drive menu can create a fresh 90K ATR (`BLANKnn.ATR`) on the SD card and mount it; format it from DOS and you have a writable disk without ever touching a PC
 - **Safe double-mounts** (v2.4) — mounting the same image on D1: *and* D2: automatically makes the second mount read-only (two write handles on one file can corrupt the SD card's filesystem)
 - **PC Link over the board's own USB-C** (v2.5) — the onboard BL616's serial port is wired to the firmware: with `tools/atari.py` on the PC you can **send files to the SD card** (auto-foldered into `/PC`), **push-and-boot `.xex` builds** (`atari.py run` = a ~5-second compile-run loop for cross-development), **paste text as keystrokes** (`type` — BASIC listings straight from your editor), use a **live remote keyboard** (`kbd` — every PC keystroke lands on the Atari; F12 on the real keyboard hands control back), **reset/eject remotely** (no reaching into the case), and **watch live firmware logs** (`log`). No extra hardware — same cable that powers the board. Flashing is unaffected
+- **Printer emulation → your PC** (v2.7) — the classic `P:` device (820-style) lives in the firmware: `LPRINT`, `PRINT #n` to `P:`, and **AtariWriter's print function** arrive on the PC as text. The desktop app collects it in a Printer tab with **Save as .txt**, **real printing** (via your system printer), and **Save as PDF — typeset in a 5×7 dot matrix**, margins and width auto-fitted to the document. The Atari only ever sent ATASCII; the font lived in the printer's ROM — and now that ROM is a Python file
 - **Remote telemetry & debugging** (v2.6) — `status` (boot stage, mounts, SIO counters), `screen` (a text dump of the Atari's display read from its own memory), `peek`/`poke` (inspect/modify Atari RAM live), boot-stage log markers, and the bridge answers everywhere — even at the ROM-failure screen, which can be rescued remotely by sending the ROM files over the cable
 - **Desktop app** (v2.6) — `tools/atari_gui.py`: everything above in a Linux/Windows GUI — progress bars, a paste-to-BASIC box, a live-keyboard zone, and a live log pane
 - **Firmware headroom ×5** (v2.5) — the PicoRV32 boot RAM now uses its full 64 KB (was 48), quintupling stack headroom (the tightness behind the v2.4-era corruption class) and leaving room for future features
@@ -86,6 +87,7 @@ the keyboard alone covers everything.
 | Disk writes — SAVE/format from DOS, both drives | ✅ Working (v2.4) |
 | PC Link: send / run / type / kbd / reset over USB-C | ✅ Working (v2.5) |
 | PC Link telemetry: status / screen / peek / poke + desktop app | ✅ Working (v2.6) |
+| P: printer → PC (LPRINT/AtariWriter, txt/paper/dot-matrix PDF) | ✅ Working (v2.7) |
 | New blank disk (OSD) + DOS FORMAT support | ✅ Working (v2.4) |
 | `.xex` executable loading (virtual-disk 6502 loader) | ✅ Working |
 | Hardware SIO command-frame capture | ✅ Working |
@@ -300,6 +302,14 @@ python3 tools/atari_gui.py
   machine back — the app detaches cleanly.
 - The app heals a Gowin-IDE gotcha automatically (the IDE's globally-exported
   `LD_LIBRARY_PATH` ships an old `libtcl` that breaks Tk apps).
+
+### Printer capture
+
+The firmware emulates the `P:` printer (SIO device `$40`, 820-style). Anything the
+Atari prints — `LPRINT` from BASIC, AtariWriter documents — lands in the app's
+**Printer tab** (or as `PRN:` lines in `atari.py log`). From the tab: save as text,
+print to a real printer, or **Save as PDF** for a period-correct 5×7 dot-matrix
+rendering (word-processor margins stripped, width auto-fitted).
 
 ### Notes
 
