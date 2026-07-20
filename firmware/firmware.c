@@ -1666,15 +1666,19 @@ void sio_poll(void) {
     }
 }
 
-// Cold-boot the Atari (COLDST=1 + core reset pulse). Caller flips booted/overlay.
+// Cold-boot the Atari. Caller flips booted/overlay.
+// Uses load_system_roms()'s LONG clean reset (core held down for the full ROM
+// reload), NOT a short reg_romload_ctrl pulse: the 20 ms pulse was an
+// intermittent-stall lottery — the 6502 sometimes never came back (black
+// screen, RTCLOK frozen, COLDST still 1; HW-autopsied 2026-07-19 after a
+// cart detach). Identical to the fix that cured xex attach-auto-boot (#2)
+// and Boot OS (#3): every cold-boot flow now shares the proven sequence.
 static void cold_boot_atari(void) {
     reg_virt_kbd_0 = 0x00000000;
     apply_machine_options();                        // RAM_SELECT stable before core leaves reset
     sio_init();
     *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
-    reg_romload_ctrl = 1;
-    delay(20);
-    reg_romload_ctrl = 0;
+    load_system_roms();                             // long clean reset + release
 }
 
 // Cold-boot the virtual XEX disk on D1: with OPTION held (BASIC disabled), then
