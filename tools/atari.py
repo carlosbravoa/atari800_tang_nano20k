@@ -19,6 +19,7 @@ Usage:
                                      #   SIO counters, stack canary)
   atari.py screen [-p P]             # text dump of the Atari's screen (GR.0)
   atari.py peek ADDR [LEN] [-p P]    # hex dump of Atari memory (e.g. 0x58 16)
+  atari.py fwpeek ADDR [LEN] [-p P]  # hex dump of FIRMWARE BSRAM (fw globals, debug)
   atari.py poke ADDR B [B...] [-p P] # write bytes into Atari memory
   atari.py hdd-install [-p P]        # install the H: handler (files -> /HDD
                                      #   on the SD); session-scoped
@@ -159,6 +160,18 @@ def cmd_poke(args):
     print(f"{len(data)} byte(s) written at {addr:#06x}")
 
 
+def cmd_fwpeek(args):
+    addr = int(args.addr, 0)
+    length = int(args.len, 0)
+    with AtariLink(args.port) as l:
+        data = l.fwpeek(addr, length)
+    for off in range(0, len(data), 16):
+        row = data[off:off + 16]
+        hexs = " ".join(f"{b:02x}" for b in row)
+        text = "".join(chr(b) if 32 <= b < 127 else "." for b in row)
+        print(f"{addr + off:04x}  {hexs:<48}  {text}")
+
+
 def cmd_hdd_install(args):
     with AtariLink(args.port) as l:
         lo, hi = l.hdd_install()
@@ -209,6 +222,8 @@ def main():
         lambda sp: sp.add_argument("len", nargs="?", default="64"))
     add("poke", cmd_poke, lambda sp: sp.add_argument("addr"),
         lambda sp: sp.add_argument("bytes", nargs="+"))
+    add("fwpeek", cmd_fwpeek, lambda sp: sp.add_argument("addr"),
+        lambda sp: sp.add_argument("len", nargs="?", default="64"))
     add("reset", cmd_reset,
         lambda sp: sp.add_argument("--warm", action="store_true"),
         lambda sp: sp.add_argument("--keep", action="store_true",

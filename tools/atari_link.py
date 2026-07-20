@@ -233,6 +233,25 @@ class AtariLink:
             raise LinkError("peek: checksum mismatch")
         return payload
 
+    def fwpeek(self, addr, length):
+        """Read FIRMWARE memory (0x0D): PicoRV32 BSRAM 0x0000-0xFFFF —
+        remote inspection of firmware globals (debug aid)."""
+        if not 0 < length <= 1024:
+            raise LinkError("fwpeek length 1..1024")
+        self._cmd(0x0D)
+        self.ser.write(addr.to_bytes(2, "little") + length.to_bytes(2, "little"))
+        self._expect(b"+", "fwpeek")
+        data = b""
+        deadline = time.time() + 5
+        while len(data) < length + 2 and time.time() < deadline:
+            data += self.ser.read(length + 2 - len(data))
+        if len(data) < length + 2:
+            raise LinkError(f"fwpeek: short read ({len(data)}/{length + 2})")
+        payload, sum_rx = data[:length], int.from_bytes(data[length:], "little")
+        if sum(payload) & 0xFFFF != sum_rx:
+            raise LinkError("fwpeek: checksum mismatch")
+        return payload
+
     def poke(self, addr, data):
         """Write bytes into Atari memory (0x0A)."""
         if not 0 < len(data) <= 256:

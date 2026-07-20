@@ -71,10 +71,16 @@ endif
 	$(Q)$(OBJDUMP) -d $(TARGET_ELF) > disasm.txt
 
 # Generate BSRAM init hex (4 byte lanes + word-wide) from the firmware binary.
+# The RTL-consistency grep guards against the AWORDS init hole (INVESTIGATE.md
+# #10): fw_bram's DECLARED depth caps how far $readmemh initialises — if the
+# instantiation parameter lags BRAM_DEPTH, every init byte above it silently
+# powers up ZERO on silicon (image crossing 48 KB cost a day of debugging).
 $(BRAM_HEX): $(TARGET_BIN) bin2bram.py
 ifneq ($(VERBOSE),1)
 	@echo BIN2BRAM "->" $(BRAM_DIR)/fw_lane{0..3}.hex
 endif
+	$(Q)grep -q "AWORDS($(BRAM_DEPTH))" ../src/iosys_picorv32.v || \
+		{ echo "ERROR: fw_bram .AWORDS in src/iosys_picorv32.v != BRAM_DEPTH=$(BRAM_DEPTH) — init hole!"; exit 1; }
 	$(Q)python3 bin2bram.py $(TARGET_BIN) $(BRAM_DIR) $(BRAM_DEPTH)
 
 clean:

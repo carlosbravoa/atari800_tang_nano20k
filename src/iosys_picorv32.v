@@ -162,7 +162,7 @@ reg ram_ready /* synthesis syn_keep=1 */;
 reg [31:0] ram_rdata;
 
 // Low 8 MB region (addr[31:23]==0) is split:
-//   addr < 32 KB (0x0000_0000..0x0000_7FFF) → on-chip BSRAM = firmware code/data/stack
+//   addr < 64 KB (0x0000_0000..0x0000_FFFF) → on-chip BSRAM = firmware code/data/stack
 //   addr >= 32 KB                            → SDRAM (Atari memory: ROM load 0x220000/
 //                                              0x224000 → phys 0x020000/0x024000, COLDST
 //                                              0x200244, 4 MB cart 0x400000-0x7FFFFF)
@@ -175,13 +175,20 @@ wire        ram_sel  = lowregion_sel && (mem_addr[22:14] >= 9'd4);  // SDRAM (At
 // ── Firmware BSRAM boot RAM (64 KB, byte-laned, $readmemh-initialised) ────────
 wire [31:0] bram_rdata;
 wire        bram_ready;
+// AWORDS MUST be 16384 (64 KB): the v2.5 BSRAM growth updated the decode above,
+// AW, STACK_TOP and the linker, but left AWORDS at the 48 KB value 12288. Gowin
+// rounds the physical lanes up to 16K deep anyway (so R/W and the stack above
+// 0xC000 worked), but $readmemh only initialises the DECLARED depth — every
+// .data/rodata byte above 48 KB powered up ZERO. Latent since v2.5; detonated
+// on feature/hdd-net, the first image to cross 48 KB (xex_loader_img tail =
+// served BRK BRK -> deterministic xex boot freeze; INVESTIGATE.md #10).
 fw_bram #(
-    .AWORDS(12288),
+    .AWORDS(16384),
     .AW(14)
 ) fw_bram_inst (
     .clk   (clk),
     .sel   (bram_sel),
-    .waddr (mem_addr[15:2]),     // 14-bit word address within 48 KB
+    .waddr (mem_addr[15:2]),     // 14-bit word address within 64 KB
     .wdata (mem_wdata),
     .wstrb (bram_sel ? mem_wstrb : 4'b0000),
     .rdata (bram_rdata),

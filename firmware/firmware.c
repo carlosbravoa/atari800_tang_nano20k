@@ -15,6 +15,24 @@ static void bridge_poll(void);   // serial bridge servicing (defined below)
 static void bridge_putc(uint8_t c);  // raw serial TX (defined below)
 extern int bridge_quiet;         // transfers own the serial TX channel (defined below)
 
+// ── DEBUG guard (temporary, feature/hdd-net triage): a wild zero-store at fw
+// address 0xC000 (= xex_loader_img+332, the CLC/RTS tail of a loader routine)
+// corrupts the served .xex boot loader into BRK BRK -> every xex boot freezes
+// at ~34 jiffies. Latch the FIRST site that observes the damage; bridge_poll
+// prints it once. Remove after root cause.
+// Two watches: (a) img[332..333] catches an object-relative writer (the array
+// moved in this build, so a relative bug follows it); (b) the absolute word at
+// 0xC000 — now rodata, must never change — catches a fixed-address writer.
+// c000_snap is captured at main() entry.
+static const char *img_guard_hit;
+static uint32_t c000_snap;
+#define IMG_GUARD(tag) do { \
+    if (!img_guard_hit && \
+        ((xex_loader_img[332] != 0x18 || xex_loader_img[333] != 0x60) || \
+         (c000_snap && *(volatile uint32_t *)0xC000u != c000_snap))) \
+        img_guard_hit = (tag); \
+} while (0)
+
 #define OPTION_FILE "/atari.ini"
 #define OPTION_INVALID 2
 
@@ -1930,7 +1948,9 @@ static void sio_poll_hwcapture(void) {
     dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
 
     uint32_t rsp_t0 = reg_cycle;
+    IMG_GUARD("sio_pre");
     sio_process_command();
+    IMG_GUARD("sio_post");
     dbg_resp_time_us = (uint32_t)(reg_cycle - rsp_t0) / 27;
     sio_cmd_idx = 0;
     while (!sio_rx_empty()) { (void)reg_sio_rx; }
@@ -2009,7 +2029,9 @@ void sio_poll(void) {
             dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
 
             uint32_t rsp_t0 = reg_cycle;
+            IMG_GUARD("sio2_pre");
             sio_process_command();
+            IMG_GUARD("sio2_post");
             dbg_resp_time_us = (uint32_t)(reg_cycle - rsp_t0) / 27;
             sio_cmd_idx = 0;
 
@@ -2042,6 +2064,7 @@ static void cold_boot_atari(void) {
 // Cold-boot the virtual XEX disk on D1: with OPTION held (BASIC disabled), then
 // keep servicing SIO so the boot loader's sector reads are answered during boot.
 static void cold_boot_xex(void) {
+    IMG_GUARD("cbx_in");
     reg_virt_kbd_0 = 0x00410000;                    // hold OPTION (disable BASIC)
     sio_init();                                     // SIO ready before the core is released
     // Use the SAME reliable sequence as the "Boot OS" menu item, which boots an attached
@@ -2050,6 +2073,7 @@ static void cold_boot_xex(void) {
     // reg_romload_ctrl pulse (delay 20) left the attach-auto-boot intermittently stuck while
     // "Boot OS" always worked (HW-observed 2026-06-30: attach->stuck, Hard->stuck, Boot OS->loads).
     load_system_roms();
+    IMG_GUARD("cbx_roms");
     // CRITICAL: hide the OSD before servicing the boot. The overlay MASKS inputs to the core
     // while it is on, so the held OPTION (reg_virt_kbd_0) never reaches the Atari and BASIC is
     // NOT disabled -> the .xex boots to the BASIC blue screen / loads with BASIC resident in
@@ -2614,14 +2638,17 @@ static void bridge_cmd_type(void) {
 // 0x08 STATUS: one parseable text line — the OSD debug line, remotely.
 static void bridge_cmd_status(void) {
     extern char _ebss[];
-    uart_printf("ST u:%d bs:%d rom:%d x:%d m:%d%d%d%d c:%b s:%d st:%d e:%d cn:%d\n",
+    uart_printf("ST u:%d bs:%d rom:%d x:%d m:%d%d%d%d c:%b s:%d st:%d e:%d cn:%d"
+                " hd:%d%d nt:%d,%d\n",
                 (int)time_millis(), bridge_boot_stage, bridge_rom_ok,
                 xex_active ? 1 : 0,
                 atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0,
                 atr_mounted[2] ? 1 : 0, atr_mounted[3] ? 1 : 0,
                 dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status,
                 (int)dbg_sio_err_count,
-                (*(volatile uint32_t *)_ebss != 0x53544B21u) ? 1 : 0);
+                (*(volatile uint32_t *)_ebss != 0x53544B21u) ? 1 : 0,
+                hdd_open_f[0], hdd_open_f[1],
+                net_state_pc, net_avail());
 }
 
 // 0x09 PEEK addr16 len16 -> '+', raw bytes, sum16. Reads ATARI memory through
@@ -2639,6 +2666,30 @@ static void bridge_cmd_peek(void) {
     uint16_t sum = 0;
     for (uint32_t i = 0; i < len; i++) {
         uint8_t b = *(volatile uint8_t *)(0x00200000u + ((addr + i) & 0xFFFFu));
+        bridge_putc(b);
+        sum += b;
+    }
+    bridge_putc(sum & 0xFF);
+    bridge_putc(sum >> 8);
+    bridge_quiet = 0;
+}
+
+// 0x0D FWPEEK addr16 len16 -> '+' data sum16. Reads FIRMWARE memory (BSRAM,
+// 0x0000-0xFFFF) instead of Atari RAM — remote inspection of fw globals
+// (added for the 0xC000 clobber triage; harmless to keep: read-only).
+static void bridge_cmd_fwpeek(void) {
+    bridge_quiet = 1;
+    int a0 = blrx_getc(1000), a1 = blrx_getc(1000);
+    int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
+    uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
+    if (a0 < 0 || a1 < 0 || l0 < 0 || l1 < 0 || len > 1024) {
+        bridge_quiet = 0; bridge_putc('-'); return;
+    }
+    uint32_t addr = (uint32_t)a0 | ((uint32_t)a1 << 8);
+    bridge_putc('+');
+    uint16_t sum = 0;
+    for (uint32_t i = 0; i < len; i++) {
+        uint8_t b = *(volatile uint8_t *)((addr + i) & 0xFFFFu);
         bridge_putc(b);
         sum += b;
     }
@@ -2672,12 +2723,21 @@ static void bridge_poll(void) {
     uint32_t v = reg_blrx;           // many wait loops, incl. ones a command's own
     if (busy) return;                // helpers may reach (e.g. message())
     prn_flush();                     // deliver buffered printer text when free
+    IMG_GUARD("bp");                 // DEBUG: dense sampling point (every poll)
+    static int img_guard_told;
+    if (img_guard_hit && !img_guard_told && !bridge_quiet) {
+        img_guard_told = 1;
+        uart_printf("IMGCLOB at %s img:%b%b c000:%b%b%b%b\n", img_guard_hit,
+                    xex_loader_img[332], xex_loader_img[333],
+                    *(volatile uint8_t *)0xC000u, *(volatile uint8_t *)0xC001u,
+                    *(volatile uint8_t *)0xC002u, *(volatile uint8_t *)0xC003u);
+    }
     if (!(v & 0x100)) return;
     busy = 1;
     reg_blrx = 0;                    // ack (clears valid + overrun)
     switch (v & 0xFF) {
     case 0x05: uart_printf("A8OK\n"); break;
-    case 0x01: bridge_cmd_put(); break;
+    case 0x01: bridge_cmd_put(); IMG_GUARD("put"); break;
     case 0x02:
         if (bridge_read_name(bridge_req_path) == 0) { bridge_req = 1; bridge_putc('+'); }
         else bridge_putc('-');
@@ -2692,8 +2752,9 @@ static void bridge_poll(void) {
         }
         bridge_putc('+');
         break;
-    case 0x07: bridge_cmd_type(); break;
-    case 0x08: bridge_cmd_status(); break;
+    case 0x07: bridge_cmd_type(); IMG_GUARD("type"); break;
+    case 0x08: bridge_cmd_status(); IMG_GUARD("status"); break;
+    case 0x0D: bridge_cmd_fwpeek(); break;
     case 0x0B: {                     // NET_FEED: len16 + payload -> rx ring
         bridge_quiet = 1;
         int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
@@ -2723,8 +2784,8 @@ static void bridge_poll(void) {
         bridge_putc('+');
         break;
     }
-    case 0x09: bridge_cmd_peek(); break;
-    case 0x0A: bridge_cmd_poke(); break;
+    case 0x09: bridge_cmd_peek(); IMG_GUARD("peek"); break;
+    case 0x0A: bridge_cmd_poke(); IMG_GUARD("poke"); break;
     default: break;                  // tolerate stray bytes
     }
     busy = 0;
@@ -2743,6 +2804,7 @@ static inline int  stack_canary_dead(void) { return *(volatile uint32_t *)_ebss 
 
 int main() {
     stack_canary_arm();
+    c000_snap = *(volatile uint32_t *)0xC000u;   // DEBUG: baseline for IMG_GUARD watch (b)
     delay(200); // Give SD card time to stabilize power on startup
     CORE_ID = reg_core_id;
     overlay(1);
@@ -2766,6 +2828,7 @@ int main() {
 
     bridge_boot_stage = 1;
     uart_printf("boot: sd ok\n");
+    IMG_GUARD("sd");
 
     // load_option() is the first real SD access (f_mount above is lazy). On a warm
     // reset the card is mid-state and this first read can fail transiently — retry with
@@ -2782,10 +2845,12 @@ int main() {
         opt_r = load_option();
     }
     // Initialize USB Host enable state based on loaded option (0 = UART, 1 = USB)
+    IMG_GUARD("opt");
     apply_input_options();
     apply_video_options();
     apply_machine_options();   // set RAM_SELECT before the core is released below
     sio_init();
+    IMG_GUARD("sioinit");
 
     bridge_boot_stage = 2;
 
@@ -2805,6 +2870,7 @@ int main() {
     bridge_boot_stage = 3;
     bridge_rom_ok = rom_ok;
     uart_printf("boot: roms %d\n", rom_ok);
+    IMG_GUARD("roms");
     if (rom_ok != 0) {
         clear();
         cursor(2, 2);
@@ -2879,6 +2945,7 @@ int main() {
         }
         mount_silent = 0;
     }
+    IMG_GUARD("hddmnt");
     if (rom_ok == 0) {
         bridge_boot_stage = 4;
         uart_printf("boot: running\n");
@@ -3063,6 +3130,7 @@ int main() {
                     // PC tool validates the $FFFF header before sending, so
                     // mount_xex's blocking failure popups are not expected here.
                     if (mount_xex(bridge_req_path) == 0) {
+                        IMG_GUARD("mount_xex");
                         char *base = strrchr(bridge_req_path, '/');
                         strncpy(mounted_atr_name[0],
                                 base ? base + 1 : bridge_req_path, 16);
