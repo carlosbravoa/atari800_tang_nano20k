@@ -74,10 +74,15 @@ def cmd_log(args):
 
 def cmd_send(args):
     data = open(args.file, "rb").read()
+    if getattr(args, "text", False):
+        # Atari INPUT needs ATASCII EOLs ($9B) — a raw \n text file reads as
+        # one endless record (HW-hit during the H: bring-up).
+        data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\x9b")
     name = sd_name(args.file, args.name)
     with AtariLink(args.port) as l:
         l.send(data, name, _progress(name))
-    print(f"\nOK — /{name} on the SD card")
+    print(f"\nOK — /{name} on the SD card"
+          + (" (ATASCII EOLs)" if getattr(args, "text", False) else ""))
 
 
 def cmd_run(args):
@@ -208,7 +213,9 @@ def main():
     add("ping", cmd_ping)
     add("log", cmd_log)
     add("send", cmd_send, lambda sp: sp.add_argument("file"),
-        lambda sp: sp.add_argument("name", nargs="?", default=None))
+        lambda sp: sp.add_argument("name", nargs="?", default=None),
+        lambda sp: sp.add_argument("--text", action="store_true",
+                                   help="convert \\n line endings to ATASCII $9B"))
     add("run", cmd_run, lambda sp: sp.add_argument("file"),
         lambda sp: sp.add_argument("name", nargs="?", default=None))
     add("type", cmd_type,
