@@ -97,7 +97,9 @@ def cmd_type(args):
     text = sys.stdin.read() if args.file == "-" else \
         open(args.file, "r", encoding="utf-8", errors="replace").read()
     with AtariLink(args.port) as l:
-        l.type_text(text, _progress("typing"))
+        # line-wise with drop-recovery (BL616 USB flaps mid-session; numbered
+        # BASIC lines make whole-line retypes idempotent)
+        l.type_lines(text, _progress("lines"))
     print("\ndone — check the screen")
 
 

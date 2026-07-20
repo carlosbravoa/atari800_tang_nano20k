@@ -84,7 +84,37 @@ class AtariLink:
 
     def __init__(self, port=None, timeout=1.0):
         self.port = port or auto_port()
+        self._timeout = timeout
         self.ser = serial.Serial(self.port, BAUD, timeout=timeout)
+
+    def reconnect(self, wait=4.0, deadline=20.0):
+        """Recover from a BL616 USB drop: the device re-enumerates within a few
+        seconds (usually to the same ttyUSB node). `wait` also lets an aborted
+        firmware type-session time out (3 s per-char getc) before we resume."""
+        try:
+            self.ser.close()
+        except Exception:
+            pass
+        time.sleep(wait)
+        end = time.time() + deadline
+        while True:
+            try:
+                port = self.port
+                try:
+                    port = auto_port()      # node may have moved
+                except LinkError:
+                    pass
+                self.ser = serial.Serial(port, BAUD, timeout=self._timeout)
+                self.port = port
+                break
+            except (serial.SerialException, OSError):
+                if time.time() > end:
+                    raise
+                time.sleep(1)
+        try:
+            self.ser.reset_input_buffer()
+        except Exception:
+            pass
 
     def close(self):
         try:
@@ -181,6 +211,32 @@ class AtariLink:
             if progress:
                 progress(i + 1, len(data))
         self._expect(b"K", "type end")
+
+    def type_lines(self, text, progress=None, retries=4):
+        """Type line-by-line, self-healing across BL616 USB drops: each line is
+        its own type session; a line whose session dies anywhere is flushed
+        (bare RETURN) and retyped whole — idempotent for numbered BASIC lines,
+        safe for immediate-mode commands that haven't executed yet."""
+        lines = [l for l in text.replace("\r\n", "\n").split("\n") if l != ""]
+        for n, line in enumerate(lines):
+            for attempt in range(retries + 1):
+                try:
+                    self.type_text(line + "\n")
+                    break
+                except Exception:
+                    if attempt == retries:
+                        raise
+                    # ride out the drop: reconnect may itself hiccup while the
+                    # device re-enumerates — keep trying within this attempt
+                    for _ in range(3):
+                        try:
+                            self.reconnect()
+                            self.type_text("\n")     # flush any partial line
+                            break
+                        except Exception:
+                            time.sleep(2)
+            if progress:
+                progress(n + 1, len(lines))
 
     def type_key(self, ch):
         """Type ONE character (bounded 1-char session). ~110 ms round-trip;
