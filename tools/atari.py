@@ -20,6 +20,8 @@ Usage:
   atari.py screen [-p P]             # text dump of the Atari's screen (GR.0)
   atari.py peek ADDR [LEN] [-p P]    # hex dump of Atari memory (e.g. 0x58 16)
   atari.py poke ADDR B [B...] [-p P] # write bytes into Atari memory
+  atari.py hdd-install [-p P]        # install the H: handler (files -> /HDD
+                                     #   on the SD); session-scoped
 
 Protocol implementation lives in atari_link.py (shared with the desktop app,
 atari_gui.py). Needs: pip install pyserial.
@@ -157,6 +159,14 @@ def cmd_poke(args):
     print(f"{len(data)} byte(s) written at {addr:#06x}")
 
 
+def cmd_hdd_install(args):
+    with AtariLink(args.port) as l:
+        lo, hi = l.hdd_install()
+    print(f"H: installed at ${lo:04X}-${hi - 1:04X}, MEMLO raised — "
+          f'try OPEN #1,8,0,"H:HELLO.TXT" from BASIC '
+          f"(files land in /HDD on the SD). RESET clears it; re-run to restore.")
+
+
 def cmd_eject(args):
     with AtariLink(args.port) as l:
         l.eject()
@@ -192,6 +202,7 @@ def main():
         lambda sp: sp.add_argument("file", help="text file, or - for stdin"))
     add("kbd", cmd_kbd)
     add("eject", cmd_eject)
+    add("hdd-install", cmd_hdd_install)
     add("status", cmd_status)
     add("screen", cmd_screen)
     add("peek", cmd_peek, lambda sp: sp.add_argument("addr"),

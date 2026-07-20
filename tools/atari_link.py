@@ -262,6 +262,37 @@ class AtariLink:
         b = self.peek(0x12, 3)
         return a != b
 
+    def hdd_install(self, handler_path=None):
+        """Install the H: handler: poke the binary at $0900, register 'H' in
+        HATABS ($031A), raise MEMLO. Session-scoped (RESET clears HATABS —
+        re-run). Returns (load_addr, end_addr)."""
+        import os
+        if handler_path is None:
+            handler_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        "build", "hdd_handler.bin")
+        code = open(handler_path, "rb").read()
+        load = 0x0900
+        # already installed? scan HATABS for 'H'
+        hatabs = self.peek(0x031A, 38)
+        for i in range(0, 36, 3):
+            if hatabs[i] == 0:
+                free = i
+                break
+            if hatabs[i] == ord('H'):
+                raise LinkError("H: already installed (RESET to clear)")
+        else:
+            raise LinkError("HATABS full")
+        for off in range(0, len(code), 256):
+            self.poke(load + off, code[off:off + 256])
+        back = self.peek(load, min(len(code), 64))
+        if bytes(back) != code[:len(back)]:
+            raise LinkError("handler verify failed")
+        self.poke(0x031A + free,
+                  bytes([ord('H'), load & 0xFF, load >> 8]))
+        memlo = ((load + len(code) + 0xFF) // 0x100) * 0x100
+        self.poke(0x02E7, bytes([memlo & 0xFF, memlo >> 8]))
+        return load, load + len(code)
+
     def read_log(self, max_bytes=4096):
         """Drain any pending firmware log bytes (non-blocking-ish)."""
         return self.ser.read(max_bytes)
