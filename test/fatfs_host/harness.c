@@ -18,12 +18,13 @@
 int diskio_host_open(const char *path);
 
 /* ── firmware globals the extracted functions expect ─────────────────────── */
-#define ATR_DRIVES 2
+#define ATR_DRIVES 4
 FIL atr_file[ATR_DRIVES];
-bool atr_mounted[ATR_DRIVES] = {false, false};
-bool atr_readonly[ATR_DRIVES] = {false, false};
-uint16_t atr_sector_size[ATR_DRIVES] = {128, 128};
-uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16};
+bool atr_mounted[ATR_DRIVES] = {false, false, false, false};
+bool atr_readonly[ATR_DRIVES] = {false, false, false, false};
+uint16_t atr_sector_size[ATR_DRIVES] = {128, 128, 128, 128};
+uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16, 16, 16};
+int mount_silent = 0;
 bool xex_active = false;
 FIL xex_file;
 static uint8_t sio_sector_buf[256];
@@ -289,6 +290,24 @@ int main(int argc, char **argv) {
             }
             f_close(&f);
         }
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_fourslots")) {         /* D1-D4 all live at once */
+        for (int sl = 0; sl < 4; sl++) {
+            char nm[16];
+            sprintf(nm, "/D%d.ATR", sl + 1);
+            if (mount_atr(nm, sl)) die("mount");
+            if (atr_readonly[sl]) die("unexpected RO");
+        }
+        for (int sl = 0; sl < 4; sl++) {
+            uint32_t secs[3] = {1, 360, 720};
+            if (write_verify(sl, secs, 3)) return 1;
+        }
+        /* dup guard scans all slots: remount slot0's file on slot3 */
+        f_close(&atr_file[3]); atr_mounted[3] = false;
+        if (mount_atr("/D1.ATR", 3)) die("dup remount");
+        if (!atr_readonly[3]) die("4-slot dup guard failed");
         return 0;
     }
 

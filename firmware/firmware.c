@@ -75,13 +75,14 @@ int file_sizes[PAGESIZE];
 int file_len;		// number of files on this page
 
 // ATR Disk Emulator state
-#define ATR_DRIVES 2            // D1: (0x31) and D2: (0x32)
+#define ATR_DRIVES 4            // D1:-D4: (0x31-0x34); D3/D4 have no menu UI —
+                                // they are config/bridge-managed (hdd= auto-mount)
 FIL atr_file[ATR_DRIVES];
-bool atr_mounted[ATR_DRIVES] = {false, false};
-bool atr_readonly[ATR_DRIVES] = {false, false};  // write-open failed even after AM_RDO strip
-uint16_t atr_sector_size[ATR_DRIVES] = {128, 128};
+bool atr_mounted[ATR_DRIVES] = {false, false, false, false};
+bool atr_readonly[ATR_DRIVES] = {false, false, false, false};  // write-open failed even after AM_RDO strip
+uint16_t atr_sector_size[ATR_DRIVES] = {128, 128, 128, 128};
 // Byte offset of sector 1 in the image: 16 for .atr (header), 0 for raw .xfd.
-uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16};
+uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16, 16, 16};
 
 // XEX (Atari binary executable) state — served as a virtual bootable disk on D1:
 // only. When xex_active, D1: STATUS/READ are answered from the baked-in 6502 boot
@@ -547,6 +548,7 @@ int load_cartridge(char *filepath) {
     return 0;
 }
 
+int mount_silent = 0;    // boot-time automount: suppress interactive popups
 int mount_atr(char *filepath, int slot) {
     if (atr_mounted[slot]) {
         f_close(&atr_file[slot]);
@@ -583,12 +585,17 @@ int mount_atr(char *filepath, int slot) {
     // state write inconsistent FAT/dir updates -> can destroy the whole volume,
     // HW-confirmed 2026-07: SD card FAT wiped after same-ATR-on-D1+D2 testing).
     // Detect by start cluster and demote THIS mount to read-only.
-    if (!atr_readonly[slot] && atr_mounted[1 - slot] &&
-        atr_file[slot].obj.sclust == atr_file[1 - slot].obj.sclust) {
-        f_close(&atr_file[slot]);
-        r = f_open(&atr_file[slot], filepath, FA_READ);
-        if (r != FR_OK) return r;
-        atr_readonly[slot] = true;
+    if (!atr_readonly[slot]) {
+        for (int o = 0; o < ATR_DRIVES; o++) {
+            if (o == slot || !atr_mounted[o]) continue;
+            if (atr_file[slot].obj.sclust == atr_file[o].obj.sclust) {
+                f_close(&atr_file[slot]);
+                r = f_open(&atr_file[slot], filepath, FA_READ);
+                if (r != FR_OK) return r;
+                atr_readonly[slot] = true;
+                break;
+            }
+        }
     }
 
     char *ext = strrchr(filepath, '.');
@@ -611,7 +618,7 @@ int mount_atr(char *filepath, int slot) {
         atr_hdr_off[slot] = 0;
         uart_printf("XFD D%d %s ss %d\n", slot+1, filepath, atr_sector_size[slot]);
         atr_mounted[slot] = true;
-        if (atr_readonly[slot])
+        if (atr_readonly[slot] && !mount_silent)
             message("Disk is read-only\nWrites will fail (144)", 1);
         return 0;
     }
@@ -644,7 +651,7 @@ int mount_atr(char *filepath, int slot) {
 
     uart_printf("ATR D%d %s ss %d\n", slot+1, filepath, atr_sector_size[slot]);
     atr_mounted[slot] = true;
-    if (atr_readonly[slot])
+    if (atr_readonly[slot] && !mount_silent)
         message("Disk is read-only\nWrites will fail (144)", 1);
     return 0;
 }
@@ -1309,8 +1316,8 @@ void sio_process_command(void) {
         return;
     }
 
-    // Respond to D1:/D2: (Device IDs 0x31/0x32)
-    if (device != 0x31 && device != 0x32) {
+    // Respond to D1:-D4: (Device IDs 0x31-0x34; D3/D4 = config/bridge drives)
+    if (device < 0x31 || device > 0x30 + ATR_DRIVES) {
         return;
     }
     int slot = device - 0x31;
@@ -2041,7 +2048,7 @@ int bridge_req = 0;                     // 1 = run xex, 2 = cold boot, 3 = warm
 char bridge_req_path[68];               // full path, subfolders allowed
 // OSD drive/cart display names — global so the bridge keeps the menu truthful
 // when it mounts/ejects behind the menu's back (remote RUN/eject).
-char mounted_atr_name[ATR_DRIVES][16] = {"None", "None"};
+char mounted_atr_name[ATR_DRIVES][16] = {"None", "None", "None", "None"};
 char mounted_cart_name[16] = "None";
 int bridge_boot_stage = 0;   // 0 start, 1 sd ok, 2 options, 3 roms tried, 4 running
 int bridge_rom_ok = -1;
@@ -2256,10 +2263,11 @@ static void bridge_cmd_type(void) {
 // 0x08 STATUS: one parseable text line — the OSD debug line, remotely.
 static void bridge_cmd_status(void) {
     extern char _ebss[];
-    uart_printf("ST u:%d bs:%d rom:%d x:%d m:%d%d c:%b s:%d st:%d e:%d cn:%d\n",
+    uart_printf("ST u:%d bs:%d rom:%d x:%d m:%d%d%d%d c:%b s:%d st:%d e:%d cn:%d\n",
                 (int)time_millis(), bridge_boot_stage, bridge_rom_ok,
                 xex_active ? 1 : 0,
                 atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0,
+                atr_mounted[2] ? 1 : 0, atr_mounted[3] ? 1 : 0,
                 dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status,
                 (int)dbg_sio_err_count,
                 (*(volatile uint32_t *)_ebss != 0x53544B21u) ? 1 : 0);
@@ -2480,6 +2488,17 @@ int main() {
         }
     }
 
+    // Rung-1 "hard drive": if /HDD.ATR exists it auto-mounts on D4: at every
+    // boot (convention over configuration — no menu, no ini key). Create one
+    // with the OSD's New-blank-disk + rename, or copy any big MyDOS ATR.
+    if (rom_ok == 0) {
+        mount_silent = 1;
+        if (mount_atr("/HDD.ATR", 3) == 0) {
+            strncpy(mounted_atr_name[3], "HDD.ATR", 16);
+            uart_printf("boot: hdd mounted on D4\n");
+        }
+        mount_silent = 0;
+    }
     if (rom_ok == 0) {
         bridge_boot_stage = 4;
         uart_printf("boot: running\n");
@@ -2521,9 +2540,10 @@ int main() {
             // count, and each slot's mounted flag. sio_cmd_buf[0] persists after
             // dispatch = the last serviced command's device byte.
             cursor(1, 25);
-            printf("d%b c%b s%d st%d e%d m%d%d", sio_cmd_buf[0],
+            printf("d%b c%b s%d st%d e%d m%d%d%d%d", sio_cmd_buf[0],
                    dbg_last_sio_cmd, dbg_last_sio_sector, dbg_last_sio_status,
-                   dbg_sio_err_count, atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0);
+                   dbg_sio_err_count, atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0,
+                   atr_mounted[2] ? 1 : 0, atr_mounted[3] ? 1 : 0);
             if (stack_canary_dead())
                 print("!");   // stack hit bottom = bss corruption likely
 
