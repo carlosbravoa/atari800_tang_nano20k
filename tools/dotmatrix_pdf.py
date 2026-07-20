@@ -87,7 +87,9 @@ def text_to_pdf(text, path, cols=None, page=(612, 792), margin=54, ink=0.15):
             lines = [l[indent:] if l.strip() else "" for l in lines]
     maxlen = max((len(l) for l in lines), default=1)
     if cols is None:
-        cols = 40 if maxlen <= 40 else 80 if maxlen <= 80 else maxlen
+        # fit the longest line to the full printable width (font as large as
+        # the content allows); 40-col floor keeps short notes from ballooning
+        cols = max(40, maxlen)
 
     cell_w = (pw - 2 * margin) / cols          # char cell width in points
     pitch = cell_w / 6.0                       # dot pitch (5 cols + 1 gap)
