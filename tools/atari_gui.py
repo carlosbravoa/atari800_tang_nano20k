@@ -317,10 +317,15 @@ class App:
         path = filedialog.askopenfilename(
             title="Run .xex" if run else "Send file",
             filetypes=[("Atari files", "*.xex *.atr *.xfd *.car *.rom"),
+                       ("Text (auto ATASCII EOLs)", "*.txt *.lst *.bas"),
                        ("All files", "*.*")])
         if not path:
             return
         data = open(path, "rb").read()
+        if not run and path.lower().endswith((".txt", ".lst", ".bas")):
+            # text destined for H:/ENTER needs ATASCII EOLs ($9B) — a raw \n
+            # file reads from BASIC as one endless record
+            data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\x9b")
         try:
             name = sd_name(path, None, self.dest.get().strip() or None)
         except LinkError as e:
@@ -342,7 +347,10 @@ class App:
         if not text.strip():
             return
         prog = self._progress_cb()
-        self.worker.submit("type", lambda l: l.type_text(text, prog))
+        # type_lines = line-wise sessions with drop-recovery (the BL616's USB
+        # link flaps under sustained per-char typing; whole-line retypes are
+        # idempotent for numbered BASIC lines)
+        self.worker.submit("type", lambda l: l.type_lines(text, prog))
 
     def _type_load(self):
         path = filedialog.askopenfilename(title="Load text/BASIC listing")
