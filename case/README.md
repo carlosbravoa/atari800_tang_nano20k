@@ -91,38 +91,42 @@ are on the other. To wire jumpers comfortably, the board sits **pins-up**, so th
 - **DB9 joystick ports** — one panel-mount female D-sub on each **end cap** in the
   **rear bay** behind the CH9350 (left = Joystick 1, right = Joystick 2). Each is
   a D-shaped aperture + two 24.99 mm-pitch screw holes.
-- The back wall has a **ventilation grill** matching the lid; a **rear vent** and
-  no cable notch (power is USB-C; the GND/5V/Pin-53 links are internal jumpers).
+- The back wall has a **ventilation grill** matching the lid's, placed at the
+  **bottom** of the wall — the components face the floor, so the hot zone is
+  low. No cable notch (power is USB-C; GND/5V/Pin-53 are internal jumpers).
 
 ### Removable end caps — how the board goes in
 
-The board has connectors on **both** short ends that hang *below* the flipped
-PCB, so it can't be dropped or slid into a closed box. The two short walls are
-therefore **separate bolt-on end caps**, each carrying that end's connector
-cutouts. Assembly:
+The board has connectors on **both** short ends that overhang its edges (the
+HDMI nose protrudes past the PCB), so it can't be dropped or slid into a closed
+box. The two short walls are therefore **separate hook-on end caps**, each
+carrying that end's connector cutouts and DB9 mount. Assembly:
 
-1. Wire the two **DB9** sockets and mount them to their end caps.
+1. Wire the two **DB9** sockets and bolt them to their end caps.
 2. Set the **Tang** onto the long-edge shelves (both ends open — nothing blocks
-   it) and drop the **CH9350** onto its shelf.
-3. Slide each **end cap** on over its connectors and drive **one M3 screw** down
-   through the cap's inner foot into the floor boss. Small **clamp lips** on each
-   cap hook the board's short-edge corners and hold it down (this replaces the
-   old snap clips, which were what stopped the board seating).
-4. Screw the **lid** on (4 corner screws). The lid also traps the cap tops.
+   it, the old snap clips are gone) and drop the **CH9350** onto its shelf.
+3. **Hook each cap on**: hold it ~3 mm high, slide it inward so the connector
+   noses pass through their openings, then let it drop — its bottom edge lands
+   in a floor channel (outer sill + inner rib), locking the bottom in and out.
+   Small **clamp lips** on each cap land on bare PCB edge areas and hold the
+   boards down (placed to clear the pin headers, HDMI solder tabs and SD slot).
+4. Plug the Dupont jumpers onto the pins (they point up — do this any time).
+5. Screw the **lid** on: 4 corner screws + **1 screw per end cap** that goes
+   down through the lid into a boss on the cap top (the boss sits above the DB9,
+   with clear screwdriver access from above). That locks the cap tops.
 
-To service it, back out the lid + the two cap screws and the board lifts out.
-Everything is calibrate-able: `endcap_*`, `hdmi_*`/`usbc_*`/`sd_*` opening sizes.
-The connector openings are now sized to clear the **mating plug** (not just the
-board connector) since FDM holes print undersized — the first print needed every
-hole opened up, so they were all enlarged.
+To service it: remove 6 screws, lift the lid, lift the caps out, board lifts
+out. Every dimension is calibrate-able (`endcap_*`, `hdmi_*`/`usbc_*`/`sd_*`).
+The connector openings are sized to clear the **mating plug** (not just the
+board connector) since FDM holes print undersized — the first print needed
+every hole opened up, so they were all enlarged.
 
-The lid **screws down** with **4 × M3 self-tapping screws** into four external
-corner lugs (the interior is too packed for internal posts). The base lugs have
-pilot holes; the lid lugs have counterbored clearance holes so the heads sit
-flush. A perimeter lip also locates the lid. Screws ~12–16 mm long; or use
-machine screws into heat-set inserts (open up `screw_pilot_d` to the insert
-bore). Set `screw_enable = false` to drop the lugs and use the lip as a plain
-friction fit.
+The lid takes **6 × M3 self-tapping screws total** (4 corner lugs + 2 cap
+hold-downs), all from the top. The base lugs and cap bosses have pilot holes;
+the lid holes are counterbored so the heads sit flush. Screws ~12–16 mm for the
+lugs, ~8–10 mm for the cap screws; or use machine screws into heat-set inserts
+(open `screw_pilot_d` to the insert bore). Two shallow bars under the lid align
+it front/back (kept short so they clear the Dupont plugs).
 
 Outer size with defaults: **box ≈ 60 × 90 × 33 mm** (~37 mm on its feet),
 **≈ 72 × 102 mm including the corner lugs**. The depth comes from the three

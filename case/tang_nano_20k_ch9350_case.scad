@@ -188,44 +188,51 @@ shelf_grip= 1.5;    // how far the Tang shelf reaches UNDER the board edge
 rib_h     = 2.5;    // height of locating ribs above the board top
 fillet    = 2.0;    // outer vertical edge rounding
 
-// Board retention is now handled by the REMOVABLE END CAPS (see below): each cap
-// carries small clamp lips that hook over the board's short-edge corners, and
-// you fit the board with the caps OFF, then screw them on. The old in-base snap
-// clips are removed (they blocked the board from seating). Left here disabled.
-clip_enable = false;
-clip_w = 6.0; clip_t = 2.0; clip_ov = 0.8; clip_h = 1.8;
-clip_x = [10, 30]; clip_end = false; clip_end_w = 3.5;
-
 // -----------------------------------------------------------------------------
-//  REMOVABLE END CAPS
-//  The board has connectors on BOTH short ends (HDMI on -X, USB-C on +X) that
-//  hang below the flipped PCB, so it cannot be dropped or slid into a closed
-//  box. The two short walls are therefore separate bolt-on caps: fit the board
-//  onto the shelf (both ends open), slide each cap on over its connectors, and
-//  screw it down. Each cap carries that end's connector cutouts + clamp lips
-//  that hold the board's short-edge corners down.
+//  REMOVABLE END CAPS  (the two short walls print separately and hook on)
+//  The board has connectors on BOTH short ends that overhang its edges, so it
+//  cannot be lowered into a closed box. Assembly instead:
+//    1. drop the boards into the open-ended tray (nothing overhangs them),
+//    2. HOOK each cap on: hold it ~endcap_drop high, slide it inward so the
+//       connector noses pass through their openings, then drop it down so its
+//       bottom edge lands in the floor channel (outer sill + inner rib —
+//       bottom locked in AND out),
+//    3. the lid closes over the cap tops and ONE M3 screw per cap goes down
+//       through the lid into the cap's top boss (top locked; screws reachable
+//       from above; the boss sits over the DB9, in free air).
+//  Each cap carries that end's connector cutouts, the DB9 mount, and small
+//  clamp lips that land on bare PCB edge areas to hold the boards down
+//  (placed to clear the pin headers, HDMI solder tabs, SD slot and USB stack).
 // -----------------------------------------------------------------------------
 endcap_enable = true;
-endcap_corner = 6.0;    // Y kept as solid base corner at each end; the span
-                        // between the two corners is the cap opening
-endcap_clear  = 0.35;   // fit clearance around the cap
-endcap_lip_ov = 1.6;    // how far a clamp lip reaches over the board top edge
-endcap_lip_w  = 6.0;    // clamp-lip width (Y) at each board corner
-endcap_foot   = 8.0;    // inward foot length carrying the hold-down screw boss
+endcap_corner = 6.0;    // solid base wall kept at each corner (Y)
+endcap_clear  = 0.35;   // side clearance of the cap in its opening
+endcap_drop   = 3.0;    // hook-over drop height (openings for protruding
+                        // connectors get this much extra bottom margin)
+sill_t        = 0.9;    // outer sill: thin skirt outside each cap bottom edge
+sill_h        = 2.8;    //   ... its height above the floor top
+capr_t        = 1.6;    // inner floor rib (stops the cap falling inward)
+capr_h        = 2.5;    //   ... its height above the floor top
+endcap_lip_ov = 1.6;    // clamp lips: reach over the PCB edge (bare area only)
+endcap_lip_h  = 2.0;    //   ... lip thickness (Z)
+endcap_lip_cl = 0.3;    //   ... vertical play over the PCB top
 
-// Rear ventilation grill: the same 45-degree slot band as the lid, on the back
-// (+Y) wall (vertical). Uses the vent_* parameters above.
+// Rear ventilation grill: the same 45-degree slot band as the lid, but on the
+// back (+Y) wall at the BOTTOM — the board components face the floor, so the
+// hot zone is low. Uses the vent_* parameters above.
 rear_vent_enable = true;
-rear_vent_h      = 14.0;  // band height on the wall (Z)
-rear_vent_z_top  = 4.0;   // gap from the wall top down to the band
+rear_vent_h      = 14.0;  // band height (Z)
+rear_vent_z0     = 3.0;   // band bottom, measured from the outside floor
 
 // Feet: lift the case so the floor button holes / LED window clear the desk
 // (and the down-facing LEDs are visible). Four pads under the corner lugs.
 foot_enable = true;
 foot_h      = 4.0;
 
-lip_depth = 6.0;    // how deep the lid lip plugs into the base
-lip_clear = 0.35;   // clearance so the lid lip slides in
+lip_depth = 2.5;    // how deep the lid alignment bars reach into the base.
+                    // Kept SHALLOW: the Dupont plugs on the outer pin rows rise
+                    // to ~3 mm below the wall top, so a deep lip would hit them.
+lip_clear = 0.35;   // clearance so the bars slide in
 
 // -----------------------------------------------------------------------------
 //  SCREW-DOWN LID  (four external corner lugs; M3 self-tapping)
@@ -283,12 +290,23 @@ db9_z = base_h * db9_z_frac;
 lug_pts = [[-lug_off, -lug_off], [out_x + lug_off, -lug_off],
            [out_x + lug_off, out_y + lug_off], [-lug_off, out_y + lug_off]];
 
-// End-cap opening Y-span (between the solid base corners) and the hold-down
-// screw-boss X positions (just inside each cap, under the boards at floor level).
-cap_y0    = endcap_corner;
-cap_y1    = out_y - endcap_corner;
-cap_boss_x = [wall + endcap_foot/2, out_x - wall - endcap_foot/2];  // [-X, +X]
-cap_boss_h = floor_th + 5;                                          // boss height
+// End-cap opening Y-span (between the solid base corners).
+cap_y0 = endcap_corner;
+cap_y1 = out_y - endcap_corner;
+
+// Connector centrelines (shared by the cap cutouts and the channel notches).
+hdmi_cy = tn_y0 + tn_wid/2 + hdmi_y_off;
+usbc_cy = tn_y0 + tn_wid/2 + usbc_y_off;
+sd_cy   = tn_y0 + tn_wid/2 + sd_y_off;
+
+// Floor-channel notches: where plugs pass at floor level, the sill and the
+// inner rib are cut away so nothing blocks the connectors.
+notch_hdmi = [hdmi_cy - hdmi_w/2 - 1.5, hdmi_cy + hdmi_w/2 + 1.5];
+notch_usbc = [min(usbc_cy - usbc_w/2, sd_cy - sd_w/2) - 1.5,
+              max(usbc_cy + usbc_w/2, sd_cy + sd_w/2) + 1.5];
+
+// Cap hold-down screws: vertical, through the lid into each cap's top boss.
+cap_scr_x = [3.2, out_x - 3.2];      // screw axes (x); both at y = db9_y
 
 // =============================================================================
 //  HELPER MODULES
@@ -399,43 +417,26 @@ module support_ledge(x0, y0, bx, by, z_bottom, z_top, w) {
 
 // Tang shelf: two strips along the LONG (front/back) edges only, reaching
 // shelf_grip under the board so it actually rests on them. The SHORT ends are
-// left clear because the down-facing HDMI / USB-C connectors live there.
+// left clear (down-facing HDMI / USB-C live there), and the strips stop short
+// of the cap openings so the end caps can drop past them. The back strip is
+// narrow so it also clears the cap channel and the rear locating ribs.
 module tang_support() {
-    h = tn_z0 - floor_th;
-    for (yy = [tn_y0 - ledge_w,                 // front (-Y) strip
-               tn_y0 + tn_wid - shelf_grip])    // back  (+Y) strip
-        translate([tn_x0 - ledge_w, yy, floor_th])
-            cube([tn_len + 2*ledge_w, ledge_w + shelf_grip, h]);
+    h   = tn_z0 - floor_th;
+    xs  = wall + endcap_clear + 0.1;             // clear of both cap planes
+    xe  = out_x - wall - endcap_clear - 0.1;
+    translate([xs, wall, floor_th])              // front strip (from the wall)
+        cube([xe - xs, (tn_y0 + shelf_grip) - wall, h]);
+    translate([xs, tn_y0 + tn_wid - shelf_grip, floor_th])   // back strip
+        cube([xe - xs, shelf_grip + 0.4, h]);
 }
 
-// Retention clips that hook over the Tang's TOP edge (board captured in base).
-// Front (-Y): rigid hooks off the front wall. Back (+Y): free-standing flexible
-// fingers rising from the floor. Hook overhang = clip_ov (calibrate vs headers).
-module tang_clips() {
-    if (clip_enable) {
-        // long-edge clips (HDMI half): hold the board down along both long edges
-        for (lx = clip_x) {
-            x = tn_x0 + lx;
-            // front (-Y): rigid hook off the wall, over the board front edge
-            translate([x - clip_w/2, wall, tn_top])
-                cube([clip_w, (tn_y0 + clip_ov) - wall, clip_h]);
-            // back (+Y): free-standing finger up from the floor + inward hook
-            translate([x - clip_w/2, tn_y0 + tn_wid + clear, floor_th])
-                cube([clip_w, clip_t, (tn_top + clip_h) - floor_th]);
-            translate([x - clip_w/2, tn_y0 + tn_wid - clip_ov, tn_top])
-                cube([clip_w, clip_ov + clear + clip_t, clip_h]);
-        }
-        // USB-C (+X) short-edge hold-downs near each corner: hooks off the +X
-        // wall over the board's +X edge, holding the BUTTON end down. Placed at
-        // the corners so they clear the centred microSD opening (and S1/S2 sit
-        // ~3 mm inboard, below the floor, so the hooks never touch them).
-        if (clip_end) {
-            ex = tn_x0 + tn_len;                 // board +X edge
-            for (yy = [tn_y0 + 0.5, tn_y0 + tn_wid - 0.5 - clip_end_w])
-                translate([ex - clip_ov, yy, tn_top])
-                    cube([(out_x - wall) - (ex - clip_ov), clip_end_w, clip_h]);
-        }
-    }
+// Rear Y-stops for the Tang: two short ribs in the gap between the Tang and
+// the CH9350 (the front wall is the forward stop). Placed clear of the rear
+// Dupont row and of the CH9350's front locating rib.
+module tang_stop_ribs() {
+    for (rx = [16, 38])
+        translate([tn_x0 + rx, tn_y0 + tn_wid + 0.55, floor_th])
+            cube([6, 1.4, (tn_top + 2) - floor_th]);
 }
 
 // Four feet under the corner lugs so the floor button/LED openings clear the
@@ -477,12 +478,13 @@ module db9_shape(d) {
             cylinder(h = d, d = db9_screw_d);
 }
 
-// Vertical 45-degree vent band on the back (+Y) wall (mirrors the lid grill).
+// Vertical 45-degree vent band on the back (+Y) wall (mirrors the lid grill),
+// at the BOTTOM of the wall — the components face down, so heat collects low.
 // Built in a local frame (localX = case X, localY = case Z, localZ = depth),
 // then stood up onto the +Y wall with rotate([90,0,0]) (depth runs into -Y).
 module rear_vent(depth) {
-    vz1 = base_h - rear_vent_z_top;
-    vz0 = vz1 - rear_vent_h;
+    vz0 = rear_vent_z0;
+    vz1 = vz0 + rear_vent_h;
     vx0 = vent_margin;
     vx1 = out_x - vent_margin;
     r   = vent_slot_w/2;
@@ -521,57 +523,95 @@ module base_cutouts() {
 }
 
 // Connector cutouts carried by an END CAP.  s = -1 (HDMI/-X) or +1 (USB-C/+X).
+// Openings for connectors that PROTRUDE past the board edge (HDMI, USB-C, the
+// USB stack) carry >= endcap_drop of bottom margin so the raised cap can slide
+// over them during the hook-on move.
 module endcap_cutouts(s) {
     conn_top = tn_z0 + conn_drop;
     ix = (s < 0) ? -1 : (out_x - wall - 1);      // cutout x-origin for that wall
     if (s < 0) {
         // HDMI (centred on Tang width), dropping from the under-face
-        translate([ix, tn_y0 + tn_wid/2 + hdmi_y_off - hdmi_w/2, conn_top - hdmi_h])
+        translate([ix, hdmi_cy - hdmi_w/2, conn_top - hdmi_h])
             cube([wall + 2, hdmi_w, hdmi_h]);
     } else {
         // USB-C
-        translate([ix, tn_y0 + tn_wid/2 + usbc_y_off - usbc_w/2, conn_top - usbc_h])
+        translate([ix, usbc_cy - usbc_w/2, conn_top - usbc_h])
             cube([wall + 2, usbc_w, usbc_h]);
         // microSD (up-face; reaches down to overlap USB-C -> one stepped opening)
         if (sd_enable)
-            translate([ix, tn_y0 + tn_wid/2 + sd_y_off - sd_w/2, tn_z0])
+            translate([ix, sd_cy - sd_w/2, tn_z0])
                 cube([wall + 2, sd_w, (tn_top + sd_h) - tn_z0]);
-        // CH9350 stacked dual USB-A
-        translate([ix, ch_y0 + ch_wid/2 - usba_w/2, ch_top + usba_z_off - conn_drop])
-            cube([wall + 2, usba_w, usba_h]);
+        // CH9350 stacked dual USB-A (bottom extended by endcap_drop)
+        translate([ix, ch_y0 + ch_wid/2 - usba_w/2,
+                   ch_top + usba_z_off - conn_drop - endcap_drop])
+            cube([wall + 2, usba_w, usba_h + endcap_drop]);
     }
-    // DB9 joystick port for this end (rear bay)
+    // DB9 joystick port for this end (mounted ON the cap, moves with it)
     if (db9_enable) translate([ix, db9_y, db9_z]) db9_shape(wall + 2);
 }
 
 // =============================================================================
 //  REMOVABLE END CAP.  s = -1 (HDMI/-X end) or +1 (USB-C/+X end).
+//  A flat panel (prints outer-face-down, no supports) with: that end's
+//  connector cutouts, clamp lips that land on bare PCB edge areas, and a top
+//  boss that takes the vertical hold-down screw through the lid.
 // =============================================================================
 module endcap(s) {
-    cap_x0  = (s < 0) ? 0 : out_x - wall;                 // cap outer-face x
-    inner_x_face = (s < 0) ? wall : (out_x - wall);       // cap inner face
-    board_edge   = (s < 0) ? tn_x0 : (tn_x0 + tn_len);    // board short edge
-    lip_len = endcap_lip_ov + clear;
-    lip_x0  = (s < 0) ? wall : (out_x - wall - lip_len);
-    foot_x0 = (s < 0) ? wall : (out_x - wall - endcap_foot);
-    fx      = cap_boss_x[(s < 0) ? 0 : 1];
+    x0    = (s < 0) ? 0 : out_x - wall;                    // plate outer face
+    lipw  = endcap_lip_ov + clear;                         // lip reach past plate
+    lipx  = (s < 0) ? wall : out_x - wall - lipw;
+    bossx = (s < 0) ? wall : out_x - wall - 4;
+    scx   = cap_scr_x[(s < 0) ? 0 : 1];
     difference() {
         union() {
-            // cap plate (fits between the base corners, floor -> wall top)
-            translate([cap_x0, cap_y0, floor_th])
-                cube([wall, cap_y1 - cap_y0, base_h - floor_th]);
-            // clamp lips over the board's two short-edge corners (hold it down)
-            for (yy = [tn_y0, tn_y0 + tn_wid - endcap_lip_w])
-                translate([lip_x0, yy, tn_top])
-                    cube([lip_len, endcap_lip_w, 2]);
-            // hold-down ear sitting on the base boss (screw goes down into it)
-            translate([foot_x0, out_y/2 - 4.5, cap_boss_h])
-                cube([endcap_foot, 9, 1.6]);
+            // plate: spans the base opening, floor top -> wall top
+            translate([x0, cap_y0 + endcap_clear, floor_th])
+                cube([wall, (cap_y1 - cap_y0) - 2*endcap_clear,
+                      base_h - floor_th]);
+            if (s < 0) {
+                // Tang HDMI end: two lips on the bare bands between the header
+                // rows and the HDMI solder tabs
+                for (p = [[2.6, 3.2], [15.9, 3.7]])
+                    translate([lipx, tn_y0 + p[0], tn_top + endcap_lip_cl])
+                        cube([lipw, p[1], endcap_lip_h]);
+            } else {
+                // Tang USB-C end: one lip on the bare strip between the SD slot
+                // and the rear header row
+                translate([lipx, tn_y0 + 17.5, tn_top + endcap_lip_cl])
+                    cube([lipw, 2.2, endcap_lip_h]);
+                // CH9350: two lips at its corners beside the USB stack
+                for (yy = [ch_y0 + 0.2, ch_y0 + ch_wid - 2.2])
+                    translate([lipx, yy, ch_top + endcap_lip_cl])
+                        cube([lipw, 2.0, endcap_lip_h]);
+            }
+            // top screw boss (under the lid, in free air above the DB9 body)
+            translate([bossx, db9_y - 4, base_h - 6]) cube([4, 8, 6]);
         }
         endcap_cutouts(s);
-        // hold-down screw clearance hole through the ear
-        translate([fx, out_y/2, cap_boss_h - 1])
-            cylinder(h = 4, d = screw_clear_d);
+        // pilot for the lid screw, down into the boss
+        translate([scx, db9_y, base_h - 5.5])
+            cylinder(h = 6.5, d = screw_pilot_d);
+    }
+}
+
+// Floor channel that captures a cap's bottom edge: a thin OUTER SILL (skirt
+// just outside the wall plane) + an INNER RIB, both notched where plugs pass.
+// The cap hooks over the sill while raised, then drops in between them.
+module cap_channel(s) {
+    notch = (s < 0) ? notch_hdmi : notch_usbc;
+    sx = (s < 0) ? -sill_t : out_x - 0.02;
+    rx = (s < 0) ? wall + endcap_clear + 0.1
+                 : out_x - wall - endcap_clear - 0.1 - capr_t;
+    difference() {
+        union() {
+            translate([sx, 3.5, 0])
+                cube([sill_t + 0.02, out_y - 7, floor_th + sill_h]);
+            translate([rx, cap_y0, floor_th])
+                cube([capr_t, cap_y1 - cap_y0, capr_h]);
+        }
+        translate([-sill_t - 1, notch[0], -1])
+            cube([out_x + 2*sill_t + 2, notch[1] - notch[0],
+                  floor_th + sill_h + 2]);
     }
 }
 
@@ -597,27 +637,33 @@ module base() {
             corner_lugs(base_h);
             feet();
             tang_support();                              // board rests on these
-            if (clip_enable) tang_clips();
-            // CH9350 (component-up): perimeter shelf + locating ribs.
-            support_ledge(ch_x0, ch_y0, ch_len, ch_wid, floor_th, ch_z0, ledge_w);
-            locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymin");
-            locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "ymax");
-            locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0, ch_top + rib_h, "xmin");
-            // end-cap hold-down bosses (rise from the floor, under the CH9350)
-            if (endcap_enable)
-                for (fx = cap_boss_x)
-                    translate([fx, out_y/2, floor_th])
-                        cylinder(h = cap_boss_h - floor_th, r = 3.4);
+            tang_stop_ribs();
+            // CH9350 (component-up): perimeter shelf + locating ribs, all
+            // trimmed clear of the two cap planes so the caps can drop in.
+            intersection() {
+                union() {
+                    support_ledge(ch_x0, ch_y0, ch_len, ch_wid,
+                                  floor_th, ch_z0, ledge_w);
+                    locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0,
+                               ch_top + rib_h, "ymin");
+                    locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0,
+                               ch_top + rib_h, "ymax");
+                    locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0,
+                               ch_top + rib_h, "xmin");
+                }
+                translate([wall + endcap_clear + 0.1, -1, 0])
+                    cube([out_x - 2*(wall + endcap_clear + 0.1),
+                          out_y + 2, base_h]);
+            }
+            // floor channels that capture the cap bottom edges
+            if (endcap_enable) for (s = [-1, 1]) cap_channel(s);
         }
         base_cutouts();
         front_bevel_cut();
-        // pilot holes: corner lugs (lid) + end-cap bosses
+        // pilot holes in the corner lugs (leave the floor solid)
         if (screw_enable)
             for (p = lug_pts) translate([p[0], p[1], floor_th])
                 cylinder(h = base_h, d = screw_pilot_d);
-        if (endcap_enable)
-            for (fx = cap_boss_x) translate([fx, out_y/2, floor_th - 1])
-                cylinder(h = cap_boss_h + 1, d = screw_pilot_d);
     }
 }
 
@@ -629,8 +675,12 @@ module lid() {
         union() {
             rrect_prism(out_x, out_y, lid_th, fillet);          // top plate
             corner_lugs(lid_th);                                // screw lugs
-            translate([wall + lip_clear, wall + lip_clear, -lip_depth])
-                cube([inner_x - 2*lip_clear, inner_y - 2*lip_clear, lip_depth]);
+            // two shallow alignment bars along the FRONT/BACK walls only
+            // (the cap regions at the ends stay clear; the corner screws are
+            // what actually fix the lid)
+            for (yy = [wall + lip_clear, out_y - wall - lip_clear - 2])
+                translate([8, yy, -lip_depth])
+                    cube([out_x - 16, 2, lip_depth + 0.01]);
             // embossed (raised) Fuji logo on the top face
             if (logo_enable && logo_raised)
                 translate([0, 0, lid_th - 0.01]) fuji_solid(logo_depth);
@@ -643,23 +693,16 @@ module lid() {
         // debossed (recessed) Fuji logo in the top face
         if (logo_enable && !logo_raised)
             translate([0, 0, lid_th - logo_depth]) fuji_solid(logo_depth + 1);
-        // hollow the lip so it is a thin rim (saves plastic, clears parts)
-        translate([wall + lip_clear + 2, wall + lip_clear + 2, -lip_depth - 1])
-            cube([inner_x - 2*lip_clear - 4, inner_y - 2*lip_clear - 4,
-                  lip_depth + 1]);
-
-        // (S1/S2 button holes and the LED window are now in the BASE FLOOR —
-        //  the board is mounted component-side-down — so the lid is a plain cover.)
-        // keep the rear cable notch open through the lid lip too
-        if (cable_enable) {
-            slot_cx = tn_x0 + tn_len*cable_slot_frac;
-            translate([slot_cx - cable_slot_w/2, out_y - wall - lip_clear - 3,
-                       -lip_depth - 1])
-                cube([cable_slot_w, wall + lip_clear + 5, lip_depth + 2]);
-        }
         // counterbored clearance holes through the corner lugs
         if (screw_enable)
             for (p = lug_pts) translate([p[0], p[1], -1]) {
+                cylinder(h = lid_th + 2, d = screw_clear_d);
+                translate([0, 0, lid_th - screw_head_h + 1])
+                    cylinder(h = screw_head_h + 1, d = screw_head_d);
+            }
+        // counterbored holes for the two end-cap hold-down screws
+        if (endcap_enable)
+            for (sx = cap_scr_x) translate([sx, db9_y, -1]) {
                 cylinder(h = lid_th + 2, d = screw_clear_d);
                 translate([0, 0, lid_th - screw_head_h + 1])
                     cylinder(h = screw_head_h + 1, d = screw_head_d);
@@ -672,17 +715,18 @@ module lid() {
 //  Print this first to confirm board fit & connector alignment.
 // =============================================================================
 module fitcheck() {
-    // tall enough to include the capture clips, and the DB9 ports when enabled
-    fc_h = max(tn_top + clip_h + 1,
-               db9_enable ? (db9_z + db9_apt_h/2 + db9_screw_d/2 + 3)
-                          : (floor_th + standoff + tn_thick + 3));
+    // Base sliced low (floor + channels + shelves + stubs; feet omitted so it
+    // sits flat), plus BOTH full end caps laid flat beside it — together they
+    // test every opening, the shelf fit, and the hook-on drop, cheaply.
+    fc_h = tn_top + 4;
     intersection() {
-        union() {
-            base();
-            if (endcap_enable) { endcap(-1); endcap(1); }   // test connector fit
-        }
-        translate([-1, -1, -foot_h - 1])
-            cube([out_x + 2, out_y + 2, fc_h + foot_h + 1]);
+        base();
+        translate([-sill_t - 1, -1, 0])
+            cube([out_x + 2*sill_t + 2, out_y + 2, fc_h]);
+    }
+    if (endcap_enable) {
+        translate([-6, 0, 0])            rotate([0, -90, 0]) endcap(-1);
+        translate([out_x + 6, 0, out_x]) rotate([0,  90, 0]) endcap(1);
     }
 }
 
@@ -717,7 +761,7 @@ module assembly() {
     color("DarkSlateGray") base();
     // removable end caps (exploded outward along X so you can see them)
     if (endcap_enable) {
-        ex = show_lid ? 12 : 0;                 // explode distance
+        ex = show_lid ? 14 : 0;                 // explode distance
         color("SteelBlue") translate([-ex, 0, 0]) endcap(-1);
         color("SteelBlue") translate([ ex, 0, 0]) endcap(1);
     }
