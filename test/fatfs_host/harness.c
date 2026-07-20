@@ -24,6 +24,7 @@ bool atr_mounted[ATR_DRIVES] = {false, false, false, false};
 bool atr_readonly[ATR_DRIVES] = {false, false, false, false};
 uint16_t atr_sector_size[ATR_DRIVES] = {128, 128, 128, 128};
 uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16, 16, 16};
+bool atr_dd_fullboot[ATR_DRIVES] = {false, false, false, false};
 int mount_silent = 0;
 bool xex_active = false;
 FIL xex_file;
@@ -381,6 +382,42 @@ int main(int argc, char **argv) {
             }
         }
         printf("  never filled up (image too big for this test)\n");
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_ddlayout")) {          /* both DD layout conventions */
+        /* argv[3] = packed-boot image, argv[4] = full-boot image; generator
+         * tagged every sector's first 4 bytes: 'S' lo hi layout */
+        if (mount_atr(argv[3], 0)) die("mount packed");
+        if (mount_atr(argv[4], 1)) die("mount fullboot");
+        if (atr_sector_size[0] != 256 || atr_sector_size[1] != 256) die("not DD");
+        if (atr_dd_fullboot[0]) die("packed misdetected as fullboot");
+        if (!atr_dd_fullboot[1]) die("fullboot layout not detected");
+        static const uint32_t dsecs[] = {1, 2, 3, 4, 5, 100, 719, 720};
+        for (int sl = 0; sl < 2; sl++)
+            for (int i = 0; i < 8; i++) {
+                uint8_t rbuf[256]; int rlen;
+                uint32_t s = dsecs[i];
+                if (atr_read_sector(sl, s, rbuf, &rlen)) die("dd read");
+                if (rlen != (s <= 3 ? 128 : 256)) die("dd wire length");
+                if (rbuf[0] != 0x53 || rbuf[1] != (s & 0xFF) ||
+                    rbuf[2] != (s >> 8) || rbuf[3] != sl) {
+                    printf("FAIL: slot %d sector %u tag %02x %02x %02x %02x\n",
+                           sl, s, rbuf[0], rbuf[1], rbuf[2], rbuf[3]);
+                    return 1;
+                }
+            }
+        /* writes honor the layout: write+verify, then confirm untouched
+         * neighbors (boot sector 3, data sector 5) kept their tags */
+        uint32_t wsecs[4] = {2, 4, 100, 720};
+        for (int sl = 0; sl < 2; sl++) {
+            if (write_verify(sl, wsecs, 4)) return 1;
+            uint8_t rbuf[256]; int rlen;
+            if (atr_read_sector(sl, 5, rbuf, &rlen)) die("neighbor read 5");
+            if (rbuf[0] != 0x53 || rbuf[1] != 5) die("write clobbered sector 5");
+            if (atr_read_sector(sl, 3, rbuf, &rlen)) die("neighbor read 3");
+            if (rbuf[0] != 0x53 || rbuf[1] != 3) die("write clobbered boot sector 3");
+        }
         return 0;
     }
 

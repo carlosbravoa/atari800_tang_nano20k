@@ -23,6 +23,28 @@ open(sys.argv[1], 'wb').write(hdr + bytearray(body))
 EOF
 }
 
+mkatr_dd() {  # $1=path $2=layout (0=packed 384-B data origin, 1=768-B boot area)
+              # 720x256 DD ATR; boot sectors 1-3 packed at 0/128/256 in BOTH
+              # layouts (HW-proven MyDOS convention); every sector tagged
+              # 'S' lo hi layout at its start.
+python3 - "$1" "$2" << 'EOF'
+import sys, struct
+full = int(sys.argv[2])
+n = 720
+size = 16 + n*256 if full else 16 + 384 + (n-3)*256
+paras = (size - 16) // 16
+hdr = struct.pack('<HHH', 0x0296, paras & 0xFFFF, 256) + bytes([paras >> 16]) + bytes(9)
+body = bytearray(size - 16)
+for s in range(1, n + 1):
+    if s <= 3:
+        off = (s - 1) * 128
+    else:
+        off = (s - 1) * 256 if full else 384 + (s - 4) * 256
+    body[off:off+4] = bytes([0x53, s & 0xFF, s >> 8, full])
+open(sys.argv[1], 'wb').write(hdr + body)
+EOF
+}
+
 fresh() {  # $1=image  $2=size-MB
     rm -f "$1"; truncate -s "${2}M" "$1"
     $MKFS "$1" > /dev/null || exit 1
@@ -102,6 +124,14 @@ for i in 1 2 3 4; do ./fatfs_host $IMG put a.atr /D$i.ATR > /dev/null; done
 # 13. H: device: create/write/read/append/dir/rename/delete/sanitize
 fresh $IMG 64
 ./fatfs_host $IMG s_hdd > /dev/null; check "s_hdd          " $? $IMG
+
+# 14. DD layouts: packed vs full-boot-sector images (the MyDOS-in-the-wild
+#     flavor — sectors 4+ were served 384 bytes off before atr_dd_fullboot)
+fresh $IMG 64
+mkatr_dd dd_packed.atr 0; mkatr_dd dd_full.atr 1
+./fatfs_host $IMG put dd_packed.atr /DDP.ATR > /dev/null
+./fatfs_host $IMG put dd_full.atr /DDF.ATR > /dev/null
+./fatfs_host $IMG s_ddlayout /DDP.ATR /DDF.ATR > /dev/null; check "s_ddlayout     " $? $IMG
 
 # 8. INFORMATIONAL: the pre-guard bug — two raw write-FILs on one file.
 #    Not a pass/fail gate; prints whether fsck sees damage (it demonstrates

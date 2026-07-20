@@ -102,6 +102,10 @@ bool atr_readonly[ATR_DRIVES] = {false, false, false, false};  // write-open fai
 uint16_t atr_sector_size[ATR_DRIVES] = {128, 128, 128, 128};
 // Byte offset of sector 1 in the image: 16 for .atr (header), 0 for raw .xfd.
 uint16_t atr_hdr_off[ATR_DRIVES] = {16, 16, 16, 16};
+// DD images come in two layouts: standard packs boot sectors 1-3 as 128 B
+// (data area at +384); "full-boot" stores them as 256-B slots (MyDOS images in
+// the wild use this). Detected at mount; wrong guess = sectors 4+ off by 384.
+bool atr_dd_fullboot[ATR_DRIVES] = {false, false, false, false};
 
 // XEX (Atari binary executable) state — served as a virtual bootable disk on D1:
 // only. When xex_active, D1: STATUS/READ are answered from the baked-in 6502 boot
@@ -635,6 +639,10 @@ int mount_atr(char *filepath, int slot) {
             return -3;
         }
         atr_hdr_off[slot] = 0;
+        // 183936 = 384 + 717*256 = the packed layout; a full-boot DD dump would
+        // be 184320 and lands in the 128-B branch above (harmless: unmountable
+        // geometry either way — keep .xfd behavior unchanged).
+        atr_dd_fullboot[slot] = false;
         uart_printf("XFD D%d %s ss %d\n", slot+1, filepath, atr_sector_size[slot]);
         atr_mounted[slot] = true;
         if (atr_readonly[slot] && !mount_silent)
@@ -667,33 +675,40 @@ int mount_atr(char *filepath, int slot) {
         return -3;
     }
     atr_hdr_off[slot] = 16;
+    // DD layout detection (Altirra's heuristic): data bytes % 256 == 0 means the
+    // boot sectors occupy full 256-B slots; the packed layout leaves rem 128.
+    atr_dd_fullboot[slot] = (atr_sector_size[slot] == 256) &&
+                            ((f_size(&atr_file[slot]) - 16) % 256 == 0);
 
-    uart_printf("ATR D%d %s ss %d\n", slot+1, filepath, atr_sector_size[slot]);
+    uart_printf("ATR D%d %s ss %d%s\n", slot+1, filepath, atr_sector_size[slot],
+                atr_dd_fullboot[slot] ? " fullboot" : "");
     atr_mounted[slot] = true;
     if (atr_readonly[slot] && !mount_silent)
         message("Disk is read-only\nWrites will fail (144)", 1);
     return 0;
 }
 
+// Sector -> file offset + wire length for the mounted image. DD boot sectors
+// 1-3 are 128 B on the wire AND stored packed in the first 384 file bytes in
+// BOTH layouts (HW-proven on a real MyDOS 4.5 image: slot-start boot reads
+// froze its loader; packed reads run it). atr_dd_fullboot only moves the
+// data-area origin: a 768-B boot area (384 used + 384 pad) vs packed 384.
+static uint32_t atr_sector_offset(int slot, uint32_t sector_num, int *len) {
+    uint32_t base = atr_hdr_off[slot];   // 16 for .atr, 0 for .xfd
+    if (atr_sector_size[slot] == 128 || sector_num <= 3) {
+        *len = 128;
+        return base + (sector_num - 1) * 128;
+    }
+    *len = 256;
+    return base + (atr_dd_fullboot[slot] ? (sector_num - 1) * 256
+                                         : 384 + (sector_num - 4) * 256);
+}
+
 int atr_read_sector(int slot, uint32_t sector_num, uint8_t *buf, int *sector_len) {
     if (!atr_mounted[slot]) return -1;
-    
-    uint32_t base = atr_hdr_off[slot];   // 16 for .atr, 0 for .xfd
-    uint32_t offset = 0;
-    int len = 128;
-    if (atr_sector_size[slot] == 128) {
-        offset = base + (sector_num - 1) * 128;
-        len = 128;
-    } else { // 256 bytes
-        if (sector_num <= 3) {
-            offset = base + (sector_num - 1) * 128;
-            len = 128;
-        } else {
-            offset = base + 384 + (sector_num - 4) * 256;
-            len = 256;
-        }
-    }
-    
+
+    int len;
+    uint32_t offset = atr_sector_offset(slot, sector_num, &len);
     *sector_len = len;
 
     // Out-of-range = error like a real drive. CRITICAL: never f_lseek past
@@ -727,7 +742,11 @@ int mount_xex(char *filepath) {
     int r = f_open(&xex_file, filepath, FA_READ);
     if (r != FR_OK) {
         uart_printf("xex open %s %d\n", filepath, r);
-        message("Cannot open XEX file", 1);
+        // mount_silent: a blocking popup on a BRIDGE-initiated mount parks
+        // main() in message()'s key-wait — remote control wedges until a
+        // physical Enter (HW-hit 2026-07-20). Remote callers report over
+        // serial instead; OSD attach keeps the popup.
+        if (!mount_silent) message("Cannot open XEX file", 1);
         return r;
     }
     xex_len = f_size(&xex_file);
@@ -737,7 +756,7 @@ int mount_xex(char *filepath) {
     if (f_read(&xex_file, h, 2, &br) != FR_OK || br != 2 ||
         h[0] != 0xFF || h[1] != 0xFF) {
         f_close(&xex_file);
-        message("Not a valid .XEX\n(missing $FFFF header)", 1);
+        if (!mount_silent) message("Not a valid .XEX\n(missing $FFFF header)", 1);
         return -1;
     }
     // Patch the 24-bit remaining-byte length into the loader's init code.
@@ -782,19 +801,11 @@ int xex_read_sector(uint32_t sector_num, uint8_t *buf, int *sector_len) {
 
 int atr_write_sector(int slot, uint32_t sector_num, const uint8_t *buf, int len) {
     if (!atr_mounted[slot]) return -1;
-    
-    uint32_t base = atr_hdr_off[slot];   // 16 for .atr, 0 for .xfd
-    uint32_t offset = 0;
-    if (atr_sector_size[slot] == 128) {
-        offset = base + (sector_num - 1) * 128;
-    } else { // 256 bytes
-        if (sector_num <= 3) {
-            offset = base + (sector_num - 1) * 128;
-        } else {
-            offset = base + 384 + (sector_num - 4) * 256;
-        }
-    }
-    
+
+    int expect_len;
+    uint32_t offset = atr_sector_offset(slot, sector_num, &expect_len);
+    if (len != expect_len) return -6;    // caller/geometry disagree — never corrupt
+
     // same out-of-range guard as atr_read_sector (see comment there)
     if (sector_num == 0 || offset + len > f_size(&atr_file[slot])) return -5;
 
@@ -1756,7 +1767,11 @@ void sio_process_command(void) {
         }
         
         case 0x52: { // Read sector command
-            uart_printf("SIO RD %d\n", sector);
+            // NO per-sector uart_printf here: a working DOS reads hundreds of
+            // sectors and the log flood crash-loops the BL616's FT2232-emu USB
+            // stack (HW-proven 2026-07-20: first successful MyDOS boot = serial
+            // link started flapping). dbg_sio_read_count / dbg_last_sio_sector
+            // carry the same info to STATUS and the OSD debug line.
             dbg_sio_read_count++;
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = 128;
@@ -1804,8 +1819,7 @@ void sio_process_command(void) {
         
         case 0x57:   // Write sector command (with verify)
         case 0x50: { // Write sector command (without verify)
-            uart_printf("SIO WR %d\n", sector);
-            dbg_sio_write_count++;
+            dbg_sio_write_count++;   // no per-sector log — see READ (BL616 flood)
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = (atr_sector_size[slot] == 128 || sector <= 3) ? 128 : 256;
 
@@ -3127,15 +3141,26 @@ int main() {
                 int r = bridge_req;
                 bridge_req = 0;
                 if (r == 1) {
-                    // PC tool validates the $FFFF header before sending, so
-                    // mount_xex's blocking failure popups are not expected here.
-                    if (mount_xex(bridge_req_path) == 0) {
+                    // Remote mount: never popup (mount_silent), and retry once —
+                    // a fresh f_open right after the PUT's f_close failed
+                    // transiently on HW (same FatFs mid-state family as
+                    // load_option's documented remount-retry).
+                    mount_silent = 1;
+                    int mr = mount_xex(bridge_req_path);
+                    if (mr != 0) {
+                        delay(100);
+                        mr = mount_xex(bridge_req_path);
+                    }
+                    mount_silent = 0;
+                    if (mr == 0) {
                         IMG_GUARD("mount_xex");
                         char *base = strrchr(bridge_req_path, '/');
                         strncpy(mounted_atr_name[0],
                                 base ? base + 1 : bridge_req_path, 16);
                         mounted_atr_name[0][15] = '\0';
                         cold_boot_xex();
+                    } else {
+                        uart_printf("run: mount failed %d\n", mr);
                     }
                 } else if (r == 2) {
                     cold_boot_atari();
