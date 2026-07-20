@@ -67,27 +67,43 @@ def _esc(b):
     return b
 
 
-def text_to_pdf(text, path, cols=40, page=(612, 792), margin=54, ink=0.15):
-    """Render text (already ASCII) to `path`. cols=40 = 820-style width."""
+def text_to_pdf(text, path, cols=None, page=(612, 792), margin=54, ink=0.15):
+    """Render text (already ASCII) to `path`.
+
+    cols=None auto-sizes: word processors (AtariWriter) emit their own left
+    margin as spaces and format for 80-column printers — the common leading-
+    space margin is stripped (the sheet margin here replaces it) and the
+    column count picks 40 (820-style) or 80 (825-style) to fit the content."""
     pw, ph = page
+
+    # normalize + de-margin
+    lines = [l.rstrip() for l in text.replace("\r\n", "\n").split("\n")]
+    while lines and lines[-1] == "":
+        lines.pop()
+    nonblank = [l for l in lines if l.strip()]
+    if nonblank:
+        indent = min(len(l) - len(l.lstrip(" ")) for l in nonblank)
+        if indent:
+            lines = [l[indent:] if l.strip() else "" for l in lines]
+    maxlen = max((len(l) for l in lines), default=1)
+    if cols is None:
+        cols = 40 if maxlen <= 40 else 80 if maxlen <= 80 else maxlen
+
     cell_w = (pw - 2 * margin) / cols          # char cell width in points
     pitch = cell_w / 6.0                       # dot pitch (5 cols + 1 gap)
     dot = pitch * 0.92                         # dot diameter
     cell_h = pitch * 9                         # 7 rows + 2 leading
     lines_pp = int((ph - 2 * margin) // cell_h)
 
-    # wrap/normalize
-    lines = []
-    for raw in text.replace("\r\n", "\n").split("\n"):
+    # wrap anything still longer than the chosen width
+    wrapped = []
+    for raw in lines:
         if raw == "":
-            lines.append("")
+            wrapped.append("")
         while raw:
-            lines.append(raw[:cols])
+            wrapped.append(raw[:cols])
             raw = raw[cols:]
-    while lines and lines[-1] == "":
-        lines.pop()
-    if not lines:
-        lines = [""]
+    lines = wrapped or [""]
 
     pages = [lines[i:i + lines_pp] for i in range(0, len(lines), lines_pp)]
 
