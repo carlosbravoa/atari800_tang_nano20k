@@ -12,6 +12,7 @@ uint32_t CORE_ID;
 
 void uart_keyboard_poll(void);
 static void bridge_poll(void);   // serial bridge servicing (defined below)
+static void bridge_putc(uint8_t c);  // raw serial TX (defined below)
 extern int bridge_quiet;         // transfers own the serial TX channel (defined below)
 
 #define OPTION_FILE "/atari.ini"
@@ -1355,6 +1356,113 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
     return -4;
 }
 
+// ── N: network device (0x71) — SIO relay; the PC is the network processor ───
+// Atari side: OPEN(devicespec)/CLOSE/WRITE are forwarded to the PC as framed
+// events (0xA6 ev len16 payload sum8) on the serial link; READ serves from a
+// ring buffer the PC fills via bridge cmd 0x0B; STATUS = {conn,0,avail16}.
+// FujiNet-style optimistic OPEN: 'C' immediately, truth via STATUS.
+// No PC tool connected -> OPEN still 'C's but STATUS shows disconnected.
+#define NET_RING 512
+static uint8_t net_ring[NET_RING];
+static uint16_t net_head, net_tail;               // head=write(PC), tail=read(Atari)
+static uint8_t net_state_pc;                      // 0 closed, 1 open, 2 error (PC-set)
+
+static uint16_t net_avail(void) {
+    return (uint16_t)((net_head - net_tail) & (NET_RING - 1));
+}
+static uint16_t net_free(void) {
+    return NET_RING - 1 - net_avail();
+}
+
+// framed event to the PC: 0xA6 ev len16 payload sum8 (atomic on the main loop)
+static void net_event(uint8_t ev, const uint8_t *payload, uint16_t len) {
+    bridge_putc(0xA6);
+    bridge_putc(ev);
+    bridge_putc(len & 0xFF);
+    bridge_putc(len >> 8);
+    uint8_t sum = ev + (len & 0xFF) + (len >> 8);
+    for (uint16_t i = 0; i < len; i++) {
+        bridge_putc(payload[i]);
+        sum += payload[i];
+    }
+    bridge_putc(sum);
+}
+
+static void sio_net(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
+    uint8_t *buf = sio_sector_buf;
+    (void)aux2;
+    switch (cmd) {
+    case 0x4F: {                                   // OPEN: devicespec -> PC
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        net_head = net_tail = 0;
+        net_state_pc = 0;
+        net_event(1, buf, 64);
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250); sio_tx_byte(0x43);          // optimistic complete
+        break;
+    }
+    case 0x43: {                                   // CLOSE
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        net_event(2, 0, 0);
+        net_state_pc = 0;
+        delay_us(250); sio_tx_byte(0x43);
+        break;
+    }
+    case 0x57: {                                   // WRITE: payload -> PC
+        int len = aux1 ? aux1 : 128;
+        if (len > 128) len = 128;
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        if (sio_rx_data_frame(buf, len)) { delay_us(250); sio_tx_byte(0x4E); break; }
+        net_event(3, buf, len);
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250); sio_tx_byte(0x43);
+        break;
+    }
+    case 0x52: {                                   // READ from the ring
+        int len = aux1 ? aux1 : 128;
+        if (len > 128) len = 128;
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250);
+        if (net_avail() < (uint16_t)len) { sio_tx_byte(0x45); break; }
+        sio_tx_byte(0x43); sio_wait_tx_empty();
+        uint8_t sum = 0;
+        delay_us(250);
+        for (int i = 0; i < len; i++) {
+            uint8_t b = net_ring[net_tail];
+            net_tail = (net_tail + 1) & (NET_RING - 1);
+            sio_tx_byte(b);
+            uint16_t t = (uint16_t)sum + b;          // Atari end-around carry,
+            sum = (uint8_t)((t & 0xFF) + (t >> 8));  // computed while streaming
+        }
+        sio_tx_byte(sum); sio_wait_tx_empty();
+        break;
+    }
+    case 0x53: {                                   // STATUS
+        delay_us(250);
+        sio_tx_byte(0x41); sio_wait_tx_empty();
+        uint8_t st[4];
+        uint16_t av = net_avail();
+        st[0] = net_state_pc;
+        st[1] = 0;
+        st[2] = av & 0xFF;
+        st[3] = av >> 8;
+        uint8_t sum = sio_checksum(st, 4);
+        delay_us(250); sio_tx_byte(0x43); sio_wait_tx_empty();
+        delay_us(250);
+        for (int i = 0; i < 4; i++) sio_tx_byte(st[i]);
+        sio_tx_byte(sum); sio_wait_tx_empty();
+        break;
+    }
+    default:
+        break;                                     // SILENT on unknowns
+    }
+}
+
 // ── H: SIO protocol (device 0x72) — CIO-shaped file ops over /HDD ───────────
 // O(0x4F): aux1=mode(4 rd/8 wr/9 app/6 dir) aux2=handle; 64B name frame.
 // R(0x52): aux1=len(1..128) aux2=handle -> data frame len bytes (caller sizes
@@ -1535,6 +1643,14 @@ void sio_process_command(void) {
         return;
     }
     
+    // N: network device (0x71) — PC is the network processor
+    if (device == 0x71) {
+        dbg_last_sio_cmd = cmd;
+        sio_wait_cmd_high();
+        sio_net(cmd, aux1, aux2);
+        return;
+    }
+
     // H: hard-drive file device (0x72)
     if (device == 0x72) {
         dbg_last_sio_cmd = cmd;
@@ -2578,6 +2694,35 @@ static void bridge_poll(void) {
         break;
     case 0x07: bridge_cmd_type(); break;
     case 0x08: bridge_cmd_status(); break;
+    case 0x0B: {                     // NET_FEED: len16 + payload -> rx ring
+        bridge_quiet = 1;
+        int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
+        uint32_t len = (l0 < 0 || l1 < 0) ? 0xFFFFFFFF
+                     : ((uint32_t)l0 | ((uint32_t)l1 << 8));
+        if (len > 256 || net_free() < len) {
+            bridge_quiet = 0; bridge_putc('-'); break;
+        }
+        bridge_putc('+');            // in the tight loop from here — stream
+        int died = 0;
+        for (uint32_t i = 0; i < len; i++) {
+            int c = blrx_getc(2000);
+            if (c < 0) { died = 1; break; }
+            net_ring[net_head] = (uint8_t)c;
+            net_head = (net_head + 1) & (NET_RING - 1);
+        }
+        bridge_quiet = 0;
+        if (died) { bridge_putc('-'); break; }
+        bridge_putc('K');
+        bridge_putc(net_free() > 255 ? 255 : (uint8_t)net_free());
+        break;
+    }
+    case 0x0C: {                     // NET_STATE: 1 byte connection state
+        int c = blrx_getc(1000);
+        if (c < 0) { bridge_putc('-'); break; }
+        net_state_pc = (uint8_t)c;
+        bridge_putc('+');
+        break;
+    }
     case 0x09: bridge_cmd_peek(); break;
     case 0x0A: bridge_cmd_poke(); break;
     default: break;                  // tolerate stray bytes
