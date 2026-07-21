@@ -106,6 +106,29 @@ Ways to create/fill `HDD.ATR`:
 > disk ever gets scrambled, `send` the copy back and power-cycle. The PC-side
 > copy *is* your backup.
 
+### What if there's no `HDD.ATR`, or the wrong kind?
+
+The automount is **fail-safe and opt-in** — it can never break your boot:
+
+- **No `HDD.ATR` on the card:** nothing happens. D4: simply isn't there, the
+  machine boots normally, and a DOS that asks for D4: just gets "drive not
+  present." (Same for a corrupt or non-ATR file named `HDD.ATR` — the firmware
+  checks the ATR header and quietly declines to mount it.)
+- **A valid image, but formatted for a *different DOS* than the one you boot:**
+  D4: **does** mount — the firmware serves its sectors faithfully, exactly like
+  a floppy in a real drive — but your **running DOS may not read it**. Typical
+  symptoms: a garbled directory, "not a DOS disk," or `0000 FREE SECTORS`.
+  Common mismatches:
+  - a big **MyDOS** image while you booted **DOS 2.5** — DOS 2.5 caps at
+    90K/130K and can't address the extra space, and by default it only polls
+    D1:/D2: (you'd need `POKE 1802,15` for it to even see D4:);
+  - an image in a filesystem your DOS doesn't understand (e.g. SpartaDOS read
+    by MyDOS, or vice-versa).
+
+  **The cure:** format `HDD.ATR` with the *same* DOS you boot. **MyDOS 4.5x is
+  the recommended pairing** — format the image with MyDOS and boot MyDOS, and
+  its full capacity is usable.
+
 ---
 
 ## 5. The H: device — a folder shared with the PC
