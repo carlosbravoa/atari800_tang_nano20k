@@ -1,6 +1,6 @@
 # Atari 800 — Tang Nano 20K Port
 
-> This project started as a vibe-coding experiment with no shame. But now we have a full Atari800XL/130XE running with full NTSC Atari speed, low-latency jitter-free HDMI (now a genlocked line-buffer, with optional CRT scanlines), keyboard, joystick, ATR disks, cartridges and `.xex` executables — plus a PC Link over the USB-C cable (send files, boot builds, type remotely, even print from AtariWriter to a PDF) — all on this really small device. It's a blast to play with. It took a lot of effort to get the coding agents focused on the right challenge/issue. Enjoy it (because I am)!
+> This project started as a vibe-coding experiment with no shame. But now we have a full Atari800XL/130XE running with full NTSC Atari speed, low-latency jitter-free HDMI (now a genlocked line-buffer, with optional CRT scanlines), keyboard, joystick, ATR disks (four drives, MyDOS-ready, with an always-mounted hard-drive image), cartridges and `.xex` executables — plus a PC Link over the USB-C cable (send files, boot builds, type remotely, share an H: folder between the Atari and the PC, even print from AtariWriter to a PDF) — all on this really small device. It's a blast to play with. It took a lot of effort to get the coding agents focused on the right challenge/issue. Enjoy it (because I am)!
 
 
 <img width="400" height="400" alt="Eureka! Atari running Montezuma from an ATR Disk" src="https://github.com/user-attachments/assets/20121280-905e-4c15-8795-352eec9abf01" />
@@ -58,7 +58,10 @@ the keyboard alone covers everything.
 - **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F12 = OSD menu**
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
-- **SIO disk emulation, two drives** — mount `.atr` and raw `.xfd` images as **D1: and D2:** from the SD card; live mount/swap while the machine runs
+- **SIO disk emulation, four drives** (v2.8) — mount `.atr` and raw `.xfd` images as **D1:–D4:** from the SD card (D1:/D2: in the OSD; D3:/D4: serve automounts and the PC link); live mount/swap while the machine runs
+- **Double-density disks, both layouts** (v2.8) — 256-byte-sector ATRs work in **both** DD file conventions (packed and full-boot-area) — **MyDOS 4.5 images now boot**
+- **Always-on hard drive on D4:** (v2.8) — put a big ATR named **`/HDD.ATR`** on the SD card and it auto-mounts on **D4:** at every power-on: your DOS sees a permanent extra drive (MyDOS can format ATRs up to 16 MB — a real hard disk for file storage that survives reboots, no OSD interaction ever needed)
+- **H: file device — a folder shared with the PC** (v2.8) — a CIO handler (installed from the PC with `atari.py hdd-install`) adds the classic **H:** device: `OPEN #1,8,0,"H:NOTES.TXT"`, `LIST "H:PROG.LST"`/`ENTER "H:PROG.LST"`, directory via `OPEN #1,6,0,"H:"`, delete via `XIO 33`. Files land as **plain files in `/HDD` on the SD's FAT filesystem** — the same folder the PC link writes to (`atari.py send --text notes.txt HDD/NOTES.TXT`), so the Atari and the PC share one file space. Handler is session-scoped (RESET clears it; re-run the install)
 - **Reliable disk writes** (v2.4) — SAVE/write from DOS works on both drives: correct SIO data-frame ACK timing, out-of-range-sector protection, and write-protection honored end-to-end (a PC-inherited read-only attribute is auto-cleared when possible; otherwise the drive shows **"(RO)"**, reports write-protect in its status, and writes return error 144 like a real protected disk)
 - **DOS disk formatting** (v2.4) — the SIO FORMAT commands are implemented, so DOS 2.5's "Format disk" (and friends) work on mounted images
 - **New blank disk from the OSD** (v2.4) — each drive menu can create a fresh 90K ATR (`BLANKnn.ATR`) on the SD card and mount it; format it from DOS and you have a writable disk without ever touching a PC
@@ -100,7 +103,10 @@ the keyboard alone covers everything.
 | F9 soft-reset hotkey | ✅ Working |
 | DB9 joystick (wired to GPIO pins) | ✅ Working |
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
-| SIO disk emulation (.atr / .xfd), **D1: + D2:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs |
+| SIO disk emulation (.atr / .xfd), **D1:–D4:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs (v2.8: four slots) |
+| Double-density ATRs, both layouts (MyDOS 4.5 boots) | ✅ Working (v2.8) |
+| `/HDD.ATR` hard-drive automount on D4: | ✅ Working (v2.8) |
+| H: file device (`/HDD` folder shared Atari↔PC) | ✅ Working (v2.8) — session-scoped handler via `hdd-install` |
 | Live OSD overlay (game runs behind menu, inputs masked) | ✅ Working |
 | Core timing — exact NTSC speed (28.6875 MHz / `cycle_length=16`) | ✅ Working |
 | Cartridge images (.car / .rom) | ✅ Working — 8K/16K, banked, and 4 MB MegaCart verified on hardware; 50 mapper types, up to 4 MB |
@@ -155,6 +161,10 @@ Format a MicroSD card as **FAT32**. Place these files in the root directory:
 /
 ├── ATARIXL.ROM   ← Atari XL/XE OS ROM, exactly 16384 bytes
 ├── BASIC.ROM     ← Atari BASIC ROM, exactly 8192 bytes
+├── HDD.ATR       ← optional (v2.8): auto-mounts on D4: at every boot — your
+│                    permanent "hard drive" (any ATR; MyDOS-formatted is ideal)
+├── HDD/          ← optional (v2.8): the H: device's folder — files here are
+│                    shared between the Atari (H:) and the PC link
 ├── games/        ← your .atr disks and .car/.rom cartridges, any folders,
 └── ...              long filenames fine
 ```
@@ -283,6 +293,9 @@ python3 tools/atari.py status               # boot stage, mounts, SIO counters
 python3 tools/atari.py screen               # TEXT DUMP OF THE ATARI'S SCREEN
 python3 tools/atari.py peek 0x12 3          # hex-dump Atari memory (jiffy clock!)
 python3 tools/atari.py poke 0x2C8 0x35      # write Atari memory (pink border)
+python3 tools/atari.py hdd-install          # install the H: device (see Features)
+python3 tools/atari.py send --text n.txt HDD/N.TXT  # text -> /HDD with ATASCII
+                                            #   line endings (read it as H:N.TXT)
 ```
 
 ### Desktop app — `tools/atari_gui.py` (Linux/Windows)
@@ -639,8 +652,11 @@ atari800_tang_nano20k_parallel/
 - **PC Link** — ✅ working (v2.5–v2.7): file transfer, push-and-boot, remote typing/keyboard,
   telemetry (status/screen/peek/poke), printer capture with dot-matrix PDF. Known issue: F12
   can be unresponsive while a PC serial session is engaged (S2 button works; see `KNOWN_ISSUES.md`)
-- **R: serial device (850) / internet** — designed, not implemented (the printer shares its
-  skeleton); would enable BobTerm-style terminals with the PC as the modem
+- **N: network device / internet** — working prototype in the tree (an N: SIO device relayed
+  to a PC-side network processor; a real FujiNet weather app has fetched and rendered live
+  data on the bench), but not yet release-grade under sustained load — next release
+- **R: serial device (850 / modem)** — researched and planned (`docs/rs232_bobterm_plan.md`);
+  the goal is BobTerm dialing telnet BBSes with the PC as the modem
 - **Joystick paddles** — analogue pot inputs not implemented
 - **Cartridge images** — ✅ `.car`/`.rom` working, banked + 4 MB MegaCart hardware-verified; 50 CAR
   types up to 4 MB (The!Cart 32/64/128 MB cannot fit the 8 MB SDRAM). Rejected types
