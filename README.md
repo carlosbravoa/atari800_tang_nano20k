@@ -268,6 +268,10 @@ The same USB-C cable that powers/flashes the board carries a serial port (the on
 BL616 bridges it to the FPGA). Two ways to use it — a CLI and a desktop app — both in
 `tools/` and sharing the same protocol library.
 
+> 📖 **Full walkthrough with worked examples** — the CLI and desktop app, the D4:
+> `HDD.ATR` hard drive, the H: shared folder, and recipes for pasting code PC→Atari and
+> getting listings back Atari→PC: **[docs/pc_link_guide.md](docs/pc_link_guide.md)**.
+
 ### Setup (once)
 
 ```bash
