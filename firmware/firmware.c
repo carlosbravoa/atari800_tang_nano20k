@@ -2409,10 +2409,11 @@ void test_sdram(void) {
 
 // ── BL616 USB-C serial bridge — protocol v1 (PC tool: tools/atari.py) ────────
 // Single-byte commands, PC paces all transfers; replies are raw bytes.
+// Refusal/NAK = 0x15 (NAK, was '-' before 2026-07-21 — see BRIDGE_NAK below).
 //   0x05 ENQ                        -> "A8OK\n"
-//   0x01 PUT  nlen name size32LE    -> '+' | '-'; then '+' per 256-byte chunk;
+//   0x01 PUT  nlen name size32LE    -> '+' | NAK; then '+' per 256-byte chunk;
 //        finally sum16LE from PC    -> 'K' | 'E' (mismatch deletes the file)
-//   0x02 RUN  nlen name             -> '+' | '-'; mounts the .xex + cold-boots
+//   0x02 RUN  nlen name             -> '+' | NAK; mounts the .xex + cold-boots
 //   0x03 COLD                       -> '+'  (like the menu's Hard Reset)
 //   0x04 WARM                       -> '+'  (like F9)
 // RUN/COLD/WARM are queued (bridge_req) and executed by the booted background
@@ -2432,6 +2433,13 @@ int bridge_quiet = 0;                   // mute uart_printf during transfers: th
                                         // protocol acks share the TX channel
 
 static void bridge_putc(uint8_t c) { reg_uart_data = c; }
+
+// Protocol refusal byte. MUST be a control char that never appears in the
+// firmware's ASCII log text: the PC tools scan a stream that interleaves log
+// chatter with protocol replies, and the old refusal byte '-' (0x2D) collides
+// with ordinary log content (filenames like "Astro-Droid.atr", "ad_dir")
+// -> the tool misreads a log '-' as a refusal (seen live). 0x15 = ASCII NAK.
+#define BRIDGE_NAK 0x15
 
 static int blrx_getc(uint32_t timeout_ms) {
     uint32_t start = time_millis();
@@ -2488,15 +2496,15 @@ static void bridge_cmd_put(void) {
     char path[68];
     uint8_t buf[256];
     bridge_quiet = 1;
-    if (bridge_read_name(path)) { bridge_quiet = 0; bridge_putc('-'); return; }
+    if (bridge_read_name(path)) { bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
     uint32_t size = 0;
     for (int i = 0; i < 4; i++) {
         int c = blrx_getc(1000);
-        if (c < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+        if (c < 0) { bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
         size |= (uint32_t)c << (8 * i);
     }
     if (bridge_mkdirs(path) || bridge_put_open(path)) {
-        bridge_quiet = 0; bridge_putc('-'); return;
+        bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return;
     }
     bridge_putc('+');
     uint16_t sum = 0;
@@ -2506,13 +2514,13 @@ static void bridge_cmd_put(void) {
         for (unsigned int i = 0; i < chunk; i++) {
             int c = blrx_getc(2000);
             if (c < 0) { bridge_put_close(); f_unlink(path);
-                         bridge_quiet = 0; bridge_putc('-'); return; }
+                         bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
             buf[i] = (uint8_t)c;
             sum += (uint8_t)c;
         }
         if (bridge_put_chunk(buf, chunk)) {
             bridge_put_close(); f_unlink(path);
-            bridge_quiet = 0; bridge_putc('-'); return;
+            bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return;
         }
         left -= chunk;
         sio_poll();                 // Atari runs live behind the transfer
@@ -2620,14 +2628,14 @@ static void bridge_type_char(uint8_t c) {
 static void bridge_cmd_type(void) {
     bridge_quiet = 1;
     int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
-    if (l0 < 0 || l1 < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+    if (l0 < 0 || l1 < 0) { bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
     uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
     int live = (len == 0xFFFF);      // live session: until 0x00, SIO serviced
     bridge_putc('+');
     for (uint32_t i = 0; live || i < len; i++) {
         int c = live ? blrx_getc_serviced(120000) : blrx_getc(3000);
         if (c == -2) { bridge_quiet = 0; bridge_putc('M'); return; }  // menu
-        if (c < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+        if (c < 0) { bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
         if (live && c == 0x00) break;
         bridge_type_char((uint8_t)c);
         bridge_putc('+');
@@ -2660,7 +2668,7 @@ static void bridge_cmd_peek(void) {
     int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
     uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
     if (a0 < 0 || a1 < 0 || l0 < 0 || l1 < 0 || len > 1024) {
-        bridge_quiet = 0; bridge_putc('-'); return;
+        bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return;
     }
     uint32_t addr = (uint32_t)a0 | ((uint32_t)a1 << 8);
     bridge_putc('+');
@@ -2684,7 +2692,7 @@ static void bridge_cmd_fwpeek(void) {
     int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
     uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
     if (a0 < 0 || a1 < 0 || l0 < 0 || l1 < 0 || len > 1024) {
-        bridge_quiet = 0; bridge_putc('-'); return;
+        bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return;
     }
     uint32_t addr = (uint32_t)a0 | ((uint32_t)a1 << 8);
     bridge_putc('+');
@@ -2706,13 +2714,13 @@ static void bridge_cmd_poke(void) {
     int l0 = blrx_getc(1000), l1 = blrx_getc(1000);
     uint32_t len = (uint32_t)l0 | ((uint32_t)l1 << 8);
     if (a0 < 0 || a1 < 0 || l0 < 0 || l1 < 0 || len > 256) {
-        bridge_quiet = 0; bridge_putc('-'); return;
+        bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return;
     }
     uint32_t addr = (uint32_t)a0 | ((uint32_t)a1 << 8);
     bridge_putc('+');                // in the tight loop from here — stream
     for (uint32_t i = 0; i < len; i++) {
         int c = blrx_getc(2000);
-        if (c < 0) { bridge_quiet = 0; bridge_putc('-'); return; }
+        if (c < 0) { bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
         *(volatile uint8_t *)(0x00200000u + ((addr + i) & 0xFFFFu)) = (uint8_t)c;
     }
     bridge_quiet = 0;
@@ -2732,7 +2740,7 @@ static void bridge_poll(void) {
     case 0x01: bridge_cmd_put(); break;
     case 0x02:
         if (bridge_read_name(bridge_req_path) == 0) { bridge_req = 1; bridge_putc('+'); }
-        else bridge_putc('-');
+        else bridge_putc(BRIDGE_NAK);
         break;
     case 0x03: bridge_req = 2; bridge_putc('+'); break;
     case 0x04: bridge_req = 3; bridge_putc('+'); break;
@@ -2753,7 +2761,7 @@ static void bridge_poll(void) {
         uint32_t len = (l0 < 0 || l1 < 0) ? 0xFFFFFFFF
                      : ((uint32_t)l0 | ((uint32_t)l1 << 8));
         if (len > 256 || net_free() < len) {
-            bridge_quiet = 0; bridge_putc('-'); break;
+            bridge_quiet = 0; bridge_putc(BRIDGE_NAK); break;
         }
         bridge_putc('+');            // in the tight loop from here — stream
         int died = 0;
@@ -2764,14 +2772,14 @@ static void bridge_poll(void) {
             net_head = (net_head + 1) & (NET_RING - 1);
         }
         bridge_quiet = 0;
-        if (died) { bridge_putc('-'); break; }
+        if (died) { bridge_putc(BRIDGE_NAK); break; }
         bridge_putc('K');
         bridge_putc(net_free() > 255 ? 255 : (uint8_t)net_free());
         break;
     }
     case 0x0C: {                     // NET_STATE: 1 byte connection state
         int c = blrx_getc(1000);
-        if (c < 0) { bridge_putc('-'); break; }
+        if (c < 0) { bridge_putc(BRIDGE_NAK); break; }
         net_state_pc = (uint8_t)c;
         bridge_putc('+');
         break;

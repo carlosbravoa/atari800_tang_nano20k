@@ -134,10 +134,10 @@ class Processor:
             self.w(bytes([0x0B]))
             time.sleep(0.05)
             self.w(len(chunk).to_bytes(2, "little") + chunk)
-            r = self.expect(b"+-", "feed hdr")
+            r = self.expect(b"+\x15", "feed hdr")      # \x15 = NAK (ring full)
             if r != b"+":
                 break                                  # ring full — retry later
-            r = self.expect(b"K-", "feed end")
+            r = self.expect(b"K\x15", "feed end")
             if r != b"K":
                 break
             free = self.r(1)

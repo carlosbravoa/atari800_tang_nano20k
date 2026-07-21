@@ -66,7 +66,7 @@ class MockFirmware:
                 free = 511 - len(self.ring)
                 if ln > free:
                     self.cmd = self.cmd[3 + ln:]
-                    self.to_pc += b"-"
+                    self.to_pc += b"\x15"          # NAK (ring full) — was '-'
                     continue
                 self.to_pc += b"+"
                 self.ring += self.cmd[3:3 + ln]

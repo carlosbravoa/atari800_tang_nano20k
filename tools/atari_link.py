@@ -23,6 +23,15 @@ import serial.tools.list_ports
 
 BAUD = 115200
 
+# Protocol refusal byte (firmware BRIDGE_NAK). 0x15 = ASCII NAK — a control char
+# that never appears in the firmware's ASCII log text, so scanning for it in a
+# stream that interleaves logs and replies is unambiguous. (Before 2026-07-21
+# the firmware refused with '-', which collided with log content like filenames
+# — a log '-' was misread as a refusal. Old firmware still sends '-'; the tools
+# no longer treat it as a refusal, so against old firmware a genuine refusal
+# degrades to a timeout instead of a false-positive on the happy path.)
+NAK = 0x15
+
 
 def _screencode_to_ascii(c):
     """Atari internal screen code -> printable ASCII (inverse video ignored)."""
@@ -161,9 +170,9 @@ class AtariLink:
             if b:
                 if b in want:
                     return b
+                if b == bytes([NAK]):
+                    raise LinkError(f"{what}: firmware refused (NAK)")
                 skipped += b
-                if b"-" in skipped:
-                    raise LinkError(f"{what}: firmware refused (got {skipped!r})")
         raise LinkError(f"{what}: timeout (skipped {skipped!r})")
 
     def _cmd(self, byte):
