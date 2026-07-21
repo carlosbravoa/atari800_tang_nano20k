@@ -42,7 +42,7 @@ the keyboard alone covers everything.
 
 ## Features
 
-- **Atari 800 / 800XL / 65XE / 130XE** emulation (6502 CPU, ANTIC, GTIA, POKEY, PIA)
+- **Atari 800 / 800XL / 65XE / 130XE** emulation (6502 CPU, ANTIC, GTIA, POKEY, PIA) — **passes ACID800 (57/57)** on hardware
 - **Expandable RAM — up to 1088 KB** (v2.2): OSD selector for **128 KB** (130XE) / **320** / **576** / **1088 KB** (RAMBO); default 128 KB, cold-boots to apply, persisted in `atari.ini`. Coexists with 4 MB carts
 - **HDMI video — genlocked, low-latency, no frame buffer** (v2.0): the Atari frame is shown via a
   small line-buffer **scandoubler** (integer 3× → 1056×720 active, HD-class) whose pixel clock is
@@ -79,6 +79,10 @@ the keyboard alone covers everything.
 ---
 
 ## Status
+
+> **Core accuracy:** passes the **ACID800** conformance suite (Avery Lee's standard
+> Atari 8-bit compatibility tests) — **57 of 57 tests, zero failures** — run on real
+> hardware with the v2.8 release build.
 
 | Feature | Status |
 |---|---|
