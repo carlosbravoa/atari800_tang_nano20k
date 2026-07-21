@@ -82,10 +82,32 @@ def sd_name(path, override=None, default_dir="PC"):
 class AtariLink:
     """One open connection. Not thread-safe — serialize access externally."""
 
-    def __init__(self, port=None, timeout=1.0):
+    def __init__(self, port=None, timeout=1.0, settle=True):
         self.port = port or auto_port()
         self._timeout = timeout
-        self.ser = serial.Serial(self.port, BAUD, timeout=timeout)
+        # exclusive: a second reader steals bytes mid-frame — two atari_net
+        # instances once split an event stream 50/50 (HW-hit; one served the
+        # request, the other broke the next one). Fail loudly instead.
+        self.ser = serial.Serial(self.port, BAUD, timeout=timeout, exclusive=True)
+        if settle:
+            self._settle_drain()
+
+    def _settle_drain(self, quiet=0.25, limit=3.0):
+        """The BL616 stores firmware log output while no PC reader is attached
+        and delivers the backlog on the next open (7+ KB takes ~0.7 s at
+        115200). Read until the line goes quiet so stale logs are never
+        mistaken for live replies. (A single reset_input_buffer loses this
+        race — the backlog is still streaming in.)"""
+        end = time.time() + limit
+        deadline = time.time() + quiet
+        old_to = self.ser.timeout
+        self.ser.timeout = 0.05
+        try:
+            while time.time() < deadline and time.time() < end:
+                if self.ser.read(4096):
+                    deadline = time.time() + quiet
+        finally:
+            self.ser.timeout = old_to
 
     def reconnect(self, wait=4.0, deadline=20.0):
         """Recover from a BL616 USB drop: the device re-enumerates within a few
@@ -104,7 +126,8 @@ class AtariLink:
                     port = auto_port()      # node may have moved
                 except LinkError:
                     pass
-                self.ser = serial.Serial(port, BAUD, timeout=self._timeout)
+                self.ser = serial.Serial(port, BAUD, timeout=self._timeout,
+                                         exclusive=True)
                 self.port = port
                 break
             except (serial.SerialException, OSError):

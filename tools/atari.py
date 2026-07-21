@@ -60,7 +60,8 @@ def cmd_ping(args):
 
 
 def cmd_log(args):
-    with AtariLink(args.port, timeout=0.5) as l:
+    # settle=False: the log tail WANTS the BL616's stored backlog
+    with AtariLink(args.port, timeout=0.5, settle=False) as l:
         print(f"— tailing {l.port} @ {BAUD} (Ctrl-C to stop) —")
         try:
             while True:
