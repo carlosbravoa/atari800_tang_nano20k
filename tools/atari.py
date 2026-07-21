@@ -21,8 +21,9 @@ Usage:
   atari.py peek ADDR [LEN] [-p P]    # hex dump of Atari memory (e.g. 0x58 16)
   atari.py fwpeek ADDR [LEN] [-p P]  # hex dump of FIRMWARE BSRAM (fw globals, debug)
   atari.py poke ADDR B [B...] [-p P] # write bytes into Atari memory
-  atari.py hdd-install [-p P]        # install the H: handler (files -> /HDD
-                                     #   on the SD); session-scoped
+  atari.py hdd-install [-p P]        # install the H: handler above MEMLO
+                                     #   (files -> /HDD on the SD); session-
+                                     #   scoped; type NEW in BASIC after
 
 Protocol implementation lives in atari_link.py (shared with the desktop app,
 atari_gui.py). Needs: pip install pyserial.
@@ -182,10 +183,12 @@ def cmd_fwpeek(args):
 
 def cmd_hdd_install(args):
     with AtariLink(args.port) as l:
-        lo, hi = l.hdd_install()
-    print(f"H: installed at ${lo:04X}-${hi - 1:04X}, MEMLO raised — "
-          f'try OPEN #1,8,0,"H:HELLO.TXT" from BASIC '
-          f"(files land in /HDD on the SD). RESET clears it; re-run to restore.")
+        lo, hi, memlo = l.hdd_install()
+    print(f"H: installed at ${lo:04X}-${hi - 1:04X} (above MEMLO), "
+          f"MEMLO raised to ${memlo:04X}.")
+    print("In BASIC, type NEW now (BASIC only re-reads MEMLO on NEW), then "
+          'try OPEN #1,8,0,"H:HELLO.TXT" (files land in /HDD on the SD). '
+          "RESET clears it; re-run to restore.")
 
 
 def cmd_eject(args):

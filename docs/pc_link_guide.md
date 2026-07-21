@@ -142,17 +142,17 @@ seamless bridge for **text and data files** between the two worlds.
 
 ```bash
 python3 tools/atari.py hdd-install
-# -> "H: installed at $0900-$0CB2, MEMLO raised"
+# -> "H: installed at $0900-$0CB2 (above MEMLO), MEMLO raised to $0D00."
 ```
 
-The handler lives in Atari RAM and is **session-scoped**: a RESET clears it —
-re-run `hdd-install` to restore.
+The installer reads **MEMLO** and places the handler just above it (with a
+resident DOS booted it simply lands higher — no collision), then raises MEMLO
+past its end. The handler lives in Atari RAM and is **session-scoped**: a
+RESET clears it — re-run `hdd-install` to restore.
 
-> ⚠️ **Known limitation (bug #19):** the handler installs at a fixed address
-> (`$0900`) that **resident MyDOS 4.5 also uses**. Install H: from a plain
-> **BASIC** boot (no DOS loaded). Installing it while MyDOS is resident
-> corrupts DOS and the next disk operation hangs. (A fix to place the handler
-> above MEMLO is planned.)
+> ⚠️ **Type `NEW` in BASIC right after installing.** BASIC only re-reads the
+> raised MEMLO on `NEW`; until then its program area still overlaps the
+> handler, so install first, `NEW`, *then* `ENTER`/type your program.
 
 **Use it from BASIC:**
 
@@ -251,8 +251,10 @@ python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink
 
 ## 7. Limitations to know
 
-- **H: install is session-scoped and collides with resident MyDOS** (bug #19):
-  install from BASIC (no DOS); RESET clears it (re-run `hdd-install`).
+- **H: install is session-scoped**: RESET clears it (re-run `hdd-install`).
+  It installs above MEMLO (coexists with a resident DOS — bug #19 fixed), but
+  BASIC only picks up the raised MEMLO on `NEW` — install first, then `NEW`,
+  then load your program.
 - **No file download from the SD over the bridge yet** — Atari→PC text goes via
   the printer path (`LIST "P:"` / `LPRINT`); a `get` command is planned.
 - **The `HDD.ATR` automount runs once at firmware start** — after you `send` a

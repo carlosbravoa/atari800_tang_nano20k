@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """hdd_handler.py — assemble the H: CIO handler (SIO device $72 -> /HDD on SD).
 
-A classic Atari CIO device handler, fixed at $0900, using only official
-interfaces: ZIOCB ($20-$2F, CIO's zero-page copy of the active IOCB), HATABS
-registration (done by the installer), DVSTAT, the SIO DCB + SIOV.
+A classic Atari CIO device handler, relocatable to any org, using only
+official interfaces: ZIOCB ($20-$2F, CIO's zero-page copy of the active IOCB),
+HATABS registration (done by the installer), DVSTAT, the SIO DCB + SIOV.
 
 Two concurrent channels (matching the firmware's two handles), each with a
 128-byte buffer: GET refills via STATUS(avail)+READ; PUT flushes on a full
 buffer and at CLOSE. XIO 32 rename ("OLD,NEW") / 33 delete.
 
-Install (session-scoped): `atari.py hdd-install` pokes the binary at $0900 and
-adds the HATABS entry. RESET clears HATABS — re-run (boot-poll persistence
-comes later).
+Install (session-scoped): `atari.py hdd-install` reads MEMLO, assembles the
+handler just above it (plan_install — clears resident DOS, bug #19), pokes it,
+adds the HATABS entry and raises MEMLO. RESET clears HATABS — re-run
+(boot-poll persistence comes later).
 
 Outputs: tools/build/hdd_handler.bin + .lst. Tests: tools/test_hdd_handler.py.
 """
@@ -369,10 +370,33 @@ prog = [
 ]
 
 
-def build():
-    _, labels = assemble(prog, LOAD)                # pass A: sizes + labels
-    code, labels = assemble(prog, LOAD, resolve_hash=labels)  # pass B: resolve #<
+def build(org=LOAD):
+    _, labels = assemble(prog, org)                 # pass A: sizes + labels
+    code, labels = assemble(prog, org, resolve_hash=labels)  # pass B: resolve #<
     return code, labels
+
+
+def plan_install(memlo):
+    """Pick the install org for a live machine and assemble there.
+
+    org = page-aligned MEMLO + $200: the +$200 clears BASIC's 256-byte
+    tokenize buffer AND its (near-empty) tables, which sit AT LOMEM == MEMLO —
+    installing exactly at MEMLO would be shredded by the next typed line.
+    DOS-less (MEMLO=$0700) this lands at the HW-proven $0900; with resident
+    MyDOS (MEMLO ~$1Fxx+) it clears the FMS (bug #19). BASIC only re-reads the
+    raised MEMLO on NEW — the installer's caller must say so.
+
+    Returns (org, code, new_memlo)."""
+    if not 0x0480 <= memlo <= 0x8000:
+        raise ValueError(f"implausible MEMLO ${memlo:04X} — machine not in a "
+                         "sane OS state?")
+    org = ((memlo + 0xFF) & 0xFF00) + 0x200
+    code, _ = build(org)
+    new_memlo = (org + len(code) + 0xFF) & 0xFF00
+    if new_memlo > 0x9000:
+        raise ValueError(f"no room above MEMLO ${memlo:04X} — handler would "
+                         f"end at ${new_memlo:04X}")
+    return org, code, new_memlo
 
 
 if __name__ == '__main__':

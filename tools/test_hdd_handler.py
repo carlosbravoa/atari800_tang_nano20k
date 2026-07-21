@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """py65 test matrix for the H: CIO handler.
 
-Loads hdd_handler.bin at $0900, drives its CIO vectors exactly as the OS
-would (X = IOCB*16, ZIOCB populated), and stubs SIOV ($E459) with a python
+Assembles the handler at an install org (as `atari.py hdd-install` would:
+plan_install(MEMLO)), drives its CIO vectors exactly as the OS would
+(X = IOCB*16, ZIOCB populated), and stubs SIOV ($E459) with a python
 implementation of the firmware's device-$72 protocol over a temp directory —
 the same semantics as firmware.c's hdd_* (which have their own host suite).
+
+The full matrix runs twice: at the DOS-less layout (MEMLO=$0700 -> org $0900,
+the HW-proven address) and at a simulated resident-MyDOS layout (bug #19),
+with the [$0700, org) "resident DOS" region sentinel-filled and asserted
+untouched afterwards.
 
 Run: python3 tools/test_hdd_handler.py
 """
@@ -15,15 +21,15 @@ import tempfile
 from py65.devices.mpu6502 import MPU
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hdd_handler import build, LOAD, SIOV, DVSTAT
+from hdd_handler import build, plan_install, SIOV, DVSTAT
 
 DDEVIC, DUNIT, DCOMND, DSTATS = 0x0300, 0x0301, 0x0302, 0x0303
 DBUFLO, DBUFHI = 0x0304, 0x0305
 DBYTLO, DBYTHI, DAUX1, DAUX2 = 0x0308, 0x0309, 0x030A, 0x030B
 ICCOMZ, ICBALZ, ICBAHZ, ICAX1Z = 0x22, 0x24, 0x25, 0x2A
 NAME_AT = 0x8000
-
-CODE, LABELS = build()
+DOS_BASE = 0x0700          # sentinel region base: simulated resident DOS
+SENTINEL = 0xA5
 
 
 # ── python mirror of the firmware's device-$72 semantics ────────────────────
@@ -151,15 +157,22 @@ class FwSide:
 
 # ── CIO-style driver ─────────────────────────────────────────────────────────
 class Rig:
-    def __init__(self, tmp):
+    def __init__(self, tmp, org):
+        self.org = org
+        self.code, _ = build(org)
         self.mpu = MPU()
         self.mem = self.mpu.memory
-        for i, byte in enumerate(CODE):
-            self.mem[LOAD + i] = byte
+        for a in range(DOS_BASE, org):     # simulated resident DOS below org
+            self.mem[a] = SENTINEL
+        for i, byte in enumerate(self.code):
+            self.mem[org + i] = byte
         self.fw = FwSide(tmp)
 
+    def dos_intact(self):
+        return all(self.mem[a] == SENTINEL for a in range(DOS_BASE, self.org))
+
     def vector(self, idx):
-        lo = self.mem[LOAD + idx * 2] | (self.mem[LOAD + idx * 2 + 1] << 8)
+        lo = self.mem[self.org + idx * 2] | (self.mem[self.org + idx * 2 + 1] << 8)
         return lo + 1
 
     def call(self, idx, iocb=1, a=0, name=None, ax1=0, iccom=0, max_steps=200000):
@@ -207,9 +220,10 @@ def check(label, cond, extra=""):
         fails += 1
 
 
-def main():
+def run_matrix(org, tag):
+    print(f"── matrix at org ${org:04X} ({tag}) ──")
     tmp = tempfile.mkdtemp(prefix="hddtest_")
-    r = Rig(tmp)
+    r = Rig(tmp, org)
 
     # 1. open-write + 300 PUTs (two full flushes + partial at close)
     _, y = r.call(OPEN, iocb=1, name="H:TEST.TXT", ax1=8)
@@ -289,6 +303,32 @@ def main():
     check("third open -> 161", y == 161, f"y={y}")
     r.call(CLOSE, iocb=1)
     r.call(CLOSE, iocb=2)
+
+    # 8. the simulated resident DOS below the handler was never touched
+    check("resident DOS region intact", r.dos_intact())
+
+
+def main():
+    # installer org selection (bug #19: must respect MEMLO, never fixed $0900)
+    org_dosless, code, nm = plan_install(0x0700)
+    check("plan(MEMLO=$0700) = HW-proven $0900", org_dosless == 0x0900,
+          f"org=${org_dosless:04X}")
+    for memlo in (0x0700, 0x1FE5, 0x2A00):
+        org, code, nm = plan_install(memlo)
+        check(f"plan(MEMLO=${memlo:04X}) above MEMLO, page-aligned, room",
+              org - memlo >= 0x200 and (org & 0xFF) == 0
+              and nm >= org + len(code),
+              f"org=${org:04X} memlo'=${nm:04X}")
+    try:
+        plan_install(0x0100)
+        bad = False
+    except ValueError:
+        bad = True
+    check("plan rejects implausible MEMLO", bad)
+
+    org_mydos, _, _ = plan_install(0x1FE5)      # typical resident-MyDOS MEMLO
+    run_matrix(org_dosless, "DOS-less, MEMLO=$0700")
+    run_matrix(org_mydos, "resident MyDOS, MEMLO=$1FE5")
 
     print(f"\n{'ALL GREEN' if fails == 0 else f'{fails} FAILURES'}")
     return fails

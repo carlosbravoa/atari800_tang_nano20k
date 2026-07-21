@@ -12,7 +12,7 @@ message. Roll back anytime: `releases/atari800_tn20k_v2.7.1` = last release.*
 |---|---|
 | Four drive slots (D1:–D4:), `/HDD.ATR` auto-mounts on D4: at boot | sim-tested |
 | H: file device (SIO `$72` → `/HDD` folder on SD) | host-suite green |
-| H: CIO handler (`$0900`, installed by `atari.py hdd-install`) | py65 green |
+| H: CIO handler (relocatable, installed above MEMLO by `atari.py hdd-install`) | py65 green |
 | N: network device (SIO `$71` ↔ `tools/atari_net.py`) | loopback green |
 | STATUS line gains `hd:XY nt:S,avail` | — |
 

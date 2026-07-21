@@ -369,16 +369,24 @@ class AtariLink:
         b = self.peek(0x12, 3)
         return a != b
 
-    def hdd_install(self, handler_path=None):
-        """Install the H: handler: poke the binary at $0900, register 'H' in
-        HATABS ($031A), raise MEMLO. Session-scoped (RESET clears HATABS —
-        re-run). Returns (load_addr, end_addr)."""
+    def hdd_install(self):
+        """Install the H: handler ABOVE MEMLO (bug #19: a fixed $0900 sat on
+        resident MyDOS): read MEMLO ($02E7), assemble at page-aligned
+        MEMLO+$200 (hdd_handler.plan_install — the cushion clears BASIC's
+        tokenize buffer at LOMEM; DOS-less this is the HW-proven $0900), poke
+        it, register 'H' in HATABS ($031A), raise MEMLO past the end.
+        Session-scoped (RESET clears HATABS — re-run). BASIC only picks up the
+        raised MEMLO on NEW — tell the user to type NEW right after.
+        Returns (load_addr, end_addr, new_memlo)."""
         import os
-        if handler_path is None:
-            handler_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "build", "hdd_handler.bin")
-        code = open(handler_path, "rb").read()
-        load = 0x0900
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from hdd_handler import plan_install
+        memlo = int.from_bytes(self.peek(0x02E7, 2), "little")
+        try:
+            load, code, new_memlo = plan_install(memlo)
+        except ValueError as e:
+            raise LinkError(f"hdd-install: {e}")
         # already installed? scan HATABS for 'H'
         hatabs = self.peek(0x031A, 38)
         for i in range(0, 36, 3):
@@ -396,9 +404,8 @@ class AtariLink:
             raise LinkError("handler verify failed")
         self.poke(0x031A + free,
                   bytes([ord('H'), load & 0xFF, load >> 8]))
-        memlo = ((load + len(code) + 0xFF) // 0x100) * 0x100
-        self.poke(0x02E7, bytes([memlo & 0xFF, memlo >> 8]))
-        return load, load + len(code)
+        self.poke(0x02E7, bytes([new_memlo & 0xFF, new_memlo >> 8]))
+        return load, load + len(code), new_memlo
 
     def read_log(self, max_bytes=4096):
         """Drain any pending firmware log bytes (non-blocking-ish)."""
