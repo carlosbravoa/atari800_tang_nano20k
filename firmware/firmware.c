@@ -8,6 +8,14 @@
 #include "firmware.h"
 #include "xex_loader.h"   // 6502 binary-load boot loader image (virtual D1: disk)
 
+// Altirra 850 R: handler + relocator (as served by FujiNet). Too big to embed in
+// BSRAM, so — like FujiNet — they live on the SD card and are streamed on demand
+// during the coldstart bootstrap. Fixed sizes (the exact Altirra binaries).
+#define R850_RELOCATOR_SIZE 341
+#define R850_HANDLER_SIZE   1281
+#define R850_RELOCATOR_PATH "/PC/850REL.BIN"
+#define R850_HANDLER_PATH   "/PC/850HAND.BIN"
+
 uint32_t CORE_ID;
 
 void uart_keyboard_poll(void);
@@ -27,6 +35,11 @@ int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (
 int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
 int option_h_offset = 0;                    // horizontal pan: capture-skip pixels (0..48)
 int option_stereo = 0;                      // 1 = dual-POKEY stereo (POKEY2 @ $D210 -> right); default mono
+int option_modem  = 0;                      // 1 = answer the coldstart R: handler poll (BobTerm/850
+                                            // modem over USB-C). DEFAULT OFF: when off the firmware
+                                            // stays SILENT to the OS poll, so a normal gaming boot is
+                                            // byte-for-byte unchanged (no handler install, no boot
+                                            // delay, no MEMLO/RAM loss, no SD dependency).
 
 // Atari RAM size choices offered in OSD Options. code = core RAM_SELECT (RAMBO
 // variants); kb = label/persisted value. Index 0 (128 KB) is the default.
@@ -320,6 +333,9 @@ int load_option()  {
         if (strcmp(key, "stereo") == 0) {
             option_stereo = (atoi(value) != 0);
         }
+        if (strcmp(key, "modem") == 0) {
+            option_modem = (atoi(value) != 0);
+        }
         if (strcmp(key, "ram") == 0) {
             int kb = atoi(value);
             option_ram_idx = 0;   // default 128 KB if no match
@@ -361,6 +377,9 @@ int save_option() {
 
     err |= (f_puts("stereo=", &f) < 0);
     err |= (f_puts(option_stereo ? "1\n" : "0\n", &f) < 0);
+
+    err |= (f_puts("modem=", &f) < 0);
+    err |= (f_puts(option_modem ? "1\n" : "0\n", &f) < 0);
 
     err |= (f_puts("ram=", &f) < 0);
     { char s[6]; int n = ram_opts[option_ram_idx].kb, k = 0, d = 1000;
@@ -1475,6 +1494,167 @@ static void sio_net(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
     }
 }
 
+// ── R:/Modem device (0x50 = R1:) — 850-style modem for BobTerm et al. ────────
+// BobTerm's built-in 850 driver speaks these command frames directly (no CIO
+// handler needed).  CONFIGURE/CONTROL/STATUS are tiny; STREAM ('X') returns the
+// 9-byte POKEY table and drops us into CONCURRENT MODE — a raw full-duplex byte
+// relay between the Atari's POKEY serial port and the PC (atari_net.py --modem),
+// which runs the Hayes-AT personality + telnet socket.  Concurrent mode OWNS the
+// SIO bus (ANY command frame exits it), so pumping bridge_poll() here is safe —
+// the INVESTIGATE #16 combined-load hazard is structurally absent (no ACK window
+// to miss while the stream runs).  Baud: the Atari's POKEY RX is auto-bauded by
+// the HW SIO handler; our TX uses reg_sio_divisor (8-bit => only 9600/19200 fit;
+// lower rates would need a wider divisor = netlist change).  Reuses the N: ring +
+// 0xA6 event framing; modem events use codes 0x0F-0x13 (distinct from N:'s 1-3).
+//
+// 9-byte POKEY block ($D200-$D208) per FujiNet modem.cpp sio_stream():
+//   {AUDF_lo,0xA0, AUDF_hi,0xA0, AUDF_lo,0xA0, AUDF_hi,0xA0, 0x78}
+// AUDF16 = POKEY 16-bit divisor for the baud; AUDC=0xA0 (vol0 pure tone),
+// AUDCTL=0x78 (ch3+4 joined 16-bit @ 1.79 MHz).  sio_div 0 = TX rate can't be
+// synthesised with the 8-bit divisor (unsupported in v1; the POKEY table is
+// still correct, so a HW divisor widening is all that's needed later).
+struct modem_baud_ent { uint16_t audf; uint8_t sio_div; };
+static const struct modem_baud_ent modem_baud_tbl[8] = {
+    /* 0x8   300 */ { 0x0BA0,   0 },
+    /* 0x9   600 */ { 0x05CC,   0 },
+    /* 0xA  1200 */ { 0x02E3,   0 },
+    /* 0xB  1800 */ { 0x01EA,   0 },
+    /* 0xC  2400 */ { 0x016E,   0 },
+    /* 0xD  4800 */ { 0x00B3,   0 },
+    /* 0xE  9600 */ { 0x0056, 186 },
+    /* 0xF 19200 */ { 0x0028,  93 },
+};
+static uint8_t modem_baud_code = 0xF;              // default 19200 (= default divisor)
+static uint8_t modem_dtr       = 1;
+
+static void rs232_stream_loop(void);
+
+static void sio_rs232(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
+    (void)aux2;
+    switch (cmd) {
+    case 0x42: {                                   // CONFIGURE (B): AUX1[3:0]=baud
+        modem_baud_code = aux1 & 0x0F;
+        if (modem_baud_code < 0x8) modem_baud_code = 0xF;
+        net_head = net_tail = 0;                    // fresh link buffer
+        net_state_pc = 0;
+        net_event(0x0F, &modem_baud_code, 1);       // MODEM_CONFIG -> PC (resets it)
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();   // ACK
+        delay_us(250); sio_tx_byte(0x43);           // COMPLETE (complete-only cmd)
+        break;
+    }
+    case 0x41: {                                   // CONTROL (A): DTR/RTS/XMT bits
+        if (aux1 & 0x80) {                          // [7]=DTR-change-enable
+            uint8_t dtr = (aux1 & 0x40) ? 1 : 0;    // [6]=DTR state
+            if (!dtr && modem_dtr) net_event(0x12, 0, 0);   // DTR drop => hang up
+            modem_dtr = dtr;
+        }
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        delay_us(250); sio_tx_byte(0x43);
+        break;
+    }
+    case 0x53: {                                   // STATUS (S): 2-byte {err,handshake}
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();
+        uint8_t st[2];
+        st[0] = 0;                                  // no error bits
+        // handshake byte: DSR[7:6] CTS[5:4] CRX[3:2] all high while connected,
+        // RCV[0]=1 when RX data is waiting (FujiNet modem.cpp mdmStatus[1]).
+        uint8_t hs = 0xC0 | 0x30;                   // DSR + CTS high = interface ready
+        if (net_state_pc == 1) hs |= 0x0C;          // CRX (carrier) when connected
+        if (net_avail())        hs |= 0x01;          // RCV data waiting
+        st[1] = hs;
+        uint8_t sum = sio_checksum(st, 2);
+        delay_us(250); sio_tx_byte(0x43); sio_wait_tx_empty();
+        delay_us(250);
+        sio_tx_byte(st[0]); sio_tx_byte(st[1]); sio_tx_byte(sum);
+        sio_wait_tx_empty();
+        break;
+    }
+    case 0x58: {                                   // STREAM (X): POKEY table + concurrent
+        const struct modem_baud_ent *be = &modem_baud_tbl[modem_baud_code - 0x8];
+        uint8_t lo = be->audf & 0xFF, hi = be->audf >> 8;
+        uint8_t tbl[9] = { lo, 0xA0, hi, 0xA0, lo, 0xA0, hi, 0xA0, 0x78 };
+        uint8_t sum = sio_checksum(tbl, 9);
+        delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();       // ACK
+        delay_us(250); sio_tx_byte(0x43); sio_wait_tx_empty();       // COMPLETE
+        delay_us(250);
+        for (int i = 0; i < 9; i++) sio_tx_byte(tbl[i]);
+        sio_tx_byte(sum); sio_wait_tx_empty();
+        rs232_stream_loop();                        // -> raw concurrent byte relay
+        break;
+    }
+    default:
+        break;                                      // SILENT on unknowns
+    }
+}
+
+// Concurrent-mode byte relay. Runs until the Atari asserts the next command
+// frame (STATUS poll, CONTROL hang-up, or a re-issued STREAM). The HW SIO
+// command snoop (reg_siocmd_b) is the exit signal — we do NOT ack it here, so
+// the normal sio_poll_hwcapture() path processes it on the next poll.
+static void rs232_stream_loop(void) {
+    const struct modem_baud_ent *be = &modem_baud_tbl[modem_baud_code - 0x8];
+    if (be->sio_div) reg_sio_divisor = be->sio_div; // match negotiated TX baud
+
+    net_event(0x10, &modem_baud_code, 1);           // STREAM_START -> PC modem (also the "enter" log)
+
+    uint8_t out[64];
+    uint8_t entry_seq = (uint8_t)(reg_siocmd_b >> 16);  // seq of the 'X' frame
+    uint32_t bad_frames = 0;
+
+    for (;;) {
+        bridge_poll();                              // service PC: NET_FEED -> ring
+
+        // Atari -> PC: drain the RX FIFO in batches. A byte tagged with a
+        // non-zero cmd_count is the start of a command frame — stop draining and
+        // let the exit check below fire (the frame is latched in reg_siocmd_*).
+        int n = 0;
+        while (n < (int)sizeof(out) && !sio_rx_empty()) {
+            uint16_t w = reg_sio_rx;
+            if ((w >> 8) & 0x7F) break;
+            out[n++] = (uint8_t)(w & 0xFF);
+        }
+        if (n) net_event(0x11, out, n);             // STREAM_DATA
+
+        // PC -> Atari: drain the ring (BBS text + AT result codes) to POKEY, but
+        // only a bounded batch per pass — a big burst at 19200 is ~0.5 ms/byte,
+        // and blocking the whole ring here would stall bridge servicing and the
+        // command-frame exit check, inviting a bridge-RX overrun. 32 bytes keeps
+        // us cycling back to bridge_poll()/RX/exit every ~16 ms.
+        for (int i = 0; i < 32 && net_avail(); i++) {
+            uint8_t b = net_ring[net_tail];
+            net_tail = (net_tail + 1) & (NET_RING - 1);
+            sio_tx_byte(b);
+        }
+
+        // Exit ONLY on a VALID command frame (BobTerm re-issues 'X' to resume
+        // after a STATUS poll). Spurious/corrupt captures — the concurrent stream
+        // glitching the COMMAND line, or a frame mangled by the POKEY-mode
+        // transition — are ack'd and IGNORED so the relay SURVIVES instead of
+        // dropping the session. We log what we see (bounded) to learn BobTerm's
+        // real post-XIO-40 behaviour.
+        uint32_t sb = reg_siocmd_b;
+        if ((sb & 0x0100) && ((uint8_t)(sb >> 16) != entry_seq)) {
+            uint32_t a = reg_siocmd_a;                   // LE: dev,cmd,aux1,aux2
+            uint8_t dev = a & 0xFF, cmd = (a >> 8) & 0xFF;
+            uint8_t rxck = sb & 0xFF;
+            uint8_t calc = sio_checksum((const uint8_t *)&a, 4);
+            if (calc == rxck) {                          // real frame -> hand it off
+                (void)bad_frames;
+                break;
+            }
+            reg_siocmd_b = 0;                            // ack/clear the bad capture
+            entry_seq = (uint8_t)(reg_siocmd_b >> 16);   // re-baseline the seq
+            bad_frames++;
+            if (bad_frames <= 3)                         // rate-limited (no flood)
+                uart_printf("R: drop badframe dev=%b cmd=%b ck=%b!=%b\n",
+                            dev, cmd, rxck, calc);
+        }
+    }
+
+    if (be->sio_div) reg_sio_divisor = 0x5D;        // restore standard SIO baud (93)
+    net_event(0x13, 0, 0);                          // STREAM_END (concurrent paused)
+}
+
 // ── H: SIO protocol (device 0x72) — CIO-shaped file ops over /HDD ───────────
 // O(0x4F): aux1=mode(4 rd/8 wr/9 app/6 dir) aux2=handle; 64B name frame.
 // R(0x52): aux1=len(1..128) aux2=handle -> data frame len bytes (caller sizes
@@ -1640,6 +1820,95 @@ static void sio_printer(uint8_t cmd, uint8_t aux1) {
     }
 }
 
+// Send an SIO read response frame: ACK, COMPLETE, then `len` data bytes + the
+// end-around-carry checksum. Used for the small 850 poll responses.
+static void sio_read_response(const unsigned char *buf, int len) {
+    delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();      // ACK
+    delay_us(250); sio_tx_byte(0x43); sio_wait_tx_empty();      // COMPLETE
+    delay_us(250);
+    uint8_t sum = 0;
+    for (int i = 0; i < len; i++) {
+        sio_tx_byte(buf[i]);
+        uint16_t t = (uint16_t)sum + buf[i];
+        sum = (uint8_t)((t & 0xFF) + (t >> 8));
+    }
+    sio_tx_byte(sum); sio_wait_tx_empty();
+}
+
+// Stream a file from the SD as an SIO read response (ACK, [open], COMPLETE, data
+// + checksum). Reuses xex_file (idle during the coldstart bootstrap) and the
+// 256 B sector buffer — no big RAM blob. 'E' if the file is missing.
+static void sio_stream_file(const char *path) {
+    delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();      // ACK
+    if (f_open(&xex_file, path, FA_READ) != FR_OK) {
+        delay_us(250); sio_tx_byte(0x45); sio_wait_tx_empty();  // ERROR (no file)
+        return;
+    }
+    delay_us(250); sio_tx_byte(0x43); sio_wait_tx_empty();      // COMPLETE
+    delay_us(250);
+    uint8_t sum = 0; UINT br;
+    do {
+        if (f_read(&xex_file, sio_sector_buf, sizeof(sio_sector_buf), &br) != FR_OK)
+            break;
+        for (UINT i = 0; i < br; i++) {
+            sio_tx_byte(sio_sector_buf[i]);
+            uint16_t t = (uint16_t)sum + sio_sector_buf[i];
+            sum = (uint8_t)((t & 0xFF) + (t >> 8));
+        }
+    } while (br == sizeof(sio_sector_buf));
+    f_close(&xex_file);
+    sio_tx_byte(sum); sio_wait_tx_empty();
+}
+
+// 850 R: handler bootstrap — the XL/XE OS coldstart poll + relocator/handler
+// download, FujiNet-compatible (serves the Altirra 850 handler in r850_blobs.h):
+//   0x40 Type-3/4 poll (directed R1: = aux1 'R', aux2 1) -> {hsize16, $50, 0}
+//   0x3F Type-1 poll  -> 12-byte boot block (load $21 reply to $0500, run it)
+//   0x21 -> the 341-byte relocator      0x26 -> the 1281-byte handler
+// The OS runs the relocator @ $0500, which downloads the handler ($26) to MEMLO,
+// relocates it, and installs R: in HATABS — all before the disk (BobTerm) boots.
+// Returns 1 if it handled the frame.
+// Are the handler + relocator actually on the SD? If not, we must NOT answer the
+// poll — otherwise the OS would boot-block, try to download, and get an error mid-
+// coldstart (possible stall). Missing blobs -> stay silent -> BobTerm just reports
+// "No modem handler" (graceful), and a normal boot is undisturbed.
+static int r850_blobs_present(void) {
+    // f_open (not f_stat) — f_open is already linked all over the firmware, so this
+    // pulls in no new FatFs code (BSRAM is tight). xex_file is idle at coldstart.
+    if (f_open(&xex_file, R850_HANDLER_PATH, FA_READ) != FR_OK) return 0;
+    f_close(&xex_file);
+    if (f_open(&xex_file, R850_RELOCATOR_PATH, FA_READ) != FR_OK) return 0;
+    f_close(&xex_file);
+    return 1;
+}
+
+static int sio_r850_boot(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
+    switch (cmd) {
+    case 0x3F: {                                   // Type-1 poll -> boot block
+        unsigned char bb[12] = {
+            0x50, 0x01, 0x21, 0x40, 0x00, 0x05, 0x08, 0x00,
+            R850_RELOCATOR_SIZE & 0xFF, R850_RELOCATOR_SIZE >> 8, 0x00, 0x00 };
+        sio_read_response(bb, 12);
+        return 1;
+    }
+    case 0x40:                                     // Type-3/4 poll — R1: only
+        if (aux1 == 0x52 && aux2 == 0x01 && r850_blobs_present()) {
+            unsigned char t4[4] = {
+                R850_HANDLER_SIZE & 0xFF, R850_HANDLER_SIZE >> 8, 0x50, 0x00 };
+            sio_read_response(t4, 4);
+            return 1;
+        }
+        return 0;
+    case 0x21:                                     // download relocator (from SD)
+        sio_stream_file(R850_RELOCATOR_PATH);
+        return 1;
+    case 0x26:                                     // download handler (from SD)
+        sio_stream_file(R850_HANDLER_PATH);
+        return 1;
+    }
+    return 0;
+}
+
 void sio_process_command(void) {
     // NOTE: auto-baud tuning removed (T2) — it read reg_sio_divisor, which is a
     // *different* (measured-receive) register than the TX divisor it writes, and
@@ -1659,11 +1928,36 @@ void sio_process_command(void) {
         return;
     }
     
+    // 850 R: handler bootstrap: the coldstart poll ($40/$3F) and relocator/handler
+    // downloads ($21/$26). GATED on option_modem (default OFF): when off, this whole
+    // block is skipped and the firmware stays SILENT to the OS's coldstart handler
+    // poll, so a normal gaming boot is byte-for-byte unchanged. Only when the user
+    // opts in (OSD Options -> Modem: On) does the OS auto-load the R: handler.
+    if (option_modem &&
+        (cmd == 0x3F || cmd == 0x40 || cmd == 0x21 || cmd == 0x26 || device == 0x4F)) {
+        if ((device == 0x4F || device == 0x50) &&
+            (cmd == 0x3F || cmd == 0x40 || cmd == 0x21 || cmd == 0x26)) {
+            sio_wait_cmd_high();
+            if (sio_r850_boot(cmd, aux1, aux2)) return;
+        }
+        if (device == 0x4F) return;                // never fall through for polls
+    }
+
     // N: network device (0x71) — PC is the network processor
     if (device == 0x71) {
         dbg_last_sio_cmd = cmd;
         sio_wait_cmd_high();
         sio_net(cmd, aux1, aux2);
+        return;
+    }
+
+    // R1: modem device (0x50) — 850-style; concurrent mode relays to the PC.
+    // The Atari's own POKEY drives the concurrent baud, so this coexists with
+    // BobTerm booting off D1: (disk ops happen between stream sessions).
+    if (device == 0x50) {
+        dbg_last_sio_cmd = cmd;
+        sio_wait_cmd_high();
+        sio_rs232(cmd, aux1, aux2);
         return;
     }
 
@@ -2269,6 +2563,11 @@ void menu_options() {
         draw_ram_line();
 
         cursor(2, 19);
+        print("Modem (R:):");
+        cursor(16, 19);
+        print(option_modem ? "ON" : "OFF");
+
+        cursor(2, 20);
         print(options_dirty ? "Save changes *" : "Save changes");
 
         delay(300);
@@ -2292,7 +2591,7 @@ void menu_options() {
                     option_ram_idx--; options_dirty = 1; draw_ram_line(); delay(180);
                 }
             }
-            if (joy_choice(12, 8, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 9, &choice, OSD_KEY_CODE) == 1) {
                 // Every item applies its change LIVE (so you can see it) but does NOT write
                 // to SD — only "Save changes" persists. Leaving without saving keeps the
                 // changes for this session; they revert to the saved values on next boot.
@@ -2332,6 +2631,10 @@ void menu_options() {
                     cold_boot_atari();
                     break; // redraw UI
                 } else if (choice == 7) {
+                    option_modem = !option_modem;     // opt in/out of the R: modem handler
+                    options_dirty = 1;                // takes effect on the next COLD boot
+                    break; // redraw UI
+                } else if (choice == 8) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);

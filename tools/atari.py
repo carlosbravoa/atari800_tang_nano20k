@@ -22,6 +22,7 @@ Usage:
   atari.py fwpeek ADDR [LEN] [-p P]  # hex dump of FIRMWARE BSRAM (fw globals, debug)
   atari.py poke ADDR B [B...] [-p P] # write bytes into Atari memory
   atari.py hdd-install [-p P]        # install the H: handler above MEMLO
+  atari.py r-install [-p P]          # install the R: modem handler (for BobTerm)
                                      #   (files -> /HDD on the SD); session-
                                      #   scoped; type NEW in BASIC after
 
@@ -191,6 +192,16 @@ def cmd_hdd_install(args):
           "RESET clears it; re-run to restore.")
 
 
+def cmd_r_install(args):
+    with AtariLink(args.port) as l:
+        lo, hi, memlo = l.r_install(force=args.force)
+    print(f"R: installed at ${lo:04X}-${hi - 1:04X} (above MEMLO), "
+          f"MEMLO raised to ${memlo:04X}.")
+    print("In BASIC, type NEW now (BASIC only re-reads MEMLO on NEW). BobTerm "
+          "(and R:-aware software) will now find the modem handler. Run "
+          "`atari_net.py --modem` for the PC side. RESET clears it; re-run.")
+
+
 def cmd_eject(args):
     with AtariLink(args.port) as l:
         l.eject()
@@ -229,6 +240,9 @@ def main():
     add("kbd", cmd_kbd)
     add("eject", cmd_eject)
     add("hdd-install", cmd_hdd_install)
+    add("r-install", cmd_r_install,
+        lambda sp: sp.add_argument("--force", action="store_true",
+                                   help="reinstall even if R: is already in HATABS"))
     add("status", cmd_status)
     add("screen", cmd_screen)
     add("peek", cmd_peek, lambda sp: sp.add_argument("addr"),

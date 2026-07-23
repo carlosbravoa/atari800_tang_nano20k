@@ -16,3 +16,4 @@ releases/
 INBOX.md
 INVESTIGATE.md
 __pycache__/
+tools/build/
