@@ -3254,6 +3254,7 @@ int main() {
     }
     bool booted = (rom_ok == 0); // auto-boot to BASIC if ROMs loaded successfully
     int f9_prev = 0;             // F9 soft-reset hotkey edge detector
+    int f11_prev = 0;            // F11 arrows<->joystick live-toggle edge detector
     if (booted) overlay(0);      // hide OSD immediately on auto-boot
 
     for (;;) {
@@ -3417,6 +3418,19 @@ int main() {
                 delay(300);
             }
             f9_prev = f9;
+
+            // F11 = quick LIVE toggle: arrow keys drive Joystick 1 <-> normal
+            // typing (the same option_arrow_joystick the OSD "Arrow keys" item
+            // sets, applied live via reg_virt_kbd_1). Live-only: it is NOT written
+            // to atari.ini, so it reverts to the saved default on the next reboot
+            // (use OSD Options -> Save changes to make a preference permanent).
+            int f11 = (joy1 & 0x400);            // rv_joy1 bit 10 = F11
+            if (f11 && !f11_prev) {
+                option_arrow_joystick = !option_arrow_joystick;
+                apply_input_options();
+                delay(200);                      // debounce the keypress
+            }
+            f11_prev = f11;
 
             // Background polling loop — service SIO (bounded per call).
             sio_poll();
