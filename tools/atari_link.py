@@ -407,6 +407,44 @@ class AtariLink:
         self.poke(0x02E7, bytes([new_memlo & 0xFF, new_memlo >> 8]))
         return load, load + len(code), new_memlo
 
+    def r_installed(self):
+        """True if an 'R' device is already registered in HATABS ($031A)."""
+        hatabs = self.peek(0x031A, 38)
+        return any(hatabs[i] == ord('R') for i in range(0, 36, 3))
+
+    def r_install(self, force=False):
+        """Install the R: (850 modem) handler ABOVE MEMLO — same mechanism as
+        hdd_install(), registering 'R' in HATABS ($031A) so BobTerm (which needs
+        a resident R: handler) finds it. Session-scoped: RESET clears HATABS.
+        Returns (load_addr, end_addr, new_memlo). Raises if R: already present
+        (unless force)."""
+        import os
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from r_handler import plan_install
+        memlo = int.from_bytes(self.peek(0x02E7, 2), "little")
+        try:
+            load, code, new_memlo = plan_install(memlo)
+        except ValueError as e:
+            raise LinkError(f"r-install: {e}")
+        hatabs = self.peek(0x031A, 38)
+        free = None
+        for i in range(0, 36, 3):
+            if hatabs[i] == ord('R') and not force:
+                raise LinkError("R: already installed (RESET to clear)")
+            if hatabs[i] == 0 and free is None:
+                free = i
+        if free is None:
+            raise LinkError("HATABS full")
+        for off in range(0, len(code), 256):
+            self.poke(load + off, code[off:off + 256])
+        back = self.peek(load, min(len(code), 64))
+        if bytes(back) != code[:len(back)]:
+            raise LinkError("handler verify failed")
+        self.poke(0x031A + free, bytes([ord('R'), load & 0xFF, load >> 8]))
+        self.poke(0x02E7, bytes([new_memlo & 0xFF, new_memlo >> 8]))
+        return load, load + len(code), new_memlo
+
     def read_log(self, max_bytes=4096):
         """Drain any pending firmware log bytes (non-blocking-ish)."""
         return self.ser.read(max_bytes)
