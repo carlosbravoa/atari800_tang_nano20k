@@ -562,6 +562,8 @@ In **OSD → Options**, toggle **`Arrow keys: NORMAL → JOYSTICK`**. While set 
 - ↑ ↓ ← → drive **Joystick 1** (alongside any physical DB9 stick on port 1), **Left-Alt = fire**.
 - Those keys are suppressed from the Atari keyboard so they only move the stick (no stray typing).
 - Toggle back to **NORMAL** to type again. The setting is saved to `atari.ini` and survives reboots.
+- **Quick toggle:** press **F11** to flip arrows ↔ joystick **live, mid-game** — no need to open the
+  OSD. F11 is a live-only switch (not saved), so it reverts to your saved default on the next reboot.
 
 ### Booting a disk image
 
@@ -663,8 +665,13 @@ atari800_tang_nano20k_parallel/
 - **N: network device / internet** — working prototype in the tree (an N: SIO device relayed
   to a PC-side network processor; a real FujiNet weather app has fetched and rendered live
   data on the bench), but not yet release-grade under sustained load — next release
-- **R: serial device (850 / modem)** — researched and planned (`docs/rs232_bobterm_plan.md`);
-  the goal is BobTerm dialing telnet BBSes with the PC as the modem
+- **R: serial device (850 / modem)** — 🚧 **work in progress** (opt-in, **default OFF**). BobTerm
+  dials a live telnet BBS over the USB-C cable: the firmware answers the OS coldstart poll and
+  serves the real Altirra 850 handler (FujiNet-compatible), and `tools/atari_net.py --modem` is the
+  PC-side modem. Enable it in **OSD → Options → Modem (R:)** (needs the two Altirra `.bin`s on the SD
+  — see `tools/fujinet_850/README.md`). WIP: some text garbles under fast BBS bursts. **When OFF
+  (the default) it has zero effect on normal use** — the firmware stays silent to the OS poll, so a
+  gaming boot is unchanged
 - **Joystick paddles** — analogue pot inputs not implemented
 - **Cartridge images** — ✅ `.car`/`.rom` working, banked + 4 MB MegaCart hardware-verified; 50 CAR
   types up to 4 MB (The!Cart 32/64/128 MB cannot fit the 8 MB SDRAM). Rejected types
