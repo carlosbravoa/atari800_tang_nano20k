@@ -441,10 +441,13 @@ Standard Atari/Commodore DB9 joystick. No resistors needed — internal FPGA pul
 
 ### Wiring
 
-Each controller uses **5 signal pins** (Up/Down/Left/Right/Fire) + a shared **GND**. All
-signals are **active-low** — the FPGA holds them high with internal pull-ups; the joystick's
-switches pull them to GND. Connect the DB9's GND (pin 8) to any GPIO-header GND. Do **not**
-connect pin 7 (+5 V) unless your joystick needs power.
+Each controller uses **5 signal pins** (Up/Down/Left/Right/Fire) + a shared **GND** — that's it.
+A standard **digital** joystick is *passive*: each direction and the fire button is just a
+switch to a common line, and that common is **GND**. **No +5 V is required** — leave DB9 pin 7
+unconnected. (Pin 7 / +5 V is only for *powered* controllers — paddles, mice, active autofire
+pads — which this core doesn't support.) The signals are **active-low**: the FPGA holds each pin
+high with an internal pull-up, and the joystick's switch pulls it to GND when pressed. Connect
+the DB9's GND (pin 8) to any GPIO-header GND.
 
 The pins were chosen against the Sipeed TN20K datasheet v1.3 pinout as two **consecutive
 header blocks** — Joystick 1 on the left header, Joystick 2 on the right header:
