@@ -33,9 +33,8 @@ module tang_top (
     input  wire [4:0]  joy1_n,
     input  wire [4:0]  joy2_n,
 
-    // Audio — sigma-delta PDM (add RC filter: 1 kΩ + 10 nF to 3.5 mm jack)
-    output wire        audio_l,        // pin 25 (IOB6A) — GPIO header
-    output wire        audio_r,        // pin 26 (IOB6B) — GPIO header
+    // (Analog GPIO audio removed — pins 25/26 reused for Joystick 1 L/R. HDMI audio
+    // is unaffected; audio_l_out/audio_r_out below still feed the HDMI audio islands.)
 
     // Status LEDs (active low on Tang Nano 20K) — pins 17-20 only.
     // Pins 15/16 (leds_n[5]/[0] on schematic) are LPLL2 feedback pads; never drive them.
@@ -231,11 +230,8 @@ always_ff @(posedge sys_clk)
     else                            tone_cnt <= tone_cnt + 14'd1;
 
 wire [15:0] tone_sample = tone_sq ? 16'h4000 : 16'hC000;  // ±25 % FS square wave
-wire [15:0] audio_l_out = audio_l_pcm;
-wire [15:0] audio_r_out = audio_r_pcm;
-
-sigma_delta_dac dac_l (.clk(sys_clk), .audio_in(audio_l_out), .dac_out(audio_l));
-sigma_delta_dac dac_r (.clk(sys_clk), .audio_in(audio_r_out), .dac_out(audio_r));
+wire [15:0] audio_l_out = audio_l_pcm;   // feeds HDMI audio (line ~1330) only now
+wire [15:0] audio_r_out = audio_r_pcm;   // (GPIO sigma-delta DAC on 25/26 removed)
 
 // ── SIO — stubbed until Stage 6 ───────────────────────────────────────────
 wire sio_command, sio_txd, sio_motor;
