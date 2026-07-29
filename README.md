@@ -55,8 +55,8 @@ the keyboard alone covers everything.
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open)
-- **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F12 = OSD menu**
-- **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** (no DB9 connectors on the board — see [wiring](#atari-db9-joystick); pins changed 2026-06: the old ones collided with the onboard BL616 MCU)
+- **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F11 = arrows/joystick toggle**, **F12 = OSD menu**
+- **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** on the 2.54 mm headers (no DB9 connectors on the board — see [wiring](#atari-db9-joystick))
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation, four drives** (v2.8) — mount `.atr` and raw `.xfd` images as **D1:–D4:** from the SD card (D1:/D2: in the OSD; D3:/D4: serve automounts and the PC link); live mount/swap while the machine runs
 - **Double-density disks, both layouts** (v2.8) — 256-byte-sector ATRs work in **both** DD file conventions (packed and full-boot-area) — **MyDOS 4.5 images now boot**
@@ -105,7 +105,7 @@ the keyboard alone covers everything.
 | UART / serial keyboard (CH9350 / Pi Pico) | ✅ Working (hardware decoder, both frame variants) |
 | Long filenames (FatFs LFN) + folder browsing | ✅ Working |
 | F9 soft-reset hotkey | ✅ Working |
-| DB9 joystick (wired to GPIO pins) | ✅ Working |
+| DB9 joystick — 2 controllers on header pins | 🔧 pins verified vs datasheet; hardware test pending |
 | Arrow keys as Joystick 1 (OSD toggle, Left-Alt fire) | ✅ Working |
 | SIO disk emulation (.atr / .xfd), **D1:–D4:** | ✅ Working — per-drive mount/unmount, live swap; SIO activity LEDs (v2.8: four slots) |
 | Double-density ATRs, both layouts (MyDOS 4.5 boots) | ✅ Working (v2.8) |
@@ -441,32 +441,27 @@ Standard Atari/Commodore DB9 joystick. No resistors needed — internal FPGA pul
 
 ### Wiring
 
-> **Pin change (2026-06):** the joysticks previously sat on pins 69–76/79, which are **not free
-> GPIO** on the Tang Nano 20K — they carry the onboard BL616 MCU's UART/HSPI lines and the
-> WS2812 LED data. The BL616 drove them, creating permanent phantom joystick input (games
-> auto-skipped intros/cutscenes). The pins below carry LCD-only nets (unpopulated FPC
-> connector) and are safe. Don't ever wire anything to pins 69–76/79.
+Each controller uses **5 signal pins** (Up/Down/Left/Right/Fire) + a shared **GND**. All
+signals are **active-low** — the FPGA holds them high with internal pull-ups; the joystick's
+switches pull them to GND. Connect the DB9's GND (pin 8) to any GPIO-header GND. Do **not**
+connect pin 7 (+5 V) unless your joystick needs power.
 
-```
-DB9 male plug (pin face, looking at solder side of plug)
- ┌───────────────────────┐
- │  1   2   3   4   5   │    Joystick 1     Joystick 2
- │    6   7   8   9     │    (joy1_n)       (joy2_n)
- └───────────────────────┘
-   │   │   │   │           FPGA pin       FPGA pin
-   │   │   │   └── GND ─── GND header     GND header
-   │   │   └────── Left ── pin 29         pin 42
-   │   └────────── Down ── pin 28         pin 41
-   └────────────── Up ──── pin 27         pin 32
+The pins were chosen against the Sipeed TN20K datasheet v1.3 pinout as two **consecutive
+header blocks** — Joystick 1 on the left header, Joystick 2 on the right header:
 
-DB9 pin 3  Left  → joy1_n[2] pin 29 / joy2_n[2] pin 42
-DB9 pin 4  Right → joy1_n[3] pin 30 / joy2_n[3] pin 48
-DB9 pin 6  Fire  → joy1_n[4] pin 31 / joy2_n[4] pin 77
-DB9 pin 8  GND   → GND on GPIO header
-```
+| DB9 pin | Signal | **Joystick 1 → pin** | **Joystick 2 → pin** |
+|---|---|---|---|
+| 1 | Up    | **27** | **42** |
+| 2 | Down  | **28** | **41** |
+| 3 | Left  | **25** | **56** |
+| 4 | Right | **26** | **54** |
+| 6 | Fire  | **29** | **48** |
+| 8 | GND   | any GND | any GND |
 
-All signals are **active low**. Connect the joystick's GND (pin 8) to any GPIO header GND.
-Do **not** connect pin 7 (+5V) unless your joystick requires power.
+> **Never wire to** pins **69–76/79** (onboard BL616 MCU UART/HSPI + WS2812 — the always-on
+> BL616 drives them, creating phantom joystick input), **pin 51** (PLL clock input), or
+> **pin 32** (it's on the LCD flex connector, not a solderable header). Joystick 1 Left/Right
+> reuse pins **25/26**, which were the analogue audio-out pins — see [Audio](#audio).
 
 ---
 
@@ -477,27 +472,12 @@ Do **not** connect pin 7 (+5V) unless your joystick requires power.
 POKEY audio is embedded in HDMI data islands at **48 kHz stereo PCM**. Any HDMI
 monitor or AV receiver with audio output plays it directly. No wiring needed.
 
-### GPIO Audio (analogue — optional)
+### GPIO Audio (analogue — REMOVED)
 
-1-bit sigma-delta PDM on GPIO pins. Add a simple RC low-pass filter:
-
-```
-FPGA pin 25 (audio_l) ─── 1 kΩ ───┬─── 3.5 mm jack LEFT
-                                   │
-                                  10 nF
-                                   │
-                                  GND
-
-FPGA pin 26 (audio_r) ─── 1 kΩ ───┬─── 3.5 mm jack RIGHT
-                                   │
-                                  10 nF
-                                   │
-                                  GND
-
-3.5 mm jack SLEEVE ───────────────── GND
-```
-
-RC cutoff: 1 / (2π × 1 kΩ × 10 nF) ≈ **15.9 kHz** — adequate for POKEY audio.
+The optional analogue sigma-delta output previously on pins 25/26 has been **removed** — those
+pins now carry **Joystick 1 Left/Right**. Use **HDMI audio** (above); it's the primary path and
+is fully unaffected. To restore analogue out, revert the joystick pin change and re-add the
+`audio_l`/`audio_r` DAC (`dac_l`/`dac_r`) in `tang_top.sv`.
 
 ---
 
