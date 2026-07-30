@@ -530,8 +530,9 @@ The Atari auto-boots first. Press **S2** (or **F12**) to open/close the menu:
   **cold-boots straight into the program** (BASIC disabled)
 - **Boot to OS / Boot to BASIC** — load ROMs and (re)boot the Atari
 - **Soft / Hard Reset** — warm or cold restart (F9 is a soft-reset hotkey in-game)
-- **Options** — OSD hot key, **Arrow keys: NORMAL/JOYSTICK** (see below), **Scanlines**
-  (OFF / 25 / 50 / 75 %), and **H position** (Left/Right to slide the picture live). All persist in `atari.ini`
+- **Options** — **Arrow keys: NORMAL/JOYSTICK** (see below), **Scanlines** (OFF / 25 / 50 / 75 %),
+  **H position** (Left/Right to slide the picture live), **Stereo**, **RAM** size, and **Modem (R:)**.
+  All persist in `atari.ini`. (The OSD opens/closes with the **S2** button or **F12** — always.)
 - **Return to Atari** — close the OSD (also via S2 / F12)
 
 > While the menu is open, the Atari **keeps running live behind it** (you'll hear the game
