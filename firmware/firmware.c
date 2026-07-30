@@ -27,10 +27,6 @@ extern int bridge_quiet;         // transfers own the serial TX channel (defined
 #define OPTION_FILE "/atari.ini"
 #define OPTION_INVALID 2
 
-#define OPTION_OSD_KEY_SELECT_START 1
-#define OPTION_OSD_KEY_SELECT_RIGHT 2
-
-int option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
 int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (Left-Alt = fire)
 int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
 int option_h_offset = 0;                    // horizontal pan: capture-skip pixels (0..48)
@@ -48,7 +44,6 @@ static const struct { unsigned char code; int kb; } ram_opts[] = {
 };
 #define N_RAM_OPTS 4
 int option_ram_idx = 0;                      // index into ram_opts; 0 = 128 KB (default)
-#define OSD_KEY_CODE (option_osd_key == OPTION_OSD_KEY_SELECT_START ? 0xC : 0x84)
 
 // Push the input-related options into the hardware config register (0xA4):
 // bit 8 = USB-host-keyboard enable (permanently 0: keyboard is UART/CH9350 only),
@@ -311,13 +306,6 @@ int load_option()  {
         value = trimwhitespace(s+1);
         uart_printf("key=%s, value=%s\n", key, value);
 
-        if (strcmp(key, "osd_key") == 0) {
-            option_osd_key = atoi(value);
-            if (option_osd_key <= 0) {
-                r = OPTION_INVALID;
-                goto load_option_close;
-            }
-        }
         if (strcmp(key, "joystick") == 0) {
             option_arrow_joystick = (atoi(value) != 0);
         }
@@ -358,9 +346,6 @@ int save_option() {
     int err = 0;
     if (f_open(&f, OPTION_FILE, FA_READ | FA_WRITE | FA_CREATE_ALWAYS))
         return 1;
-
-    err |= (f_puts("osd_key=", &f) < 0);
-    err |= (f_puts(option_osd_key == OPTION_OSD_KEY_SELECT_START ? "1\n" : "2\n", &f) < 0);
 
     err |= (f_puts("joystick=", &f) < 0);
     err |= (f_puts(option_arrow_joystick ? "1\n" : "0\n", &f) < 0);
@@ -1070,7 +1055,7 @@ int menu_loadrom(int *choice, int carts, int slot) {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
                 bridge_poll();
-                int r = joy_choice(TOPLINE, file_len, &active, OSD_KEY_CODE);
+                int r = joy_choice(TOPLINE, file_len, &active);
                 int j1, j2;
                 joy_get(&j1, &j2);
                 if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
@@ -2403,7 +2388,7 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
             uart_keyboard_poll();
             sio_poll();
             bridge_poll();
-            if (joy_choice(11, 4, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(11, 4, &choice) == 1) {
                 if (choice == 0) {
                     delay(300);
                     int r = menu_loadrom(sel_idx, 0, slot);
@@ -2480,7 +2465,7 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
             uart_keyboard_poll();
             sio_poll();
             bridge_poll();
-            if (joy_choice(11, 3, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(11, 3, &choice) == 1) {
                 if (choice == 0) {
                     delay(300);
                     int r = menu_loadrom(sel_idx, 1, 0);
@@ -2508,7 +2493,7 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
 // Draw the RAM size value + "<- ->" hint at the menu's RAM row (col 16, row 18).
 // Trailing spaces clear stale characters when the digit count shrinks (1088->128).
 static void draw_ram_line(void) {
-    cursor(16, 18);
+    cursor(16, 17);
     int n = ram_opts[option_ram_idx].kb; char s[6]; int k = 0, d = 1000;
     while (d > n && d > 1) d /= 10;
     while (d >= 1) { s[k++] = '0' + (n / d) % 10; d /= 10; }
@@ -2526,48 +2511,41 @@ void menu_options() {
 
         cursor(2, 12);
         print("<< Return to main menu");
-        cursor(2, 13);
-        print("OSD hot key:");
-        cursor(16, 13);
-        if (option_osd_key == OPTION_OSD_KEY_SELECT_START)
-            print("SELECT&START");
-        else
-            print("SELECT&RIGHT");
 
-        cursor(2, 14);
+        cursor(2, 13);
         print("Arrow keys:");
-        cursor(16, 14);
+        cursor(16, 13);
         print(option_arrow_joystick ? "JOYSTICK" : "NORMAL");
 
-        cursor(2, 15);
+        cursor(2, 14);
         print("Scanlines:");
-        cursor(16, 15);
+        cursor(16, 14);
         print(option_scanline_level == 1 ? "25%" :
               option_scanline_level == 2 ? "50%" :
               option_scanline_level == 3 ? "75%" : "OFF");
 
-        cursor(2, 16);
+        cursor(2, 15);
         print("H position:");
-        cursor(16, 16);
+        cursor(16, 15);
         { char hb[8]; int n = option_h_offset; int k = 0;
           if (n >= 10) hb[k++] = '0' + (n / 10);
           hb[k++] = '0' + (n % 10); hb[k] = 0; print(hb); print("  <- ->"); }
 
-        cursor(2, 17);
+        cursor(2, 16);
         print("Stereo:");
-        cursor(16, 17);
+        cursor(16, 16);
         print(option_stereo ? "ON" : "OFF");
 
-        cursor(2, 18);
+        cursor(2, 17);
         print("RAM:");
         draw_ram_line();
 
-        cursor(2, 19);
+        cursor(2, 18);
         print("Modem (R:):");
-        cursor(16, 19);
+        cursor(16, 18);
         print(option_modem ? "ON" : "OFF");
 
-        cursor(2, 20);
+        cursor(2, 19);
         print(options_dirty ? "Save changes *" : "Save changes");
 
         delay(300);
@@ -2578,63 +2556,56 @@ void menu_options() {
             { // H position: live left/right adjust on the selected item (Save to persist)
                 int jj1, jj2; joy_get(&jj1, &jj2);
                 // Left arrow moves the picture LEFT (bigger offset = pan source right).
-                if (choice == 4 && (jj1 & 0x40) && option_h_offset < 48) {
+                if (choice == 3 && (jj1 & 0x40) && option_h_offset < 48) {
                     option_h_offset++; apply_video_options(); options_dirty = 1; delay(60);
-                } else if (choice == 4 && (jj1 & 0x80) && option_h_offset > 0) {
+                } else if (choice == 3 && (jj1 & 0x80) && option_h_offset > 0) {
                     option_h_offset--; apply_video_options(); options_dirty = 1; delay(60);
                 }
                 // RAM size: Left = smaller, Right = bigger (clamped). NOT applied until
                 // Enter (cold boot) — just update the selection and redraw it in place.
-                else if (choice == 6 && (jj1 & 0x80) && option_ram_idx < N_RAM_OPTS - 1) {
+                else if (choice == 5 && (jj1 & 0x80) && option_ram_idx < N_RAM_OPTS - 1) {
                     option_ram_idx++; options_dirty = 1; draw_ram_line(); delay(180);
-                } else if (choice == 6 && (jj1 & 0x40) && option_ram_idx > 0) {
+                } else if (choice == 5 && (jj1 & 0x40) && option_ram_idx > 0) {
                     option_ram_idx--; options_dirty = 1; draw_ram_line(); delay(180);
                 }
             }
-            if (joy_choice(12, 9, &choice, OSD_KEY_CODE) == 1) {
+            if (joy_choice(12, 8, &choice) == 1) {
                 // Every item applies its change LIVE (so you can see it) but does NOT write
                 // to SD — only "Save changes" persists. Leaving without saving keeps the
                 // changes for this session; they revert to the saved values on next boot.
                 if (choice == 0) {
                     return;
                 } else if (choice == 1) {
-                    if (option_osd_key == OPTION_OSD_KEY_SELECT_START)
-                        option_osd_key = OPTION_OSD_KEY_SELECT_RIGHT;
-                    else
-                        option_osd_key = OPTION_OSD_KEY_SELECT_START;
-                    options_dirty = 1;
-                    break;	// redraw UI
-                } else if (choice == 2) {
                     option_arrow_joystick = !option_arrow_joystick;
                     apply_input_options();
                     options_dirty = 1;
                     break; // redraw UI
-                } else if (choice == 3) {
+                } else if (choice == 2) {
                     option_scanline_level = (option_scanline_level + 1) & 0x3; // OFF/25/50/75
                     apply_video_options();
                     options_dirty = 1;
                     break; // redraw UI
-                } else if (choice == 4) {
+                } else if (choice == 3) {
                     // H position is adjusted live with Left/Right; select does nothing
                     // here (use "Save changes" to persist).
                     break; // redraw UI
-                } else if (choice == 5) {
+                } else if (choice == 4) {
                     option_stereo = !option_stereo;   // dual-POKEY stereo on/off
                     apply_video_options();            // applies live (reg_video_opts bit 2)
                     options_dirty = 1;
                     break; // redraw UI
-                } else if (choice == 6) {
+                } else if (choice == 5) {
                     // RAM size is chosen with Left/Right; Enter applies it. A running
                     // machine can't change RAM, so cold-boot (cold_boot_atari writes
                     // RAM_SELECT before releasing the core). Save persists it.
                     status("Rebooting with new RAM size...");
                     cold_boot_atari();
                     break; // redraw UI
-                } else if (choice == 7) {
+                } else if (choice == 6) {
                     option_modem = !option_modem;     // opt in/out of the R: modem handler
                     options_dirty = 1;                // takes effect on the next COLD boot
                     break; // redraw UI
-                } else if (choice == 8) {
+                } else if (choice == 7) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
@@ -3308,7 +3279,7 @@ int main() {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
                 bridge_poll();
-                int r = joy_choice(8, 9, &choice, OSD_KEY_CODE);
+                int r = joy_choice(8, 9, &choice);
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);

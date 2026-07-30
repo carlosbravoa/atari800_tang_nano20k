@@ -91,7 +91,7 @@ extern void joy_get(int *joy1, int *joy2);
 // display cursor and let user choose using joystick. 
 // this returns immediately
 // 0: no choice from user, 1: user chose *active, 2: next page, 3: previous page
-extern int joy_choice(int start_line, int len, int *active, int osd_key_code);
+extern int joy_choice(int start_line, int len, int *active);
 
 // SD card access
 extern int sd_init();   /* Return 0 on success, non-zero on failure */

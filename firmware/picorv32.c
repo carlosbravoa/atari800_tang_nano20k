@@ -202,7 +202,7 @@ void backup_process();
 
 // (R L X A RT LT DN UP START SELECT Y B)
 // overlay_key_code: 0x84 for SELECT&RIGHT, 0xC for SELECT&START, 0x804 for SELECT/RB
-int joy_choice(int start_line, int len, int *active, int overlay_key_code) {
+int joy_choice(int start_line, int len, int *active) {
    if (*active < 0 || *active >= len)
       *active = 0;
    int joy1, joy2;
@@ -212,8 +212,8 @@ int joy_choice(int start_line, int len, int *active, int overlay_key_code) {
    joy_get(&joy1, &joy2);
    // DEBUG("joy_choice: joy1=%x, joy2=%x\n", joy1, joy2);
 
-    if ((joy1 == overlay_key_code) || (joy2 == overlay_key_code) || (joy1 & 0x200) || (joy2 & 0x200)) {
-       overlay(!overlay_status());    // toggle OSD
+    if ((joy1 & 0x200) || (joy2 & 0x200)) {   // S2 button toggles the OSD (F12 is handled by callers)
+       overlay(!overlay_status());
        delay(300);
     }
 
