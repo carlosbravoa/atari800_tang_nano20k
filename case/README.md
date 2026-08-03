@@ -10,31 +10,36 @@ GPIO pins).
 | ![assembly](img/assembly.png) | ![exploded](img/exploded.png) |
 | Exploded preview (lid floating) | Removable end caps pulling out of the open-ended tray |
 | ![cap](img/cap_usbc.png) | ![side](img/side_right.png) |
-| +X end cap (inside): USB-C/SD + dual-USB + DB9, clamp lips + hold-down ear | +X end: USB-C/SD (front), dual-USB (middle), DB9 (rear) |
+| +X end cap (inside): USB-C/SD + dual-USB + DB9 + clamp lips + top boss | +X end: USB-C/SD (front), dual-USB (middle), DB9 (rear) |
 | ![side](img/side_left.png) | ![db9](img/db9_side.png) |
 | −X wall: HDMI **low** (front) + DB9 (rear) — Tang is component-side-down | Side 3/4: DB9 port detail |
 | ![section](img/section.png) | ![styled](img/lid_styled.png) |
 | Cutaway: connector gap below the PCB, pins-up headroom above, closed lid | Lid: 65XE-style top (vent band / brand strip / Fuji) — a plain cover now |
 | ![floor](img/floor.png) | ![front](img/front_wall.png) |
-| Floor: S1/S2 poke-holes + LED window (board faces down) + feet | Front wall: LED side slot (see the LEDs from the side too) |
-| ![closed](img/closed.png) | |
-| Closed case | |
+| Floor: S1/S2 poke-holes + LED window (board faces down) | Front wall: LED side slot (see the LEDs from the side too) |
+| ![back](img/back_wall.png) | ![interior](img/base_interior.png) |
+| Rear wall: vent grill at the BOTTOM (components face down, heat sits low) | Tray interior: shelves, stop ribs, cap channels, sills |
+| ![closed](img/closed.png) | ![fitcheck](img/fitcheck.png) |
+| Closed case (screw-on feet) | fitcheck plate: sliced tray + both caps flat |
 
 ## What's here
 
-Print **four parts** — the two short walls are separate, removable **end caps**
-so the board can actually be fitted (see *Assembly* below):
+Print **five parts, all support-free** — the two short walls are separate,
+removable **end caps** so the board can actually be fitted, and the feet are
+separate pucks (feet printed under the base would force supports beneath the
+whole floor). See *Assembly* below:
 
 ```
 case/
 ├── tang_nano_20k_ch9350_case.scad   # the parametric model (edit this)
 ├── stl/
-│   ├── base.stl          # open-ended tray (floor button/LED holes, feet,
-│   │                      #   rear vent grill; short ends are OPEN for the caps)
+│   ├── base.stl          # open-ended tray (floor button/LED holes, cap
+│   │                      #   channels, bottom rear vent; short ends OPEN)
 │   ├── lid.stl           # screw-down lid — plain cover (vents + branding)
-│   ├── endcap_hdmi.stl   # -X end cap: HDMI + a DB9  (bolts on)
-│   ├── endcap_usbc.stl   # +X end cap: USB-C/SD + dual USB-A + a DB9  (bolts on)
-│   └── fitcheck.stl      # thin test frame (base + caps) — PRINT THIS FIRST
+│   ├── endcap_hdmi.stl   # -X end cap: HDMI + a DB9  (hooks on)
+│   ├── endcap_usbc.stl   # +X end cap: USB-C/SD + dual USB-A + a DB9 (hooks on)
+│   ├── feet.stl          # 4 pucks, screw on from below into the lug bores
+│   └── fitcheck.stl      # test plate (sliced tray + caps) — PRINT THIS FIRST
 └── img/                  # rendered previews
 ```
 
@@ -51,19 +56,21 @@ dimensions:
 The **exact positions of the connectors, the S1/S2 buttons and the LEDs vary**
 between board revisions and CH9350 vendors. So:
 
-1. **Print `fitcheck.stl` first.** It's the floor + low walls + the board
-   shelves + capture clips + connector cutouts (~10–15 min, little plastic).
-   Drop the Tang in **pins-up** and check: it snaps under the clips, the HDMI /
-   USB-C openings (now low on the walls) and the microSD slot line up, and the
-   floor button/LED holes sit under S1/S2 and the LEDs.
-2. Adjust the variables at the top of the `.scad` (every dimension is one), then
-   re-export and print the real `base.stl` + `lid.stl`.
+1. **Print `fitcheck.stl` first.** One plate: the tray sliced low (floor +
+   shelves + cap channels + stubs) with **both end caps laid flat beside it**
+   (~20 min, little plastic). Drop the Tang in **pins-up**, hold each cap to
+   its end and check: the HDMI / USB-C / SD / dual-USB openings line up, the
+   hook-on slide-and-drop works, the clamp lips land on bare PCB (not on header
+   plastic or solder tabs), and the floor button/LED holes sit under S1/S2 and
+   the LEDs.
+2. Adjust the variables at the top of the `.scad` (every dimension is one),
+   then re-export and print the real parts.
 
 The button/LED/connector positions and the key heights (`standoff`, `headroom`,
-`clip_ov`) have now been set from **measured** values of a real board (see
-`measure_sheet.py`). They should be close — the connector openings still carry a
-little clearance — but a `fitcheck` print is the final confirmation, especially
-`clip_ov` (only ~1 mm of bare PCB edge before the pin row, so the grip is light).
+lip bands) are set from **measured** values of a real board (see
+`measure_sheet.py`). They should be close — the connector openings carry
+plug-sized clearance — but the `fitcheck` print is the final confirmation,
+especially the clamp-lip bands and the SD-slot offset (`sd_y_off`).
 
 ## Layout
 
@@ -104,29 +111,40 @@ carrying that end's connector cutouts and DB9 mount. Assembly:
 
 1. Wire the two **DB9** sockets and bolt them to their end caps.
 2. Set the **Tang** onto the long-edge shelves (both ends open — nothing blocks
-   it, the old snap clips are gone) and drop the **CH9350** onto its shelf.
+   it) and drop the **CH9350** onto its shelf. **Take the SD card out first**
+   (a protruding card would block the cap slide). The shelves deliberately grip
+   only the outer **0.3 mm** of the board's underside — the pre-soldered header
+   tails protrude on the down-facing side just ~1 mm in from each long edge, so
+   a wider shelf would sit the board on solder blobs, not PCB.
 3. **Hook each cap on**: hold it ~3 mm high, slide it inward so the connector
    noses pass through their openings, then let it drop — its bottom edge lands
    in a floor channel (outer sill + inner rib), locking the bottom in and out.
    Small **clamp lips** on each cap land on bare PCB edge areas and hold the
    boards down (placed to clear the pin headers, HDMI solder tabs and SD slot).
 4. Plug the Dupont jumpers onto the pins (they point up — do this any time).
+   Keep the pin + plug stack under **~18 mm** above the PCB or it will foul the
+   lid (`headroom` is 20 mm; measured stack ~17 mm).
 5. Screw the **lid** on: 4 corner screws + **1 screw per end cap** that goes
    down through the lid into a boss on the cap top (the boss sits above the DB9,
-   with clear screwdriver access from above). That locks the cap tops.
+   with clear screwdriver access from above; its pilot is through-drilled so a
+   long screw can't jack the cap). That locks the cap tops.
+6. Flip the case and screw the **4 feet** on from below — each puck takes an M3
+   up into the corner-lug bore (the bores run right through). The feet lift the
+   floor button holes / LED window off the desk.
 
-To service it: remove 6 screws, lift the lid, lift the caps out, board lifts
-out. Every dimension is calibrate-able (`endcap_*`, `hdmi_*`/`usbc_*`/`sd_*`).
-The connector openings are sized to clear the **mating plug** (not just the
-board connector) since FDM holes print undersized — the first print needed
-every hole opened up, so they were all enlarged.
+To service it: remove the top 6 screws, lift the lid, lift the caps out, board
+lifts out. Every dimension is calibrate-able (`endcap_*`, `hdmi_*`/`usbc_*`/
+`sd_*`). The connector openings are sized to clear the **mating plug** (not
+just the board connector) since FDM holes print undersized — the first print
+needed every hole opened up, so they were all enlarged.
 
-The lid takes **6 × M3 self-tapping screws total** (4 corner lugs + 2 cap
-hold-downs), all from the top. The base lugs and cap bosses have pilot holes;
-the lid holes are counterbored so the heads sit flush. Screws ~12–16 mm for the
-lugs, ~8–10 mm for the cap screws; or use machine screws into heat-set inserts
-(open `screw_pilot_d` to the insert bore). Two shallow bars under the lid align
-it front/back (kept short so they clear the Dupont plugs).
+Screw count: **10 × M3 self-tapping** — 4 lid corners (12–16 mm), 2 cap
+hold-downs (8–10 mm), 4 feet (8–10 mm). All pilot holes are 2.6 mm; the lid and
+feet holes are counterbored so heads sit flush. Or use machine screws into
+heat-set inserts (open `screw_pilot_d` to the insert bore). Two shallow bars
+under the lid align it front/back (kept to 2.5 mm so they clear the Dupont
+plugs). The CH9350 ledge reaches **1 mm** under that board's perimeter
+(`ledge_in`) — check your module's underside pins and adjust if needed.
 
 Outer size with defaults: **box ≈ 60 × 90 × 33 mm** (~37 mm on its feet),
 **≈ 72 × 102 mm including the corner lugs**. The depth comes from the three
