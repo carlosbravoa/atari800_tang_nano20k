@@ -1,5 +1,12 @@
 # 3D-printed case — Tang Nano 20K + CH9350
 
+> **Licence — this directory only: CC BY-NC-SA 4.0.**
+> The ventilation louvre is transplanted geometry from wt808's
+> [Atari-Compatible eclaire Mini](https://www.thingiverse.com/thing:3562690)
+> (CC BY-NC-SA), so this case is an **Adapted Work**. ShareAlike requires it to
+> carry the same licence, which means the repository's `GPL-3.0-or-later`
+> option does **not** apply to `case/`. See [Credits](#credits).
+
 An Atari-styled clamshell enclosure for this project's hardware: a **Sipeed Tang
 Nano 20K** plus a **CH9350 USB-host keyboard module**, wired as in the main
 [README](../README.md) (one data wire to Pin 53, GND + 5 V, DB9 joysticks on
@@ -45,6 +52,9 @@ case/
 │   ├── bottom.stl     # tray: card slot, CH9350 seat, DB9 mounts, front panel
 │   ├── top.stl        # cover: vents, branding, screw posts, board press pads
 │   └── fitcheck.stl   # the tray sliced low — PRINT THIS FIRST
+├── ref/
+│   ├── louvre_tile.stl # THIRD-PARTY: one pitch of wt808's vent comb
+│   └── README.md       # what it is, where it came from, what changed
 └── img/               # rendered previews
 ```
 
@@ -88,17 +98,19 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
 - **Rear wall** — ventilation grill only. Power comes in on USB-C and the
   GND / 5 V / Pin-53 links are internal jumpers, so nothing needs to leave the
   case.
-- **Cooling** — an **XE-style louvre comb wraps the front-top corner**. In the
-  reference the ribs are not a panel sitting on the lid: each one runs from the
-  top face, over the edge, and dies into the side face, so the vent is part of
-  the shell's edge rather than a window cut in the middle of it. Here that
-  corner is the front-top edge, complete with its wedge chamfer — which is also
-  directly over the Tang, so one feature does both the styling and the cooling.
-  Every rib is held at *both* ends (to the front wall below, to the top plate
-  behind), so nothing cantilevers, and it runs unbroken across the front.
-  Intake slots in the floor sit underneath, giving a
-  chimney past the standing board; upright slits around the rear flanks and
-  floor slots under the rear bay vent the back half.
+- **Cooling** — the louvre comb on the **front-top corner is wt808's actual
+  geometry**, not a reproduction: `ref/louvre_tile.stl` is one 4.0 mm pitch cut
+  out of their 800-style top shell and tiled ten times across the front. Their
+  ribs are an *edge* treatment — each runs from the top face, over the corner,
+  and dies into the front face — which is what makes it read as part of the
+  shell rather than a window cut in the lid. Their top plate is 2.0 mm, the
+  same as ours, so it grafts flush; the cover's own wedge chamfer is pocketed
+  away underneath the band. Slots are **1.0 mm wide on a 4.0 mm pitch and run
+  straight**, perpendicular to the edge — the oblique "//////" look in the
+  reference renders is perspective, not geometry. The band sits directly over
+  the Tang, and intake slots in the floor sit underneath it, giving a chimney
+  past the standing board; upright slits around the rear flanks and floor slots
+  under the rear bay vent the back half.
 
 ### How the boards are held
 
@@ -171,13 +183,30 @@ openscad -o stl/fitcheck.stl -D 'part="fitcheck"' tang_nano_20k_ch9350_case.scad
 
 ## Credits
 
-The styling — clamshell shells, wedge front, vent bands and split ports — is an
-homage to **wt808's "Atari-Compatible eclaire Mini" enclosures**
-([Thingiverse thing:3562690](https://www.thingiverse.com/thing:3562690), which
-are licensed CC BY-NC-SA). **No geometry from that work is used here**: every
-shape is generated from scratch by the OpenSCAD script, so this case stays under
-this repository's own licence. If you want the real thing for an eclaire board,
-go and print wt808's excellent models.
+The ventilation louvre in this case is **transplanted geometry**, not a
+reproduction:
+
+> **Enclosure v1.12, Atari-Compatible eclaire Mini** — by **wt808**
+> https://www.thingiverse.com/thing:3562690
+> Licensed **CC BY-NC-SA** (Attribution — NonCommercial — ShareAlike)
+
+`ref/louvre_tile.stl` is one 4.0 mm pitch of the vent comb cut out of that
+work's `v1.12eclaire800top.stl`. **Changes made:** the source mesh was repaired
+to watertight, sliced to a single pitch through the centre of a rib at each end
+so it tiles, and trimmed in depth and height for this much smaller case; it is
+then re-tiled and re-oriented by the script. See `ref/README.md`.
+
+The rest of the styling — clamshell shells, wedge front, split ports, front
+panel, branding — is drawn from scratch in OpenSCAD, but that does not matter
+for licensing: because the tile is copied mesh, the whole enclosure is an
+**Adapted Work** under CC BY-NC-SA and is licensed **CC BY-NC-SA 4.0 only**.
+ShareAlike does not permit offering it under the repository's
+`GPL-3.0-or-later` option as well, so that option does not extend to `case/`.
+NonCommercial costs nothing extra here — the project as a whole is already
+non-commercial because of the upstream Atari core (see the root `LICENSE`).
+
+If you want the real thing for an eclaire board, go and print wt808's excellent
+models rather than this one.
 
 "Atari" and the Fuji mark are trademarks of Atari Interactive, Inc. The mark
 here is a loose stylised approximation drawn in code, for personal use.

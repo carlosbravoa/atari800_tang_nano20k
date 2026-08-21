@@ -15,11 +15,15 @@
 //    parting line, so both boards drop straight in from above and the cover
 //    closes over them - no end caps, no snap clips, no fighting a board into
 //    a closed box.
-//  * Styling (clamshell, wedge front, vent bands, split ports) is an homage to
-//    wt808's "Atari-Compatible eclaire Mini" enclosures on Thingiverse
-//    (thing:3562690, CC BY-NC-SA).  All geometry here is generated from
-//    scratch by this script; no model data is copied from that work, so this
-//    file stays under the repository's own licence.
+//  * DERIVATIVE WORK - READ case/README.md BEFORE REUSING.
+//    The louvre band on the front-top corner is TRANSPLANTED GEOMETRY: it tiles
+//    case/ref/louvre_tile.stl, which is cut directly out of wt808's
+//    "Atari-Compatible eclaire Mini" 800-style top shell (Thingiverse
+//    thing:3562690, CC BY-NC-SA).  The surrounding styling - clamshell shells,
+//    wedge front, split ports - is an homage drawn from scratch, but because
+//    that tile is copied mesh, this case is an Adapted Work: it is licensed
+//    CC-BY-NC-SA-4.0 ONLY, and the repository's GPL-3.0 option does NOT apply
+//    to case/.  Attribution and the full terms are in case/README.md.
 //
 //  Board defaults are datasheet + measured values:
 //     Tang Nano 20K PCB : 54.04 x 22.55 x ~1.6 mm
@@ -176,24 +180,27 @@ post_r        = 2.9;   // leaves 1.6 mm of meat around the pilot bore, and stays
 // -----------------------------------------------------------------------------
 //  VENTILATION
 // -----------------------------------------------------------------------------
-// Louvre, XE style. The reference's ribs are not a panel sitting on the lid -
-// they wrap the shell's CORNER: each rib runs from the top face, over the edge,
-// and dies into the side face, so the vent is part of the shell's edge rather
-// than a window cut in the middle of it. Here that corner is the FRONT-top edge
-// (complete with its wedge chamfer), which is also directly over the Tang, so
-// the same feature does the styling and the cooling.
+// Louvre: TRANSPLANTED GEOMETRY, not a reproduction.
+// case/ref/louvre_tile.stl is one 4.0 mm pitch of the vent comb cut straight
+// out of wt808's 800-style top shell (v1.12eclaire800top.stl), sliced through
+// the centre of a rib at each end so it tiles seamlessly. Their top plate is
+// 2.0 mm, the same as ours, so it grafts flush: the tile carries their plate,
+// their slot and their front-edge corner, and the cover's own wedge chamfer is
+// pocketed away underneath it. Slots are 1.0 mm wide on a 4.0 mm pitch and run
+// straight (perpendicular to the edge) - the oblique look in the reference
+// renders is perspective, not geometry.
 //
-// Every rib is therefore held at BOTH ends - to the front wall below and to the
-// top plate behind - so nothing cantilevers. The comb is split into two groups
-// by a solid divider where the cover's front screw post comes down; the
-// reference's comb has a step in it too.
+// The band sits on the FRONT-top corner, directly over the Tang, so it vents
+// where the FPGA's heat is; intake slots in the floor sit underneath it.
+//
+// This tile is a derivative of a CC BY-NC-SA work - see case/README.md.
 vent_enable   = true;
-comb_gap      = 1.6;    // slot width
-comb_pitch    = 3.0;    // spacing between slots
-comb_angle    = 45;     // obliqueness of the slots
-comb_depth    = 11.0;   // how far back onto the top face the ribs run
-comb_drop     = 5.0;    // how far down the front face they run
-comb_side_in  = 9.5;    // inset from the side walls (clears the press pads)
+louvre_tiles  = 10;      // 10 x 4 mm = 40 mm of comb
+louvre_pitch  = 4.0;     // measured from the source mesh
+tile_x0       = -56.710; // the tile's own origin, for the transform
+tile_ymax     = 467.978;
+tile_depth    = 12.078;
+tile_height   = 6.000;
 
 side_vent_enable = true;  // upright slits around the cover's rear flanks
 side_vent_w      = 1.8;
@@ -259,9 +266,9 @@ function ch_x0() = out_x - wall - clear - ch_len;   // USB stack against +X wall
 // the louvre comb.
 scr_mid_y = jump_y + 3.8;
 
-// Comb bounds along the front edge, inset so it never crosses the press pads.
-comb_x0 = comb_side_in;
-comb_x1 = out_x - comb_side_in;
+// Louvre band placement: centred on the case, clear of the cover's press pads.
+louvre_w  = louvre_tiles * louvre_pitch;
+louvre_bx = (out_x - louvre_w)/2;
 
 tn_vc = tn_z0 + tn_wid/2;                      // board's vertical centre
 ch_cy = ch_y0 + ch_wid/2;
@@ -315,27 +322,24 @@ module cavity() {
 
 module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
 
-// Oblique slots cut through the FRONT-TOP CORNER: they pass through the top
-// plate (where it spans the cavity) and down through the front wall, so the
-// material left between them forms ribs that wrap the edge and end on the front
-// face. Split into two groups around the front screw post.
-module front_comb_cut() {
-    z0 = out_z - comb_drop;
-    zh = comb_drop + 2;
-    intersection() {
-        union() {
-            dx = comb_pitch / sin(comb_angle);
-            L  = (comb_x1 - comb_x0) + comb_depth + 20;
-            for (x = [comb_x0 - comb_depth : dx : comb_x1 + comb_depth])
-                translate([x, comb_depth/2, z0])
-                    linear_extrude(zh)
-                        rotate(comb_angle)
-                            hull() for (s = [-L/2, L/2])
-                                translate([s, 0]) circle(comb_gap/2);
-        }
-        translate([comb_x0, -2, z0 - 1])
-            cube([comb_x1 - comb_x0, comb_depth + 2, zh + 2]);
-    }
+// The grafted band: tiles of wt808's comb, flipped and laid along our
+// front-top corner. rotate([180,0,0]) turns their outer top face (z=0, material
+// above) into ours (material below out_z) and swings their rear edge round to
+// our front edge.
+module louvre_band() {
+    translate([louvre_bx, 0, out_z])
+        rotate([180, 0, 0])
+            translate([-tile_x0, -tile_ymax, 0])
+                for (i = [0 : louvre_tiles - 1])
+                    translate([i * louvre_pitch, 0, 0])
+                        import("ref/louvre_tile.stl", convexity = 8);
+}
+
+// The hole the band drops into. Held back 0.1 mm on every buried face so the
+// cover's own material overlaps the graft instead of merely touching it.
+module louvre_pocket() {
+    translate([louvre_bx + 0.1, -2, out_z - tile_height + 0.1])
+        cube([louvre_w - 0.2, 2 + tile_depth - 0.1, tile_height + 2]);
 }
 
 // Upright slits around the cover's rear flanks (kept behind the port cluster).
@@ -388,7 +392,7 @@ module front_fuji_cut() {
 }
 
 module brand_cut() {
-    by = (comb_depth + out_y)/2;  // centred in the plain area behind the comb
+    by = (tile_depth + out_y)/2;  // centred in the plain area behind the louvre
     translate([out_x/2, by, out_z - brand_depth])
         linear_extrude(brand_depth + 1)
             offset(r = 1.2) square([brand_w - 2.4, brand_h - 2.4], center = true);
@@ -536,10 +540,12 @@ module top() {
             translate([wall, wall_front, split_z - 1])
                 cube([inner_x, out_y - wall_front - wall, inner_z - split_z + 1]);
             port_cuts();
-            if (vent_enable) front_comb_cut();
+            if (vent_enable) louvre_pocket();
             if (side_vent_enable) side_vents();
             if (brand_enable) brand_cut();
         }
+        // The transplanted louvre band, dropped into its pocket.
+        if (vent_enable) louvre_band();
         // Everything below is added AFTER the hollow so it survives, and each
         // piece overlaps solid cover material so the result stays manifold.
         difference() {
