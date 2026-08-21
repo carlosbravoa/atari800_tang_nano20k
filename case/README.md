@@ -48,7 +48,7 @@ case/
 └── img/               # rendered previews
 ```
 
-Outer size: **≈ 60 × 90 × 28 mm**. The width is pinned by the Tang — its two
+Outer size: **≈ 60 × 96 × 28 mm**. The width is pinned by the Tang — its two
 ends carry HDMI and USB-C, so both have to reach a side wall — and the depth is
 the sum of the connector zone, the jumper stack, the CH9350 and the DB9 bay.
 
@@ -95,9 +95,8 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
   corner is the front-top edge, complete with its wedge chamfer — which is also
   directly over the Tang, so one feature does both the styling and the cooling.
   Every rib is held at *both* ends (to the front wall below, to the top plate
-  behind), so nothing cantilevers. The comb is split into two groups by a solid
-  divider where the cover's front screw post comes down — the reference's comb
-  has a step in it too. Intake slots in the floor sit underneath, giving a
+  behind), so nothing cantilevers, and it runs unbroken across the front.
+  Intake slots in the floor sit underneath, giving a
   chimney past the standing board; upright slits around the rear flanks and
   floor slots under the rear bay vent the back half.
 
@@ -120,8 +119,14 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
 3. Plug the Dupont jumpers onto the Tang's headers — they point backwards into
    the open bay, so this is comfortable with the cover off.
 4. Lower the **cover** straight down and fasten **3 × M3 self-tapping screws
-   from underneath** (one front centre, two in the rear bay) into the posts
-   moulded to the cover. Nothing shows on top.
+   from underneath** — one in the middle of the case, two in the rear bay —
+   into the posts moulded to the cover. Nothing shows on top.
+
+   The middle post lands in the clear band between the jumper bay and the
+   CH9350. That band is the only spot in the middle of the case where a post
+   touches neither board, neither set of pins, nor the Dupont plugs; `gap_tj` is
+   widened to 9 mm to make room for it, which is where ~5 mm of the case's depth
+   goes.
 
 Keep the pin + Dupont stack under ~18 mm behind the PCB (`jumper_len` is 17 mm).
 

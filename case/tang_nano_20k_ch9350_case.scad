@@ -128,7 +128,11 @@ floor_th   = 2.0;
 top_th     = 2.0;
 clear      = 0.4;   // XY fit clearance around the boards
 conn_gap   = 0.6;   // slack between the front wall and the deepest connector
-gap_tj     = 2.5;   // gap between the jumper stack and the CH9350
+gap_tj     = 9.0;   // gap between the jumper stack and the CH9350. Wide
+                    // enough to land the third cover screw in it: that band is
+                    // the only spot in the middle of the case where a post
+                    // touches neither board, neither set of pins, nor the
+                    // Dupont plugs.
 gap_jd     = 2.0;   // gap between the CH9350 and the DB9 bay
 head_gap   = 1.5;   // clear space above the tallest internal item
 fillet     = 3.0;   // outer vertical corner radius
@@ -168,8 +172,6 @@ screw_head_d  = 6.4;
 screw_head_h  = 2.2;
 post_r        = 2.9;   // leaves 1.6 mm of meat around the pilot bore, and stays
                        // clear of the Tang's front face and the DB9 bodies
-post_gap      = 7.0;   // the front card-slot rib is broken by this much so the
-                       // front post can reach the floor
 
 // -----------------------------------------------------------------------------
 //  VENTILATION
@@ -191,8 +193,7 @@ comb_pitch    = 3.0;    // spacing between slots
 comb_angle    = 45;     // obliqueness of the slots
 comb_depth    = 11.0;   // how far back onto the top face the ribs run
 comb_drop     = 5.0;    // how far down the front face they run
-comb_side_in  = 9.5;   // inset from the side walls (clears the press pads)
-comb_split    = 3.8;    // half-width of the solid divider at the screw post
+comb_side_in  = 9.5;    // inset from the side walls (clears the press pads)
 
 side_vent_enable = true;  // upright slits around the cover's rear flanks
 side_vent_w      = 1.8;
@@ -251,6 +252,13 @@ function ux(u) = tn_x0 + u;
 function vz(v) = tn_z0 + v;
 function ch_x0() = out_x - wall - clear - ch_len;   // USB stack against +X wall
 
+// Third cover screw sits in the clear band between the jumper bay and the
+// CH9350, on the case centreline. It used to stand in the 6.5 mm strip in front
+// of the Tang, a couple of tenths off the component face - too close to the
+// board and its header solder, and it forced a break in both the card slot and
+// the louvre comb.
+scr_mid_y = jump_y + 3.8;
+
 // Comb bounds along the front edge, inset so it never crosses the press pads.
 comb_x0 = comb_side_in;
 comb_x1 = out_x - comb_side_in;
@@ -264,7 +272,7 @@ db9_y = (bay_y0 + bay_y1)/2;
 // light path.
 // X of the front post is chosen to fall in a gap between the cover's press
 // pads, and Y of the rear pair keeps them clear of the top vent band.
-scr_pts = [[out_x/2,     wall_front + 3.0],
+scr_pts = [[out_x/2,     scr_mid_y],
            [out_x*0.34,  bay_y0 + 6.8],
            [out_x*0.66,  bay_y0 + 6.8]];
 
@@ -314,7 +322,6 @@ module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
 module front_comb_cut() {
     z0 = out_z - comb_drop;
     zh = comb_drop + 2;
-    px = scr_pts[0][0];
     intersection() {
         union() {
             dx = comb_pitch / sin(comb_angle);
@@ -326,12 +333,8 @@ module front_comb_cut() {
                             hull() for (s = [-L/2, L/2])
                                 translate([s, 0]) circle(comb_gap/2);
         }
-        union() {   // left and right groups, divider between them
-            translate([comb_x0, -2, z0 - 1])
-                cube([max(0.1, (px - comb_split) - comb_x0), comb_depth + 2, zh + 2]);
-            translate([px + comb_split, -2, z0 - 1])
-                cube([max(0.1, comb_x1 - (px + comb_split)), comb_depth + 2, zh + 2]);
-        }
+        translate([comb_x0, -2, z0 - 1])
+            cube([comb_x1 - comb_x0, comb_depth + 2, zh + 2]);
     }
 }
 
@@ -456,22 +459,15 @@ module port_cuts() {
 // =============================================================================
 //  INTERNAL FURNITURE  (added AFTER the cavity is cut, or it gets erased)
 // =============================================================================
-// Card slot for the Tang's lower long edge. The FRONT rib is broken where the
-// cover's front screw post has to come down to the floor; the board's X travel
-// is limited by the side walls themselves (0.4 mm either side), so no separate
-// end stops are needed - and stops there would foul the board anyway.
+// Card slot for the Tang's lower long edge. Both ribs run the full width now -
+// nothing has to come down through them. The board's X travel is limited to
+// +/-0.4 mm by the side walls, so no end stops are needed (and stops there
+// would foul the board anyway).
 module tang_slot() {
     y_front = tn_y0 - (slot_w - tn_th)/2 - slot_rib;
     y_back  = tn_y0 + tn_th + (slot_w - tn_th)/2;
-    gx0 = scr_pts[0][0] - post_gap;
-    gx1 = scr_pts[0][0] + post_gap;
-    // back rib: continuous
-    translate([wall, y_back, floor_th]) cube([inner_x, slot_rib, slot_h]);
-    // front rib: two segments either side of the post
-    translate([wall, y_front, floor_th])
-        cube([max(0.1, gx0 - wall), slot_rib, slot_h]);
-    translate([gx1, y_front, floor_th])
-        cube([max(0.1, (wall + inner_x) - gx1), slot_rib, slot_h]);
+    for (yy = [y_front, y_back])
+        translate([wall, yy, floor_th]) cube([inner_x, slot_rib, slot_h]);
 }
 
 // CH9350 pocket: a low shelf frame that reaches under the board perimeter,
