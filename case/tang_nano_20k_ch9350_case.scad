@@ -125,7 +125,7 @@ wall       = 2.4;
 wall_front = 4.0;   // thicker: carries the LED window, button wells and logo,
                     // and gives the front wedge something to bite into
 floor_th   = 2.0;
-top_th     = 2.6;   // thicker: the sunken vent panel eats 1.2 mm of it
+top_th     = 2.0;
 clear      = 0.4;   // XY fit clearance around the boards
 conn_gap   = 0.6;   // slack between the front wall and the deepest connector
 gap_tj     = 2.5;   // gap between the jumper stack and the CH9350
@@ -174,19 +174,22 @@ post_gap      = 7.0;   // the front card-slot rib is broken by this much so the
 // -----------------------------------------------------------------------------
 //  VENTILATION
 // -----------------------------------------------------------------------------
-// Louvre panel, XE style: a shallow sunken pocket in the cover with oblique
-// slots cut through its floor, so the vent reads as a recessed grille with real
-// depth rather than slots scored into a flat lid. It sits directly OVER the
-// Tang and its jumper bay - that is where the FPGA's heat comes off - with
-// matching intake slots in the floor underneath.
+// Louvre, XE style: a raised plinth on the cover, cut across by oblique slots.
+// The material left between the slots forms a comb of FINS standing proud of
+// the lid - that is what gives the vent its depth; slots cut into a flat lid
+// just read as scored lines. It sits directly OVER the Tang and its jumper bay
+// - where the FPGA's heat comes off - with matching intake slots in the floor.
 vent_enable   = true;
-vent_slot_w   = 1.6;
-vent_pitch    = 3.0;
+vent_slot_w   = 1.8;
+vent_pitch    = 3.4;
 vent_angle    = 45;
-vent_recess   = 1.2;    // depth of the sunken panel
-vent_border   = 2.8;    // flat margin inside the pocket before the slots start
+vent_raise    = 2.6;    // how far the louvre stands PROUD of the cover
+vent_cham     = 1.0;    // taper on the plinth's edge
+vent_border   = 3.0;    // solid rim left round the slots so the fins stay tied
+                        // to the lid at both ends (cut them free and the ribs
+                        // between the slots would be loose pieces)
 vent_side_in  = 12.5;   // inset from the side walls (clears the press pads)
-vent_corner   = 2.5;    // pocket corner radius
+vent_corner   = 2.5;    // plinth corner radius
 
 side_vent_enable = true;  // upright slits around the cover's rear flanks
 side_vent_w      = 1.8;
@@ -304,33 +307,46 @@ module cavity() {
 
 module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
 
-// XE-style louvre panel: a sunken pocket plus oblique slots through its floor.
-// Cut from the cover's top face; `vent_x0/x1, vent_y0/y1` bound the pocket.
-module vent_panel() {
+// The raised plinth. Tapered on all four sides so it grows out of the lid
+// instead of sitting on it like a slab.
+module vent_plinth() {
     w = vent_x1 - vent_x0;
     h = vent_y1 - vent_y0;
     r = vent_corner;
-    // (a) the sunken pocket
-    translate([vent_x0, vent_y0, out_z - vent_recess])
-        linear_extrude(vent_recess + 1)
-            translate([r, r]) offset(r = r) square([w - 2*r, h - 2*r]);
-    // (b) oblique slots straight through the pocket floor, held back from the
-    //     pocket edge by vent_border so a clean rim survives all the way round
+    c = vent_cham;
+    hull() {
+        translate([vent_x0, vent_y0, out_z - 0.01])
+            linear_extrude(0.01)
+                translate([r, r]) offset(r = r) square([w - 2*r, h - 2*r]);
+        translate([vent_x0 + c, vent_y0 + c, out_z + vent_raise])
+            linear_extrude(0.01)
+                translate([r, r]) offset(r = r)
+                    square([w - 2*c - 2*r, h - 2*c - 2*r]);
+    }
+}
+
+// Oblique slots straight through the plinth AND the lid beneath it. What is
+// left standing between them are the fins.
+module vent_slots_cut() {
+    w  = vent_x1 - vent_x0;
+    h  = vent_y1 - vent_y0;
     bi = vent_border;
-    ri = max(0.1, r - bi/2);
+    ri = max(0.1, vent_corner - bi/2);
+    z0 = inner_z - 1;
+    zh = (out_z + vent_raise + 2) - z0;
     intersection() {
         union() {
             dx = vent_pitch / sin(vent_angle);
             L  = w + h + 20;
             for (x = [vent_x0 - h : dx : vent_x1 + h])
-                translate([x, (vent_y0 + vent_y1)/2, inner_z - 1])
-                    linear_extrude(top_th + vent_recess + 3)
+                translate([x, (vent_y0 + vent_y1)/2, z0])
+                    linear_extrude(zh)
                         rotate(vent_angle)
                             hull() for (s = [-L/2, L/2])
                                 translate([s, 0]) circle(vent_slot_w/2);
         }
-        translate([vent_x0 + bi, vent_y0 + bi, inner_z - 2])
-            linear_extrude(top_th + vent_recess + 5)
+        translate([vent_x0 + bi, vent_y0 + bi, z0 - 1])
+            linear_extrude(zh + 2)
                 translate([ri, ri]) offset(r = ri)
                     square([w - 2*bi - 2*ri, h - 2*bi - 2*ri]);
     }
@@ -536,12 +552,15 @@ module bottom() {
 module top() {
     union() {
         difference() {
-            intersection() { shell_solid(); slab(split_z, out_z + 1); }
+            union() {
+                intersection() { shell_solid(); slab(split_z, out_z + 1); }
+                if (vent_enable) vent_plinth();
+            }
             // hollow the cover interior, leaving the top plate
             translate([wall, wall_front, split_z - 1])
                 cube([inner_x, out_y - wall_front - wall, inner_z - split_z + 1]);
             port_cuts();
-            if (vent_enable) vent_panel();
+            if (vent_enable) vent_slots_cut();
             if (side_vent_enable) side_vents();
             if (brand_enable) brand_cut();
         }

@@ -15,8 +15,8 @@ GPIO pins).
 | Tray with both boards dropped in | `fitcheck` — the tray sliced at the parting line |
 | ![right](img/right.png) | ![left](img/left.png) |
 | Right: USB-C + microSD, dual USB-A (keyboard), DB9 | Left: HDMI and the other DB9 |
-| ![cover](img/cover_inside.png) | ![front](img/front.png) |
-| Cover underside: screw posts, lip bars, press pads | Front elevation |
+| ![cover](img/cover_inside.png) | ![louvre](img/louvre.png) |
+| Cover underside: screw posts, lip bars, press pads | Louvre close-up: raised fins, not scored lines |
 
 ## The two ideas that make this work
 
@@ -48,7 +48,7 @@ case/
 └── img/               # rendered previews
 ```
 
-Outer size: **≈ 60 × 90 × 28 mm**. The width is pinned by the Tang — its two
+Outer size: **≈ 60 × 90 × 28 mm** (the louvre fins add 2.6 mm locally). The width is pinned by the Tang — its two
 ends carry HDMI and USB-C, so both have to reach a side wall — and the depth is
 the sum of the connector zone, the jumper stack, the CH9350 and the DB9 bay.
 
@@ -88,13 +88,16 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
 - **Rear wall** — ventilation grill only. Power comes in on USB-C and the
   GND / 5 V / Pin-53 links are internal jumpers, so nothing needs to leave the
   case.
-- **Cooling** — an **XE-style louvre panel** sits in the cover *directly over
-  the Tang*, which is where the FPGA's heat comes off. It is a shallow sunken
-  pocket (1.2 mm) with oblique 45° slots cut through its floor, so it reads as a
-  recessed grille with real depth rather than slots scored into a flat lid.
-  Intake slots in the floor sit right underneath it, giving a straight chimney
-  up past the standing board; upright slits around the rear flanks and floor
-  slots under the rear bay vent the back half.
+- **Cooling** — an **XE-style louvre** sits in the cover *directly over the
+  Tang*, which is where the FPGA's heat comes off. It is a raised plinth
+  (2.6 mm proud, tapered on all four sides) cut across by oblique 45° slots:
+  the material left between the slots forms a comb of **fins standing above the
+  lid**. That is what gives the vent its depth — slots cut into a flat lid just
+  read as scored lines. The slots stop 3 mm short of the plinth edge so each fin
+  stays tied to the lid at both ends; cut them free and the ribs would be loose
+  pieces. Intake slots in the floor sit right underneath, giving a straight
+  chimney past the standing board, and upright slits around the rear flanks plus
+  floor slots under the rear bay vent the back half.
 
 ### How the boards are held
 
