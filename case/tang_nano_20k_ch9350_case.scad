@@ -1,365 +1,331 @@
 // =============================================================================
-//  3D-printed case for the Atari800 Tang Nano 20K port
+//  Atari-style console case for the Atari800 Tang Nano 20K port
 //  Houses a Sipeed Tang Nano 20K + a CH9350 USB-host keyboard module,
 //  wired as described in the project README (one data wire to Pin 53,
 //  GND + 5V, DB9 joysticks on GPIO pins).
 //
-//  Parametric OpenSCAD model.  EVERY dimension below is a variable so you
-//  can calibrate it to your exact boards.  Defaults are from the Sipeed
-//  datasheet plus measurements of the actual boards:
-//     Tang Nano 20K PCB  : 54.04 x 22.55 x ~1.6 mm (component-side-DOWN)
-//     CH9350 module PCB  : 49.6  x 20.5  x ~1.6 mm (stacked dual USB-A)
+//  DESIGN NOTES
+//  ------------
+//  * The Tang Nano stands ON EDGE behind the front panel, component side
+//    facing FORWARD.  The status LEDs and both buttons therefore live on the
+//    front panel where you can see and reach them, and the GPIO headers point
+//    backwards so the Dupont jumpers lie flat instead of stacking under a lid.
+//  * CLAMSHELL: a bottom tray and a top cover meeting at a parting line that
+//    runs THROUGH the connectors.  Every port opening is a notch open at that
+//    parting line, so both boards drop straight in from above and the cover
+//    closes over them - no end caps, no snap clips, no fighting a board into
+//    a closed box.
+//  * Styling (clamshell, wedge front, vent bands, split ports) is an homage to
+//    wt808's "Atari-Compatible eclaire Mini" enclosures on Thingiverse
+//    (thing:3562690, CC BY-NC-SA).  All geometry here is generated from
+//    scratch by this script; no model data is copied from that work, so this
+//    file stays under the repository's own licence.
+//
+//  Board defaults are datasheet + measured values:
+//     Tang Nano 20K PCB : 54.04 x 22.55 x ~1.6 mm
+//     CH9350 module PCB : 49.6  x 20.5  x ~1.6 mm (stacked dual USB-A)
 //
 //  >>> READ case/README.md BEFORE PRINTING <<<
-//  Print the "fitcheck" part first (a thin frame, ~10 min) to verify the
-//  board pocket and the connector cutouts line up with YOUR hardware,
-//  then print base + lid.
+//  Print "fitcheck" first (a low slice of the tray, ~15 min) to verify the
+//  card slot and the connector cutouts line up with YOUR hardware.
 //
-//  PRINT FIVE PARTS, all support-free: base + lid + the two removable END CAPS
-//  (the short walls are separate so the board can actually be fitted) + FEET
-//  (separate pucks that screw on from below — feet printed as part of the base
-//  would force supports under the whole floor). Render each with:
-//     openscad -D 'part="base"'        -o base.stl        <file>
-//     openscad -D 'part="lid"'         -o lid.stl         <file>
-//     openscad -D 'part="endcap_hdmi"' -o endcap_hdmi.stl <file>   (-X end)
-//     openscad -D 'part="endcap_usbc"' -o endcap_usbc.stl <file>   (+X end)
-//     openscad -D 'part="feet"'        -o feet.stl        <file>   (4 pucks)
-//     openscad -D 'part="fitcheck"'    -o fit.stl         <file>   (test first)
-//     openscad -D 'part="assembly"' ...                 (preview only)
+//  PARTS (both print flat on their outer face, no supports):
+//     openscad -D 'part="bottom"'   -o bottom.stl   <file>
+//     openscad -D 'part="top"'      -o top.stl      <file>
+//     openscad -D 'part="fitcheck"' -o fitcheck.stl <file>   (test first)
+//     openscad -D 'part="assembly"' ...                      (preview only)
 // =============================================================================
 
-part = "assembly";   // base | lid | endcap_hdmi | endcap_usbc | feet |
-                     // fitcheck | assembly | section | closed
-show_lid = true;     // assembly preview: set false to drop the floating lid
+part = "assembly";  // bottom | top | fitcheck | assembly | section | closed
+show_top = true;    // assembly preview: false drops the floating cover
 
-$fn = 56;
-
-// -----------------------------------------------------------------------------
-//  BOARD DIMENSIONS  (measure yours and adjust if needed)
-// -----------------------------------------------------------------------------
-tn_len    = 54.04;   // Tang Nano 20K length  (X, HDMI end .. USB-C end)
-tn_wid    = 22.55;   // Tang Nano 20K width   (Y)
-tn_thick  = 1.6;     // Tang Nano 20K PCB thickness
-
-ch_len    = 49.6;    // CH9350 module length  (X)
-ch_wid    = 20.5;    // CH9350 module width   (Y)
-ch_thick  = 1.6;     // CH9350 module PCB thickness
+$fn = 48;
 
 // -----------------------------------------------------------------------------
-//  CONNECTOR / FEATURE CUTOUTS  (opening size = connector + clearance)
-//  All offsets are measured along the relevant edge from the board's
-//  reference corner; positive = toward +X / +Y / +Z. Tune to taste.
+//  BOARD DIMENSIONS  (measure yours and adjust)
 // -----------------------------------------------------------------------------
-// Tang Nano 20K : HDMI on the -X short end (centred on width). Openings are
-// sized to clear the mating PLUG/cable, not just the board connector, and FDM
-// prints tend to come out undersized — so these are deliberately generous.
-hdmi_w      = 17.0;  // opening width  (along Y)
-hdmi_h      = 11.0;  // opening height (along Z)
-hdmi_y_off  = 0;     // shift along Y from board centre (+ = toward back)
+tn_len    = 54.04;  // Tang Nano 20K length (HDMI end .. USB-C end) -> case X
+tn_wid    = 22.55;  // Tang Nano 20K width  -> becomes HEIGHT (board stands up)
+tn_th     = 1.6;    // PCB thickness
 
-// Tang Nano 20K : USB-C on the +X short end (centred on width)
-usbc_w      = 13.0;  // clears the USB-C plug + its overmould
-usbc_h      = 7.0;
-usbc_y_off  = 0;
+ch_len    = 49.6;   // CH9350 length (X)
+ch_wid    = 20.5;   // CH9350 width  (Y, lies flat)
+ch_th     = 1.6;
 
-// Tang Nano 20K : microSD / TF slot. On the underside at the USB-C (+X) END;
-//   with the board flipped pins-up it faces UP, so the opening sits just ABOVE
-//   the PCB on the +X wall. It is NOT centred: its right edge ~aligns with the
-//   USB-C socket and it extends to the side (hence sd_y_off). The opening also
-//   reaches DOWN to overlap the USB-C cutout, so no thin wall is left between
-//   them (one clean stepped opening). Confirm sd_y_off sign/size on the fitcheck.
-sd_w        = 15.0;  // opening width  (along Y) — generous for card + fingers
-sd_h        = 3.5;   // how far the opening rises above the PCB top (along Z)
-sd_y_off    = -1.5;  // offset from board centre (right edge aligns with USB-C)
+// Board-local coordinates used throughout:
+//   u = along the Tang's length, 0 at the HDMI end       -> X = tn_x0 + u
+//   v = across the Tang's width, 0 at the LED / S1 edge  -> Z = tn_z0 + v
+// The LED/S1 edge points DOWN, so the LEDs sit low on the front panel and the
+// board rests on its opposite long edge in the card slot.
+
+// -----------------------------------------------------------------------------
+//  TANG NANO FEATURES  (measured from the board)
+//  Openings are sized for the mating PLUG, not the bare connector: FDM holes
+//  print undersized and the first prototype had to be opened up by hand.
+// -----------------------------------------------------------------------------
+hdmi_v      = 14.0;  // HDMI opening across the board width  (-> vertical)
+hdmi_d      = 10.0;  // HDMI opening perpendicular to the PCB (-> depth, Y)
+hdmi_stand  = 6.0;   // how far the HDMI body stands off the component face
+hdmi_v_off  = 0;
+
+usbc_v      = 11.0;  // USB-C opening across the board width
+usbc_stand  = 2.5;   // USB-C body stand-off from the component face
+sd_v        = 16.0;  // microSD opening across the board width
+sd_stand    = 2.5;   // SD cage stand-off from the PIN face
+sd_v_off    = -1.5;  // the SD slot is not centred on the board width
 sd_enable   = true;
 
-// CH9350 : STACKED DUAL USB-A host port (two ports one above the other)
-usba_w      = 16.0;  // connector width + plug clearance
-usba_h      = 18.0;  // connector height (tall: two stacked ports)
-usba_z_off  = 0;     // raise/lower the opening relative to the CH9350 PCB top
+// Status LEDs: a 6-LED row on the component face, in line with S1.
+led_u       = 35.25;
+led_u_len   = 8.5;
+led_v       = 4.0;
+led_v_wid   = 2.0;
+led_enable  = true;
 
-// FLOOR push holes for the Tang Nano S1 / S2 buttons. The board is mounted
-// component-side-DOWN, so the buttons face the floor and are poked from below.
-// From the board photo: both buttons sit at the USB-C end on OPPOSITE long
-// edges. Coords are board-local (x from HDMI end, y from the front/-Y edge);
-// the pins-up mount preserves board Y, so they map straight through (no mirror).
-// S1 is on the FRONT (-Y) edge with the LEDs; S2 on the back edge.
-btn_hole_d  = 4.5;
-btn1_x      = 49.0;  btn1_y = 5.0;     // S1: 5 mm from USB-C end, 5 mm off front edge
-btn2_x      = 49.0;  btn2_y = 17.55;   // S2: 5 mm from USB-C end, 5 mm off back edge
+// S1 / S2: both 5 mm in from the USB-C end, on OPPOSITE long edges, so they
+// become two front-panel wells one above the other. They are plain wide holes:
+// the board sits ~6.5 mm behind the panel (the HDMI body sets that gap), so a
+// narrow hole would be unreachable - 8 mm lets a fingertip in.
+btn_u       = 49.0;
+btn1_v      = 5.0;    // S1 - low, on the LED line
+btn2_v      = 17.55;  // S2 - high
+btn_d       = 8.0;
+btn_cham    = 1.0;    // lead-in chamfer on the outer face
 btn_enable  = true;
 
-// LED row in the FLOOR, IN LINE with S1: after S1, a 3.5 mm gap, then 6 LEDs
-// spanning 8.5 mm toward the HDMI end. Same Y as S1 (collinear), front edge.
-led_win_x   = 35.25; // start (Tang X, from HDMI end) -> row runs 35.25..43.75
-led_win_len = 8.5;   // length along X (the 6-LED span)
-led_win_y   = 4.0;   // start (Tang Y) -> centred on the S1 line (btn1_y = 5)
-led_win_wid = 2.0;   // width along Y
-led_enable  = true;
-// Extra slot in the FRONT (-Y) wall aligned with the LED row, to also see the
-// down-facing LEDs from the side. Reaches back through the shelf to the LEDs.
-led_side_enable = true;
-led_side_h      = 6.0;   // slot height (Z), top aligned with the PCB underside
-
-// Rear cable-exit slot (handy for the GND/5V/Pin-53 wires, or external wiring).
-// Open notch in the top of the back wall.
-cable_slot_w     = 18.0;
-cable_slot_depth = 12.0;   // how far down from the wall top the notch goes
-cable_slot_frac  = 0.24;   // centre along the back wall (0=HDMI end, 1=USB-C end)
-cable_enable     = false;  // OFF: power is via USB-C and the GND/5V/Pin-53 lines
-                           // are internal jumpers between the two boards, so no
-                           // wires need to leave the case. Set true to reopen it.
+jumper_len  = 17.0;   // pin header + Dupont plug reach behind the PCB
 
 // -----------------------------------------------------------------------------
-//  LID STYLING (top view, rear -> front):
-//    diagonal vent band  /  "ATARI 800" brand strip  /  Fuji logo + LED window
+//  CH9350 : STACKED DUAL USB-A host port (keyboard), on its +X short end
 // -----------------------------------------------------------------------------
-// Ventilation: a full-width band of 45-degree slots across the rear/top.
-vent_enable   = true;
-vent_margin   = 7.0;    // inset from the side edges (X)
-vent_rear_gap = 6.0;    // gap from the rear edge (Y)
-vent_band_h   = 14.0;   // band height (Y)
-vent_slot_w   = 2.0;    // slot width
-vent_pitch    = 3.6;    // perpendicular spacing between slots
-vent_angle    = 45;     // slot angle (degrees)
-
-// Brand strip (recessed panel + debossed text) just below the vents.
-brand_enable = true;
-brand_text   = "ATARI 800";
-brand_cx     = 0;       // 0 = auto-centre on the lid
-brand_cy     = 62.0;    // just below the rear vent band
-brand_w      = 44.0;    // kept narrow enough that the end-cap screw
-                        // counterbores in the lid don't nick the recess
-brand_h      = 10.0;
-brand_depth  = 0.8;
-brand_txt_sz = 6.0;
-
-// Fuji logo (lower centre/left, near the front).
-logo_enable = true;
-logo_w      = 19.0;
-logo_h      = 15.0;
-logo_cx     = 21.0;     // 0 = auto-centre
-logo_cy     = 20.0;
-logo_depth  = 0.8;
-logo_raised = false;    // false = debossed (prints clean lid-face-down)
-
-// Sloped/beveled front-top edge.
-front_bevel = 4.5;      // 45-degree chamfer leg on the front-top edge (0 = none)
-front_inset = 9.0;      // keep the bevel clear of the front corner screw lugs
+usba_w      = 16.0;
+usba_h      = 18.0;
+usba_z_off  = -1.0;   // relative to the CH9350 PCB top
+ch_stand    = 3.0;    // gap under the CH9350 (clears its underside solder)
 
 // -----------------------------------------------------------------------------
 //  DB9 JOYSTICK PORTS  (panel-mount female D-sub, one per side wall)
-//  Joy1 -> left short wall (-X, HDMI end), Joy2 -> right short wall (+X).
-//  Each cutout = a D-shaped aperture + two M3 screw holes (24.99 mm pitch).
-//  Wire the socket solder cups internally to the GPIO joystick pins
-//  (see the main README "Atari DB9 Joystick" wiring table).
+//  Both sit entirely in the BOTTOM tray so the sockets can be screwed in
+//  before the cover goes on.
 // -----------------------------------------------------------------------------
 db9_enable      = true;
-db9_zone        = 38.0;   // depth (Y) of the rear bay that holds the DB9s + CH9350
-db9_apt_w       = 18.5;   // D aperture: wide dimension (along the screw axis / Y)
-db9_apt_w2      = 16.2;   // D aperture: narrow side (the chamfered "D")
-db9_apt_h       = 11.0;   // D aperture height (along Z)
-db9_screw_pitch = 24.99;  // mounting-hole centre-to-centre (D-sub standard)
-db9_screw_d     = 3.2;    // mounting-hole diameter (M3 / #4-40 clearance)
-db9_y_off       = 0;      // nudge both ports along the wall (Y)
-db9_z_frac      = 0.55;   // vertical centre of the ports as a fraction of height
-db9_body_depth  = 14.0;   // how far the connector body protrudes inward (preview
-                          // + CH9350 clearance reference; not printed)
+db9_zone        = 33.0;   // rear bay depth (Y) reserved for the two sockets
+db9_apt_w       = 18.5;
+db9_apt_w2      = 16.2;
+db9_apt_h       = 11.0;
+db9_screw_pitch = 24.99;
+db9_screw_d     = 3.2;
+db9_body_depth  = 14.0;   // inward protrusion (clearance reference; not printed)
+db9_z           = 8.0;    // aperture centre height (keeps it under the split)
 
 // -----------------------------------------------------------------------------
 //  CASE BODY
 // -----------------------------------------------------------------------------
-wall      = 2.4;    // side-wall thickness
-floor_th  = 1.8;    // base floor thickness
-lid_th    = 2.0;    // lid top-plate thickness
+wall       = 2.4;
+wall_front = 4.0;   // thicker: carries the LED window, button wells and logo,
+                    // and gives the front wedge something to bite into
+floor_th   = 2.0;
+top_th     = 2.0;
+clear      = 0.4;   // XY fit clearance around the boards
+conn_gap   = 0.6;   // slack between the front wall and the deepest connector
+gap_tj     = 2.5;   // gap between the jumper stack and the CH9350
+gap_jd     = 2.0;   // gap between the CH9350 and the DB9 bay
+head_gap   = 1.5;   // clear space above the tallest internal item
+fillet     = 3.0;   // outer vertical corner radius
+base_cham  = 1.2;   // chamfer around the bottom edge
 
-standoff  = 8.0;    // gap UNDER the Tang PCB. The board is component-side-down,
-                    // so this gap houses the down-facing HDMI / USB-C connectors
-                    // (HDMI is the tallest) plus the buttons/LEDs. Must be >=
-                    // ~ hdmi_h - conn_drop - floor_th for the HDMI hole to clear
-                    // the floor. The CH9350 shares this height (kept coplanar).
-headroom  = 20.0;   // clear height ABOVE the Tang PCB top: the GPIO pin headers
-                    // now point UP into here. Measured pin+Dupont stack ~17 mm,
-                    // so 20 leaves ~3 mm for the wire bend under the lid.
+// Front wedge: a 45-degree chamfer along the front-top edge. Its leg must stay
+// below top_th + wall_front so it cannot eat through the front wall and open a
+// slot into the cavity (that bug made the first version look broken).
+front_wedge = 4.5;
+wedge_inset = -2.0;  // negative = run the chamfer past the rounded corners
 
-clear     = 0.4;    // XY fit clearance around each board
-gap_y     = 3.0;    // gap between the Tang board and the CH9350 board
-conn_drop = 1.0;    // margin: the connector opening starts this far past the
-                    // PCB face and runs the connector's height toward the floor
+// Parting line height (absolute Z). Must sit ABOVE the DB9 aperture (so the
+// sockets stay in the tray) and BELOW the top of every board connector that
+// overhangs its board edge (so the boards can descend past the tray walls).
+split_z   = 15.0;
 
-ledge_w   = 2.0;    // width of the perimeter shelf frames outside the boards
-ledge_in  = 1.0;    // how far the CH9350 ledge reaches UNDER its board edge
-                    // (check your module's underside pins and adjust)
-shelf_grip= 0.3;    // how far the Tang shelf reaches UNDER the board edge.
-                    // KEEP SMALL: the pre-soldered header tails protrude on the
-                    // (down-facing) component side ~1 mm in from each long edge
-                    // (measured pin centres at 1.0 mm), so only the outer
-                    // ~0.4-0.7 mm strip of the underside is bare PCB. A bigger
-                    // grip would sit the board on solder blobs.
-rib_h     = 2.5;    // height of locating ribs above the board top
-fillet    = 2.0;    // outer vertical edge rounding
+// Card slot holding the Tang's lower long edge. Deliberately loose: the header
+// pins sit only ~1 mm in from that edge, so their solder fillets reach almost
+// to it and a tight slot would jam on solder rather than on PCB.
+slot_w    = 3.0;
+slot_h    = 2.6;
+slot_rib  = 1.6;
 
-// -----------------------------------------------------------------------------
-//  REMOVABLE END CAPS  (the two short walls print separately and hook on)
-//  The board has connectors on BOTH short ends that overhang its edges, so it
-//  cannot be lowered into a closed box. Assembly instead:
-//    1. drop the boards into the open-ended tray (nothing overhangs them),
-//    2. HOOK each cap on: hold it ~endcap_drop high, slide it inward so the
-//       connector noses pass through their openings, then drop it down so its
-//       bottom edge lands in the floor channel (outer sill + inner rib —
-//       bottom locked in AND out),
-//    3. the lid closes over the cap tops and ONE M3 screw per cap goes down
-//       through the lid into the cap's top boss (top locked; screws reachable
-//       from above; the boss sits over the DB9, in free air).
-//  Each cap carries that end's connector cutouts, the DB9 mount, and small
-//  clamp lips that land on bare PCB edge areas to hold the boards down
-//  (placed to clear the pin headers, HDMI solder tabs, SD slot and USB stack).
-// -----------------------------------------------------------------------------
-endcap_enable = true;
-endcap_corner = 6.0;    // solid base wall kept at each corner (Y)
-endcap_clear  = 0.35;   // side clearance of the cap in its opening
-endcap_drop   = 3.0;    // hook-over drop height (openings for protruding
-                        // connectors get this much extra bottom margin)
-sill_t        = 0.9;    // outer sill: thin skirt outside each cap bottom edge
-sill_h        = 2.8;    //   ... its height above the floor top
-capr_t        = 1.6;    // inner floor rib (stops the cap falling inward)
-capr_h        = 2.5;    //   ... its height above the floor top
-endcap_lip_ov = 1.6;    // clamp lips: reach over the PCB edge (bare area only)
-endcap_lip_h  = 2.0;    //   ... lip thickness (Z)
-endcap_lip_cl = 0.3;    //   ... vertical play over the PCB top
+press_w   = 8.0;    // cover pads that press the Tang's upper edge
+press_cl  = 0.25;
 
-// Rear ventilation grill: the same 45-degree slot band as the lid, but on the
-// back (+Y) wall at the BOTTOM — the board components face the floor, so the
-// hot zone is low. Uses the vent_* parameters above.
-rear_vent_enable = true;
-rear_vent_h      = 14.0;  // band height (Z)
-rear_vent_z0     = 3.0;   // band bottom, measured from the outside floor
+lip_h     = 2.5;    // parting-line lip on the cover
+lip_t     = 1.2;
+lip_cl    = 0.35;
 
-// Feet: lift the case so the floor button holes / LED window clear the desk
-// (and the down-facing LEDs are visible). Four pads under the corner lugs.
-foot_enable = true;
-foot_h      = 4.0;
-
-lip_depth = 2.5;    // how deep the lid alignment bars reach into the base.
-                    // Kept SHALLOW: the Dupont plugs on the outer pin rows rise
-                    // to ~3 mm below the wall top, so a deep lip would hit them.
-lip_clear = 0.35;   // clearance so the bars slide in
-
-// -----------------------------------------------------------------------------
-//  SCREW-DOWN LID  (four external corner lugs; M3 self-tapping)
-//  The interior is packed (boards + DB9 bodies), so the lugs sit OUTSIDE the
-//  corners. Base lugs get a pilot hole; lid lugs a counterbored clearance hole.
-//  Use 4x M3 self-tapping screws ~12-16 mm long (or M3 machine screws into
-//  heat-set inserts — open up screw_pilot_d to the insert's bore).
-// -----------------------------------------------------------------------------
+// Shell screws: M3, driven UP from underneath into posts moulded to the cover,
+// so nothing shows on top. One at the front centre, two in the rear bay.
 screw_enable  = true;
-lug_r         = 4.4;    // corner lug radius
-lug_off       = 1.6;    // how far the lug centre sits outside each corner (/axis)
-screw_pilot_d = 2.6;    // base pilot hole (M3 self-tap into PLA/PETG)
-screw_clear_d = 3.4;    // lid through-hole (M3 clearance)
-screw_head_d  = 6.2;    // lid counterbore diameter (screw head)
-screw_head_h  = 2.4;    // lid counterbore depth
+screw_pilot_d = 2.6;
+screw_clear_d = 3.4;
+screw_head_d  = 6.4;
+screw_head_h  = 2.2;
+post_r        = 2.9;   // leaves 1.6 mm of meat around the pilot bore, and stays
+                       // clear of the Tang's front face and the DB9 bodies
+post_gap      = 7.0;   // the front card-slot rib is broken by this much so the
+                       // front post can reach the floor
 
 // -----------------------------------------------------------------------------
+//  VENTILATION
+// -----------------------------------------------------------------------------
+vent_slot_w   = 2.0;
+vent_pitch    = 3.8;
+vent_angle    = 45;
+vent_enable   = true;   // angled band across the cover
+vent_margin   = 9.0;
+vent_rear_gap = 7.0;
+vent_band_h   = 16.0;
+
+side_vent_enable = true;  // upright slits around the cover's rear flanks
+side_vent_w      = 1.8;
+side_vent_pitch  = 4.4;
+side_vent_h      = 6.5;
+side_vent_z      = 4.5;   // above the parting line
+
+floor_vent_enable = true; // slots in the tray floor, under the rear bay
+
+// -----------------------------------------------------------------------------
+//  BRANDING
+// -----------------------------------------------------------------------------
+brand_enable = true;      // "ATARI 800" recessed strip on the cover
+brand_text   = "ATARI 800";
+brand_w      = 46.0;
+brand_h      = 9.0;
+brand_depth  = 0.8;
+brand_txt_sz = 5.6;
+
+logo_enable  = true;      // Fuji mark on the FRONT panel, left of the LEDs
+logo_w       = 14.0;
+logo_h       = 11.0;
+logo_cx      = 15.0;
+logo_cz      = 8.0;
+logo_depth   = 0.8;
+
+// =============================================================================
 //  DERIVED GEOMETRY
-// -----------------------------------------------------------------------------
-// Interior cavity. Front-to-back: Tang (front) | CH9350 (middle) | DB9 bay
-// (rear). Tang ends are pinned to the -X/+X walls for HDMI / USB-C. The CH9350
-// is nearly full width, so the DB9 joystick ports get their own bay behind it.
-inner_x = tn_len + 2*clear;                       // along X (pinned to board)
-inner_y = db9_enable ? (tn_wid + gap_y + ch_wid + db9_zone + 2*clear)
-                     : (tn_wid + gap_y + ch_wid + 2*clear);
-inner_h = standoff + tn_thick + headroom;         // floor-top .. wall-top
+// =============================================================================
+// ---- X: pinned by the Tang, whose two ends carry HDMI and USB-C ----
+inner_x = tn_len + 2*clear;
+out_x   = inner_x + 2*wall;
+tn_x0   = wall + clear;                        // board's -X (HDMI) end
 
-out_x = inner_x + 2*wall;
-out_y = inner_y + 2*wall;
-base_h = floor_th + inner_h;
+// ---- Y: front wall -> connectors -> PCB -> jumpers -> CH9350 -> DB9 bay ----
+conn_zone = hdmi_stand + conn_gap;             // deepest forward-facing part
+tn_y0   = wall_front + conn_zone;              // component (front) face
+tn_y1   = tn_y0 + tn_th;                       // pin face
+jump_y  = tn_y1 + jumper_len;
+ch_y0   = jump_y + gap_tj;
+ch_y1   = ch_y0 + ch_wid;
+bay_y0  = ch_y1 + gap_jd;
+bay_y1  = bay_y0 + db9_zone;
+out_y   = bay_y1 + wall;
 
-// Board reference origins (board's -X/-Y corner) in case interior coords,
-// where interior coords start at (wall, wall, floor_th).
-tn_x0 = wall + clear;
-tn_y0 = wall + clear;
-tn_z0 = floor_th + standoff;                 // PCB underside = COMPONENT face
-tn_top = tn_z0 + tn_thick;                   // PCB top = pins/SD face
+// ---- Z ----
+tn_z0   = floor_th;                            // lower board edge, on the floor
+tn_z1   = tn_z0 + tn_wid;                      // upper board edge
+ch_z0   = floor_th + ch_stand;
+ch_top  = ch_z0 + ch_th;
+usba_z0 = ch_top + usba_z_off;
+inner_z = max(tn_z1, usba_z0 + usba_h) + head_gap;
+out_z   = inner_z + top_th;
 
-// Mounting pins-up (component-side-down) while keeping HDMI on the -X wall
-// mirrors board X but PRESERVES board Y, so feature Y-coords map straight
-// through (no mirroring). It just turns the component face toward the floor.
+function ux(u) = tn_x0 + u;
+function vz(v) = tn_z0 + v;
+function ch_x0() = out_x - wall - clear - ch_len;   // USB stack against +X wall
 
-// CH9350: long axis along X, right-aligned so its short-end dual-USB stack sits
-// against the +X wall; placed in the middle band behind the Tang.
-ch_x0 = out_x - wall - clear - ch_len;
-ch_y0 = tn_y0 + tn_wid + gap_y;
-ch_z0 = floor_th + standoff;
-ch_top = ch_z0 + ch_thick;
+tn_vc = tn_z0 + tn_wid/2;                      // board's vertical centre
+ch_cy = ch_y0 + ch_wid/2;
+db9_y = (bay_y0 + bay_y1)/2;
 
-// DB9 ports: centred in the rear bay (behind the CH9350), on both side walls.
-db9_y = ((ch_y0 + ch_wid) + (wall + inner_y)) / 2 + db9_y_off;
-db9_z = base_h * db9_z_frac;
-
-// Corner screw-lug centres (just outside each corner so they miss the boards).
-lug_pts = [[-lug_off, -lug_off], [out_x + lug_off, -lug_off],
-           [out_x + lug_off, out_y + lug_off], [-lug_off, out_y + lug_off]];
-
-// End-cap opening Y-span (between the solid base corners).
-cap_y0 = endcap_corner;
-cap_y1 = out_y - endcap_corner;
-
-// Connector centrelines (shared by the cap cutouts and the channel notches).
-hdmi_cy = tn_y0 + tn_wid/2 + hdmi_y_off;
-usbc_cy = tn_y0 + tn_wid/2 + usbc_y_off;
-sd_cy   = tn_y0 + tn_wid/2 + sd_y_off;
-
-// Floor-channel notches: where plugs pass at floor level, the sill and the
-// inner rib are cut away so nothing blocks the connectors. The low bound is
-// pinned to 2.5 so no sub-millimetre sill sliver survives in front of the
-// connector zone (it would just snap off).
-notch_hdmi = [2.5, hdmi_cy + hdmi_w/2 + 1.5];
-notch_usbc = [2.5, max(usbc_cy + usbc_w/2, sd_cy + sd_w/2) + 1.5];
-
-// Cap hold-down screws: vertical, through the lid into each cap's top boss.
-cap_scr_x = [3.2, out_x - 3.2];      // screw axes (x); both at y = db9_y
+// Shell screws: front centre plus two in the rear bay. All are clear of the
+// DB9 bodies (which hug the side walls), the HDMI/USB-C bodies and the LED
+// light path.
+// X of the front post is chosen to fall in a gap between the cover's press
+// pads, and Y of the rear pair keeps them clear of the top vent band.
+scr_pts = [[22.0,        wall_front + 3.0],
+           [out_x*0.34,  bay_y0 + 6.8],
+           [out_x*0.66,  bay_y0 + 6.8]];
 
 // =============================================================================
-//  HELPER MODULES
+//  HELPERS
 // =============================================================================
-
-// Rounded-rectangle vertical prism (for the outer shell)
-module rrect_prism(sx, sy, sz, r) {
+module rrect(sx, sy, sz, r) {
     hull() for (mx = [r, sx-r], my = [r, sy-r])
         translate([mx, my, 0]) cylinder(h = sz, r = r);
 }
 
-// Four solid corner lugs (height h), blended into the corner with a small gusset.
-module corner_lugs(h) {
-    if (screw_enable)
-        for (p = lug_pts) translate([p[0], p[1], 0]) cylinder(h = h, r = lug_r);
-}
-
-// Full-width band of parallel 45-degree ventilation slots across the rear/top,
-// clipped to the band rectangle.
-module vent_slots(depth) {
-    vy1 = out_y - vent_rear_gap;
-    vy0 = vy1 - vent_band_h;
-    vx0 = vent_margin;
-    vx1 = out_x - vent_margin;
-    r   = vent_slot_w/2;
-    dx  = vent_pitch / sin(vent_angle);          // horizontal step for slot pitch
-    L   = (vx1 - vx0) + vent_band_h + 10;        // slot length (clipped to band)
-    yc  = (vy0 + vy1)/2;
-    intersection() {
-        union()
-            for (x = [vx0 - vent_band_h : dx : vx1 + vent_band_h])
-                translate([x, yc, -1])
-                    linear_extrude(depth + 2)
-                        rotate(vent_angle)
-                            hull() for (s = [-L/2, L/2]) translate([s, 0]) circle(r);
-        translate([vx0, vy0, -2]) cube([vx1 - vx0, vy1 - vy0, depth + 4]);
+module front_wedge_cut() {
+    if (front_wedge > 0) {
+        s = front_wedge * sqrt(2);
+        translate([out_x/2, 0, out_z]) rotate([45, 0, 0])
+            cube([out_x - 2*wedge_inset, s, s], center = true);
     }
 }
 
-// Atari "Fuji" logo (straight centre bar + two flaring side prongs on a base),
-// resize()-d to logo_w x logo_h where it is used.
+// Outer solid of the whole closed case; each shell is a Z slice of this.
+module shell_solid() {
+    difference() {
+        rrect(out_x, out_y, out_z, fillet);
+        if (base_cham > 0)
+            difference() {
+                translate([-1, -1, -0.01]) cube([out_x+2, out_y+2, base_cham]);
+                translate([base_cham, base_cham, -0.02])
+                    rrect(out_x - 2*base_cham, out_y - 2*base_cham,
+                          base_cham + 0.04, max(0.1, fillet - base_cham));
+            }
+        front_wedge_cut();
+    }
+}
+
+// Interior cavity (front wall is thicker than the rest).
+module cavity() {
+    translate([wall, wall_front, floor_th])
+        cube([inner_x, out_y - wall_front - wall, out_z]);
+}
+
+module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
+
+// Band of parallel 45-degree slots clipped to a rectangle, cut through +Z.
+module vent_band(x0, x1, y0, y1, depth) {
+    r  = vent_slot_w/2;
+    dx = vent_pitch / sin(vent_angle);
+    L  = (x1 - x0) + (y1 - y0) + 10;
+    yc = (y0 + y1)/2;
+    intersection() {
+        union()
+            for (x = [x0 - (y1-y0) : dx : x1 + (y1-y0)])
+                translate([x, yc, -1])
+                    linear_extrude(depth + 2)
+                        rotate(vent_angle)
+                            hull() for (s = [-L/2, L/2]) translate([s,0]) circle(r);
+        translate([x0, y0, -2]) cube([x1 - x0, y1 - y0, depth + 4]);
+    }
+}
+
+// Upright slits around the cover's rear flanks (kept behind the port cluster).
+module side_vents() {
+    z0 = split_z + side_vent_z;
+    y0 = bay_y0 - 10;
+    y1 = out_y - fillet - 4;
+    n  = floor((y1 - y0) / side_vent_pitch);
+    for (i = [0 : n]) {
+        yy = y0 + i*side_vent_pitch;
+        translate([-1, yy, z0])            cube([wall + 2, side_vent_w, side_vent_h]);
+        translate([out_x - wall - 1, yy, z0]) cube([wall + 2, side_vent_w, side_vent_h]);
+    }
+    nx = floor((out_x - 2*(fillet + 5)) / side_vent_pitch);
+    for (i = [0 : nx])
+        translate([fillet + 5 + i*side_vent_pitch, out_y - wall - 1, z0])
+            cube([side_vent_w, wall + 2, side_vent_h]);
+}
+
+// Atari "Fuji" mark (stylised: centre bar + two flaring prongs on a base).
 module fuji_2d() {
     d = 11; H = 15; Ri = d; Ro = d + H; off = 15; hw = 6.0; cw = 3.0;
     intersection() {
@@ -382,442 +348,267 @@ module fuji_2d() {
         translate([-Ro*1.5, 0]) square([Ro*3, H*1.3]);
     }
 }
-module fuji_solid(h) {
-    cx = (logo_cx == 0) ? out_x/2 : logo_cx;
-    translate([cx, logo_cy, 0])
-        linear_extrude(height = h)
-            resize([logo_w, logo_h], auto = true)
-                translate([0, 0.4]) fuji_2d();
+
+// Fuji debossed into the FRONT panel (stands upright in the XZ plane).
+module front_fuji_cut() {
+    if (logo_enable)
+        translate([logo_cx, logo_depth, logo_cz]) rotate([90, 0, 0])
+            linear_extrude(logo_depth + 0.2)
+                resize([logo_w, logo_h], auto = true) fuji_2d();
 }
 
-// 45-degree chamfer along the front-top edge of the CLOSED case (absolute Z),
-// kept clear of the corner lugs. Applied to base() and (shifted) to lid().
-module front_bevel_cut() {
-    if (front_bevel > 0) {
-        zt = base_h + lid_th;
-        s  = front_bevel * sqrt(2);
-        translate([out_x/2, 0, zt]) rotate([45, 0, 0])
-            cube([out_x - 2*front_inset, s, s], center = true);
-    }
-}
-
-// Recessed brand strip (rounded panel + debossed text) cut into the lid top.
 module brand_cut() {
-    if (brand_enable) {
-        bx = (brand_cx == 0) ? out_x/2 : brand_cx;
-        translate([bx, brand_cy, lid_th - brand_depth])
-            linear_extrude(brand_depth + 1)
-                offset(r = 1.2) square([brand_w - 2.4, brand_h - 2.4], center = true);
-        if (brand_text != "")
-            translate([bx, brand_cy, lid_th - brand_depth - 0.4])
-                linear_extrude(brand_depth + 1.4)
-                    text(brand_text, size = brand_txt_sz, font = "Liberation Sans:style=Bold",
-                         halign = "center", valign = "center");
-    }
+    by = out_y - vent_rear_gap - vent_band_h - 3.5 - brand_h/2;
+    translate([out_x/2, by, out_z - brand_depth])
+        linear_extrude(brand_depth + 1)
+            offset(r = 1.2) square([brand_w - 2.4, brand_h - 2.4], center = true);
+    if (brand_text != "")
+        translate([out_x/2, by, out_z - brand_depth - 0.45])
+            linear_extrude(brand_depth + 1.45)
+                text(brand_text, size = brand_txt_sz,
+                     font = "Liberation Sans:style=Bold",
+                     halign = "center", valign = "center");
 }
 
-// A flat shelf the board rests on: an outer frame whose inner window is the
-// board footprint SHRUNK by `inset` on every side, so the frame actually
-// reaches `inset` under the board perimeter (the centre stays open).
-// NOTE: with inset = 0 the window equals the board outline and the board
-// would fall straight through — always pass a positive inset.
-module support_ledge(x0, y0, bx, by, z_bottom, z_top, w, inset) {
-    translate([x0 - w, y0 - w, z_bottom])
-        difference() {
-            cube([bx + 2*w, by + 2*w, z_top - z_bottom]);
-            translate([w + inset, w + inset, -1])
-                cube([bx - 2*inset, by - 2*inset, z_top - z_bottom + 2]);
-        }
-}
-
-// Tang shelf: two strips along the LONG (front/back) edges only, reaching
-// shelf_grip under the board so it actually rests on them. The SHORT ends are
-// left clear (down-facing HDMI / USB-C live there), and the strips stop short
-// of the cap openings so the end caps can drop past them. The back strip is
-// narrow so it also clears the cap channel and the rear locating ribs.
-module tang_support() {
-    h   = tn_z0 - floor_th;
-    xs  = wall + endcap_clear + 0.1;             // clear of both cap planes
-    xe  = out_x - wall - endcap_clear - 0.1;
-    translate([xs, wall, floor_th])              // front strip (from the wall)
-        cube([xe - xs, (tn_y0 + shelf_grip) - wall, h]);
-    translate([xs, tn_y0 + tn_wid - shelf_grip, floor_th])   // back strip
-        cube([xe - xs, shelf_grip + 0.4, h]);
-}
-
-// Rear Y-stops for the Tang: two short ribs in the gap between the Tang and
-// the CH9350 (the front wall is the forward stop). Placed clear of the rear
-// Dupont row and of the CH9350's front locating rib.
-module tang_stop_ribs() {
-    for (rx = [16, 38])
-        translate([tn_x0 + rx, tn_y0 + tn_wid + 0.55, floor_th])
-            cube([6, 1.4, (tn_top + 2) - floor_th]);
-}
-
-// Feet under the corner lugs (so the floor button/LED openings clear the desk
-// and the down-facing LEDs stay visible). They are a SEPARATE printed part —
-// feet attached under the base would make the whole floor a bridge over air
-// (unprintable without supports). Each puck screws on from below with an M3
-// into the lug bore (which runs through the floor).
-module feet() {                          // preview only (shown in place)
-    if (foot_enable)
-        for (p = lug_pts)
-            translate([p[0], p[1], -foot_h]) cylinder(h = foot_h + 0.01, r = lug_r);
-}
-module foot_puck() {
-    difference() {
-        cylinder(h = foot_h, r = lug_r);
-        translate([0, 0, -1]) cylinder(h = foot_h + 2, d = screw_clear_d);
-        translate([0, 0, -0.01]) cylinder(h = screw_head_h, d = screw_head_d);
-    }
-}
-module feet_print() {                    // the printable part: 4 pucks in a row
-    if (foot_enable)
-        for (i = [0 : 3])
-            translate([i * (2*lug_r + 4), 0, 0]) foot_puck();
-}
-
-// Thin locating rib running along one board edge, sitting just outside the
-// board so the PCB cannot slide. side: "xmin" "xmax" "ymin" "ymax".
-module locate_rib(x0, y0, bx, by, z_bottom, z_top, side, len_frac=1) {
-    t = 1.4;                                  // rib thickness
-    if (side == "ymax")
-        translate([x0, y0 + by + clear, z_bottom])
-            cube([bx, t, z_top - z_bottom]);
-    if (side == "ymin")
-        translate([x0, y0 - clear - t, z_bottom])
-            cube([bx, t, z_top - z_bottom]);
-    if (side == "xmax")
-        translate([x0 + bx + clear, y0, z_bottom])
-            cube([t, by, z_top - z_bottom]);
-    if (side == "xmin")
-        translate([x0 - clear - t, y0, z_bottom])
-            cube([t, by, z_top - z_bottom]);
-}
-
-// D-sub DB9 cutout, built along +X (depth d), centred at local Y=0, Z=0:
-// a D-shaped aperture (wide top, narrow bottom) + two screw holes on the
-// horizontal centreline at the standard 24.99 mm pitch.
+// D-sub DB9 cutout built along +X (depth d), centred on local Y=0, Z=0.
 module db9_shape(d) {
     hull() {
-        translate([0, -db9_apt_w/2,   db9_apt_h/2 - 1]) cube([d, db9_apt_w, 1]);
-        translate([0, -db9_apt_w2/2, -db9_apt_h/2])     cube([d, db9_apt_w2, 1]);
+        translate([0, -db9_apt_w/2,  db9_apt_h/2 - 1]) cube([d, db9_apt_w, 1]);
+        translate([0, -db9_apt_w2/2, -db9_apt_h/2])    cube([d, db9_apt_w2, 1]);
     }
     for (s = [-1, 1])
         translate([0, s*db9_screw_pitch/2, 0]) rotate([0, 90, 0])
             cylinder(h = d, d = db9_screw_d);
 }
 
-// Vertical 45-degree vent band on the back (+Y) wall (mirrors the lid grill),
-// at the BOTTOM of the wall — the components face down, so heat collects low.
-// Built in a local frame (localX = case X, localY = case Z, localZ = depth),
-// then stood up onto the +Y wall with rotate([90,0,0]) (depth runs into -Y).
-module rear_vent(depth) {
-    vz0 = rear_vent_z0;
-    vz1 = vz0 + rear_vent_h;
-    vx0 = vent_margin;
-    vx1 = out_x - vent_margin;
-    r   = vent_slot_w/2;
-    dx  = vent_pitch / sin(vent_angle);
-    L   = (vx1 - vx0) + rear_vent_h + 10;
-    zc  = (vz0 + vz1)/2;
-    translate([0, out_y + 1, 0]) rotate([90, 0, 0])
-        intersection() {
-            union()
-                for (x = [vx0 - rear_vent_h : dx : vx1 + rear_vent_h])
-                    translate([x, zc, -1])
-                        linear_extrude(depth + 2)
-                            rotate(vent_angle)
-                                hull() for (s=[-L/2, L/2]) translate([s,0]) circle(r);
-            translate([vx0, vz0, -2]) cube([vx1 - vx0, vz1 - vz0, depth + 4]);
-        }
-}
+// =============================================================================
+//  PORT CUTOUTS
+//  One module, subtracted from BOTH shells. Each shell keeps only the part in
+//  its own Z range, so every opening straddling `split_z` is halved - which is
+//  exactly what lets the boards drop in from above.
+// =============================================================================
+module port_cuts() {
+    // ---- Tang HDMI : -X wall ----
+    translate([-1, tn_y0 - hdmi_stand - conn_gap, tn_vc + hdmi_v_off - hdmi_v/2])
+        cube([wall + 2, hdmi_d, hdmi_v]);
 
-// =============================================================================
-//  CUTOUTS
-// =============================================================================
-// Cut into the BASE: floor button/LED holes, the front LED side slot, and the
-// rear vent grill. (The short-end connectors live on the removable end caps.)
-module base_cutouts() {
-    if (btn_enable)
-        for (b = [[btn1_x, btn1_y], [btn2_x, btn2_y]])
-            translate([tn_x0 + b[0], tn_y0 + b[1], -1])
-                cylinder(h = floor_th + 2, d = btn_hole_d);
+    // ---- Tang USB-C + microSD : +X wall, merged into one stepped opening so
+    //      no fragile sliver of wall is left between them ----
+    translate([out_x - wall - 1, tn_y0 - usbc_stand - conn_gap, tn_vc - usbc_v/2])
+        cube([wall + 2, usbc_stand + conn_gap + tn_th + 0.6, usbc_v]);
+    if (sd_enable)
+        translate([out_x - wall - 1, tn_y0 - 0.6,
+                   tn_vc + sd_v_off - sd_v/2])
+            cube([wall + 2, tn_th + sd_stand + 1.2, sd_v]);
+
+    // ---- CH9350 stacked dual USB-A : +X wall ----
+    translate([out_x - wall - 1, ch_cy - usba_w/2, usba_z0])
+        cube([wall + 2, usba_w, usba_h]);
+
+    // ---- Tang status LEDs : front panel window ----
     if (led_enable)
-        translate([tn_x0 + led_win_x, tn_y0 + led_win_y, -1])
-            cube([led_win_len, led_win_wid, floor_th + 2]);
-    if (led_enable && led_side_enable)
-        translate([tn_x0 + led_win_x, -1, tn_z0 - led_side_h])
-            cube([led_win_len, tn_y0 + shelf_grip + 3, led_side_h]);
-    if (rear_vent_enable) rear_vent(wall + 2);
-}
+        translate([ux(led_u), -1, vz(led_v)])
+            cube([led_u_len, wall_front + 2, led_v_wid]);
 
-// Connector cutouts carried by an END CAP.  s = -1 (HDMI/-X) or +1 (USB-C/+X).
-// Openings for connectors that PROTRUDE past the board edge (HDMI, USB-C, the
-// USB stack) carry >= endcap_drop of bottom margin so the raised cap can slide
-// over them during the hook-on move.
-module endcap_cutouts(s) {
-    conn_top = tn_z0 + conn_drop;
-    ix = (s < 0) ? -1 : (out_x - wall - 1);      // cutout x-origin for that wall
-    if (s < 0) {
-        // HDMI (centred on Tang width), dropping from the under-face
-        translate([ix, hdmi_cy - hdmi_w/2, conn_top - hdmi_h])
-            cube([wall + 2, hdmi_w, hdmi_h]);
-    } else {
-        // USB-C
-        translate([ix, usbc_cy - usbc_w/2, conn_top - usbc_h])
-            cube([wall + 2, usbc_w, usbc_h]);
-        // microSD (up-face; reaches down to overlap USB-C -> one stepped opening)
-        if (sd_enable)
-            translate([ix, sd_cy - sd_w/2, tn_z0])
-                cube([wall + 2, sd_w, (tn_top + sd_h) - tn_z0]);
-        // CH9350 stacked dual USB-A (bottom extended by endcap_drop)
-        translate([ix, ch_y0 + ch_wid/2 - usba_w/2,
-                   ch_top + usba_z_off - conn_drop - endcap_drop])
-            cube([wall + 2, usba_w, usba_h + endcap_drop]);
-    }
-    // DB9 joystick port for this end (mounted ON the cap, moves with it)
-    if (db9_enable) translate([ix, db9_y, db9_z]) db9_shape(wall + 2);
-}
-
-// =============================================================================
-//  REMOVABLE END CAP.  s = -1 (HDMI/-X end) or +1 (USB-C/+X end).
-//  A flat panel (prints outer-face-down, no supports) with: that end's
-//  connector cutouts, clamp lips that land on bare PCB edge areas, and a top
-//  boss that takes the vertical hold-down screw through the lid.
-// =============================================================================
-module endcap(s) {
-    x0    = (s < 0) ? 0 : out_x - wall;                    // plate outer face
-    lipw  = endcap_lip_ov + clear;                         // lip reach past plate
-    lipx  = (s < 0) ? wall : out_x - wall - lipw;
-    bossx = (s < 0) ? wall : out_x - wall - 4;
-    scx   = cap_scr_x[(s < 0) ? 0 : 1];
-    difference() {
-        union() {
-            // plate: spans the base opening, floor top -> wall top
-            translate([x0, cap_y0 + endcap_clear, floor_th])
-                cube([wall, (cap_y1 - cap_y0) - 2*endcap_clear,
-                      base_h - floor_th]);
-            if (s < 0) {
-                // Tang HDMI end: two lips on the bare bands between the header
-                // rows (plastic ends ~2.3 in from each edge) and the HDMI shell
-                // solder tabs (at the connector sides, ~y 9.3 / 18.8 in board
-                // coords) — bands 2.6-5.8 and 16.5-19.6
-                for (p = [[2.6, 3.2], [16.5, 3.1]])
-                    translate([lipx, tn_y0 + p[0], tn_top + endcap_lip_cl])
-                        cube([lipw, p[1], endcap_lip_h]);
-            } else {
-                // Tang USB-C end: one lip on the bare strip between the SD slot
-                // and the rear header row
-                translate([lipx, tn_y0 + 17.5, tn_top + endcap_lip_cl])
-                    cube([lipw, 2.2, endcap_lip_h]);
-                // CH9350: two lips at its corners beside the USB stack
-                for (yy = [ch_y0 + 0.2, ch_y0 + ch_wid - 2.2])
-                    translate([lipx, yy, ch_top + endcap_lip_cl])
-                        cube([lipw, 2.0, endcap_lip_h]);
-            }
-            // top screw boss (under the lid, in free air above the DB9 body)
-            translate([bossx, db9_y - 4, base_h - 6]) cube([4, 8, 6]);
+    // ---- S1 / S2 : front panel wells, with an outer lead-in chamfer ----
+    if (btn_enable)
+        for (v = [btn1_v, btn2_v]) {
+            translate([ux(btn_u), wall_front + 1, vz(v)]) rotate([90, 0, 0])
+                cylinder(h = wall_front + 2, d = btn_d);
+            translate([ux(btn_u), btn_cham, vz(v)]) rotate([90, 0, 0])
+                cylinder(h = btn_cham + 0.1, d1 = btn_d, d2 = btn_d + 2*btn_cham);
         }
-        endcap_cutouts(s);
-        // pilot for the lid screw: THROUGH the boss, so a long screw can't
-        // bottom out and jack the cap (the tip exits into free air above the
-        // DB9 body)
-        translate([scx, db9_y, base_h - 7])
-            cylinder(h = 8.5, d = screw_pilot_d);
-    }
-}
 
-// Floor channel that captures a cap's bottom edge: a thin OUTER SILL (skirt
-// just outside the wall plane) + an INNER RIB, both notched where plugs pass.
-// The cap hooks over the sill while raised, then drops in between them.
-module cap_channel(s) {
-    notch = (s < 0) ? notch_hdmi : notch_usbc;
-    sx = (s < 0) ? -sill_t : out_x - 0.02;
-    rx = (s < 0) ? wall + endcap_clear + 0.1
-                 : out_x - wall - endcap_clear - 0.1 - capr_t;
-    difference() {
-        union() {
-            translate([sx, 3.5, 0])
-                cube([sill_t + 0.02, out_y - 7, floor_th + sill_h]);
-            translate([rx, cap_y0, floor_th])
-                cube([capr_t, cap_y1 - cap_y0, capr_h]);
-        }
-        translate([-sill_t - 1, notch[0], -1])
-            cube([out_x + 2*sill_t + 2, notch[1] - notch[0],
-                  floor_th + sill_h + 2]);
+    // ---- DB9 joystick ports : both side walls, rear bay ----
+    if (db9_enable) {
+        translate([-1, db9_y, db9_z]) db9_shape(wall + 2);
+        translate([out_x - wall - 1, db9_y, db9_z]) db9_shape(wall + 2);
     }
 }
 
 // =============================================================================
-//  BASE
+//  INTERNAL FURNITURE  (added AFTER the cavity is cut, or it gets erased)
 // =============================================================================
-module base() {
+// Card slot for the Tang's lower long edge. The FRONT rib is broken where the
+// cover's front screw post has to come down to the floor; the board's X travel
+// is limited by the side walls themselves (0.4 mm either side), so no separate
+// end stops are needed - and stops there would foul the board anyway.
+module tang_slot() {
+    y_front = tn_y0 - (slot_w - tn_th)/2 - slot_rib;
+    y_back  = tn_y0 + tn_th + (slot_w - tn_th)/2;
+    gx0 = scr_pts[0][0] - post_gap;
+    gx1 = scr_pts[0][0] + post_gap;
+    // back rib: continuous
+    translate([wall, y_back, floor_th]) cube([inner_x, slot_rib, slot_h]);
+    // front rib: two segments either side of the post
+    translate([wall, y_front, floor_th])
+        cube([max(0.1, gx0 - wall), slot_rib, slot_h]);
+    translate([gx1, y_front, floor_th])
+        cube([max(0.1, (wall + inner_x) - gx1), slot_rib, slot_h]);
+}
+
+// CH9350 pocket: a low shelf frame that reaches under the board perimeter,
+// plus locating ribs on all four sides.
+module ch9350_seat() {
+    h = ch_z0 - floor_th;
     difference() {
-        union() {
-            // outer shell -> tray; the two SHORT walls are opened (between the
-            // corners) so the removable end caps can be fitted after the board.
-            difference() {
-                rrect_prism(out_x, out_y, base_h, fillet);
-                translate([wall, wall, floor_th])
-                    cube([inner_x, inner_y, base_h]);   // open-top cavity
-                if (endcap_enable)
-                    for (s = [-1, 1])
-                        translate([(s < 0) ? -1 : (out_x - wall),
-                                   cap_y0, floor_th])
-                            cube([wall + 1, cap_y1 - cap_y0, base_h + 1]);
-            }
-            corner_lugs(base_h);
-            tang_support();                              // board rests on these
-            tang_stop_ribs();
-            // CH9350 (component-up): perimeter shelf + locating ribs, all
-            // trimmed clear of the two cap planes so the caps can drop in.
-            intersection() {
-                union() {
-                    support_ledge(ch_x0, ch_y0, ch_len, ch_wid,
-                                  floor_th, ch_z0, ledge_w, ledge_in);
-                    locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0,
-                               ch_top + rib_h, "ymin");
-                    locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0,
-                               ch_top + rib_h, "ymax");
-                    locate_rib(ch_x0, ch_y0, ch_len, ch_wid, ch_z0,
-                               ch_top + rib_h, "xmin");
+        translate([ch_x0() - 1.6, ch_y0 - 1.6, floor_th])
+            cube([ch_len + 3.2, ch_wid + 3.2, h]);
+        translate([ch_x0() + 1.2, ch_y0 + 1.2, floor_th - 1])
+            cube([ch_len - 2.4, ch_wid - 2.4, h + 2]);
+    }
+    for (r = [[ch_x0() - 1.6 - clear,    ch_y0 - 1.6,         1.6,     ch_wid + 3.2],
+              [ch_x0() + ch_len + clear, ch_y0 - 1.6,         1.6,     ch_wid + 3.2],
+              [ch_x0(),                  ch_y0 - 1.4 - clear, ch_len,  1.4],
+              [ch_x0(),                  ch_y0 + ch_wid + clear, ch_len, 1.4]])
+        translate([r[0], r[1], floor_th]) cube([r[2], r[3], h + ch_th + 1.6]);
+}
+
+// =============================================================================
+//  BOTTOM TRAY
+// =============================================================================
+module bottom() {
+    union() {
+        difference() {
+            intersection() { shell_solid(); slab(-1, split_z); }
+            cavity();
+            port_cuts();
+            front_fuji_cut();
+            if (screw_enable)
+                for (p = scr_pts) {
+                    translate([p[0], p[1], -1])
+                        cylinder(h = floor_th + 2, d = screw_clear_d);
+                    translate([p[0], p[1], -0.01])
+                        cylinder(h = screw_head_h, d = screw_head_d);
                 }
-                translate([wall + endcap_clear + 0.1, -1, 0])
-                    cube([out_x - 2*(wall + endcap_clear + 0.1),
-                          out_y + 2, base_h]);
-            }
-            // floor channels that capture the cap bottom edges
-            if (endcap_enable) for (s = [-1, 1]) cap_channel(s);
+            if (floor_vent_enable)
+                for (i = [0 : 3])   // behind the rear screw bosses
+                    translate([out_x*0.2, bay_y0 + 12.8 + i*4.4, -1])
+                        cube([out_x*0.6, 2.2, floor_th + 2]);
         }
-        base_cutouts();
-        front_bevel_cut();
-        // lug bores: right THROUGH — the lid screws self-tap from the top,
-        // the feet screws come up from the bottom into the same bore
-        if (screw_enable)
-            for (p = lug_pts) translate([p[0], p[1], -1])
-                cylinder(h = base_h + 2, d = screw_pilot_d);
+        // furniture, added after the cavity so it survives
+        difference() {
+            union() { tang_slot(); ch9350_seat(); }
+            port_cuts();
+            if (screw_enable)
+                for (p = scr_pts)
+                    translate([p[0], p[1], -1])
+                        cylinder(h = split_z + 2, d = screw_clear_d);
+        }
     }
 }
 
 // =============================================================================
-//  LID  (plate + downward lip that plugs into the base cavity)
+//  TOP COVER
 // =============================================================================
-module lid() {
-    difference() {
-        union() {
-            rrect_prism(out_x, out_y, lid_th, fillet);          // top plate
-            corner_lugs(lid_th);                                // screw lugs
-            // two shallow alignment bars along the FRONT/BACK walls only
-            // (the cap regions at the ends stay clear; the corner screws are
-            // what actually fix the lid)
-            for (yy = [wall + lip_clear, out_y - wall - lip_clear - 2])
-                translate([8, yy, -lip_depth])
-                    cube([out_x - 16, 2, lip_depth + 0.01]);
-            // embossed (raised) Fuji logo on the top face
-            if (logo_enable && logo_raised)
-                translate([0, 0, lid_th - 0.01]) fuji_solid(logo_depth);
+module top() {
+    union() {
+        difference() {
+            intersection() { shell_solid(); slab(split_z, out_z + 1); }
+            // hollow the cover interior, leaving the top plate
+            translate([wall, wall_front, split_z - 1])
+                cube([inner_x, out_y - wall_front - wall, inner_z - split_z + 1]);
+            port_cuts();
+            if (vent_enable)
+                translate([0, 0, inner_z])
+                    vent_band(vent_margin, out_x - vent_margin,
+                              out_y - vent_rear_gap - vent_band_h,
+                              out_y - vent_rear_gap, top_th);
+            if (side_vent_enable) side_vents();
+            if (brand_enable) brand_cut();
         }
-        // ventilation slots (through the plate)
-        if (vent_enable) vent_slots(lid_th);
-        // 65XE front bevel + recessed brand strip
-        translate([0, 0, -base_h]) front_bevel_cut();
-        brand_cut();
-        // debossed (recessed) Fuji logo in the top face
-        if (logo_enable && !logo_raised)
-            translate([0, 0, lid_th - logo_depth]) fuji_solid(logo_depth + 1);
-        // counterbored clearance holes through the corner lugs
-        if (screw_enable)
-            for (p = lug_pts) translate([p[0], p[1], -1]) {
-                cylinder(h = lid_th + 2, d = screw_clear_d);
-                translate([0, 0, lid_th - screw_head_h + 1])
-                    cylinder(h = screw_head_h + 1, d = screw_head_d);
-            }
-        // counterbored holes for the two end-cap hold-down screws
-        if (endcap_enable)
-            for (sx = cap_scr_x) translate([sx, db9_y, -1]) {
-                cylinder(h = lid_th + 2, d = screw_clear_d);
-                translate([0, 0, lid_th - screw_head_h + 1])
-                    cylinder(h = screw_head_h + 1, d = screw_head_d);
-            }
+        // Everything below is added AFTER the hollow so it survives, and each
+        // piece overlaps solid cover material so the result stays manifold.
+        difference() {
+            union() { lip_bars(); press_pads(); posts(); }
+            port_cuts();
+            if (screw_enable)
+                for (p = scr_pts)
+                    translate([p[0], p[1], floor_th - 1])
+                        cylinder(h = inner_z - floor_th + 2.5, d = screw_pilot_d);
+        }
     }
 }
 
+// Alignment lips on the FRONT and REAR walls only. There is no room for lips on
+// the side walls - the Tang spans the full interior width with just 0.4 mm to
+// spare - so the sides are located by the port openings and the screws instead.
+module lip_bars() {
+    x0 = wall + 5;  xw = inner_x - 10;
+    // front
+    translate([x0, wall_front - 0.6, split_z - lip_h])
+        cube([xw, 0.6 + lip_cl + lip_t, lip_h + 1.0]);
+    // rear
+    translate([x0, out_y - wall - lip_cl - lip_t, split_z - lip_h])
+        cube([xw, 0.6 + lip_cl + lip_t, lip_h + 1.0]);
+}
+
+// Pads that press the Tang's upper edge down into its slot.
+module press_pads() {
+    for (fx = [0.22, 0.5, 0.78])
+        translate([tn_x0 + tn_len*fx - press_w/2, tn_y0 - 0.7, tn_z1 + press_cl])
+            cube([press_w, tn_th + 1.4, inner_z - tn_z1 - press_cl + 0.6]);
+}
+
+// Screw posts reaching down to the tray floor.
+module posts() {
+    if (screw_enable)
+        for (p = scr_pts)
+            translate([p[0], p[1], floor_th])
+                cylinder(h = inner_z - floor_th + 0.6, r = post_r);
+}
+
 // =============================================================================
-//  FIT-CHECK  (thin test frame: floor + low walls + shelves + cutouts)
-//  Print this first to confirm board fit & connector alignment.
+//  FIT-CHECK  (a low slice of the tray: floor, card slot, CH9350 seat and the
+//  bottom half of every opening - enough to prove the boards drop in and the
+//  ports line up, for a fraction of the plastic)
 // =============================================================================
 module fitcheck() {
-    // Base sliced low (floor + channels + shelves + stubs; feet omitted so it
-    // sits flat), plus BOTH full end caps laid flat beside it — together they
-    // test every opening, the shelf fit, and the hook-on drop, cheaply.
-    fc_h = tn_top + 4;
-    intersection() {
-        base();
-        translate([-sill_t - 1, -1, 0])
-            cube([out_x + 2*sill_t + 2, out_y + 2, fc_h]);
-    }
-    if (endcap_enable) {
-        translate([-6, 0, 0])            rotate([0, -90, 0]) endcap(-1);
-        translate([out_x + 6, 0, out_x]) rotate([0,  90, 0]) endcap(1);
-    }
+    intersection() { bottom(); slab(-1, split_z); }
 }
 
 // =============================================================================
-//  SECTION  (cutaway through the Tang, lid closed) — shows how it all stacks:
-//  floor -> standoff gap -> shelf + PCB -> headroom -> closed lid.
+//  PREVIEWS
 // =============================================================================
 module boards_ghost() {
-    color([0.10, 0.55, 0.20]) translate([tn_x0, tn_y0, tn_z0])
-        cube([tn_len, tn_wid, tn_thick]);
-    color([0.20, 0.20, 0.75]) translate([ch_x0, ch_y0, ch_z0])
-        cube([ch_len, ch_wid, ch_thick]);
-}
-module section() {
-    cut_y = tn_y0 + tn_wid*0.6;
-    difference() {
-        union() {
-            color("DarkSlateGray") base();
-            if (endcap_enable) color("SteelBlue") { endcap(-1); endcap(1); }
-            boards_ghost();
-            color([0.7, 0.7, 0.7]) translate([0, 0, base_h]) lid();  // closed
-        }
-        translate([-60, cut_y, -60])
-            cube([out_x + 120, out_y + 120, base_h + 120]);          // keep front
-    }
+    color([0.10, 0.55, 0.20, 0.9])                        // Tang, standing
+        translate([tn_x0, tn_y0, tn_z0]) cube([tn_len, tn_th, tn_wid]);
+    color([0.20, 0.20, 0.75, 0.9])                        // CH9350, flat
+        translate([ch_x0(), ch_y0, ch_z0]) cube([ch_len, ch_wid, ch_th]);
+    color([0.75, 0.65, 0.15, 0.45])                       // Dupont jumper zone
+        translate([tn_x0, tn_y1, tn_z0 + 1.5])
+            cube([tn_len, jumper_len, tn_wid - 3]);
+    if (db9_enable)                                       // DB9 socket bodies
+        color([0.3, 0.3, 0.3, 0.55])
+            for (sx = [wall, out_x - wall - db9_body_depth])
+                translate([sx, db9_y - 15.5, db9_z - 6.5])
+                    cube([db9_body_depth, 31, 13]);
 }
 
-// =============================================================================
-//  ASSEMBLY PREVIEW
-// =============================================================================
 module assembly() {
-    color("DarkSlateGray") { base(); feet(); }
-    // removable end caps (exploded outward along X so you can see them)
-    if (endcap_enable) {
-        ex = show_lid ? 14 : 0;                 // explode distance
-        color("SteelBlue") translate([-ex, 0, 0]) endcap(-1);
-        color("SteelBlue") translate([ ex, 0, 0]) endcap(1);
+    color("DarkSlateGray") bottom();
+    boards_ghost();
+    if (show_top)
+        color([0.72, 0.72, 0.72, 0.55]) translate([0, 0, 18]) top();
+}
+
+module section() {
+    cut_x = out_x*0.55;   // keep the -X half; look at the front-to-back stack
+    difference() {
+        union() {
+            color("DarkSlateGray") bottom();
+            color([0.75, 0.75, 0.75]) top();
+            boards_ghost();
+        }
+        translate([cut_x, -60, -1]) cube([out_x, out_y + 120, out_z + 2]);
     }
-    // ghost boards
-    color([0.1, 0.5, 0.2, 0.85])
-        translate([tn_x0, tn_y0, tn_z0]) cube([tn_len, tn_wid, tn_thick]);
-    color([0.2, 0.2, 0.7, 0.85])
-        translate([ch_x0, ch_y0, ch_z0]) cube([ch_len, ch_wid, ch_thick]);
-    // lid floating above
-    if (show_lid)
-        color([0.6, 0.6, 0.6, 0.55])
-            translate([0, 0, base_h + 14]) lid();
 }
 
 // -----------------------------------------------------------------------------
-if (part == "base")             base();
-else if (part == "lid")         lid();
-else if (part == "endcap_hdmi") endcap(-1);   // -X end cap (HDMI + DB9)
-else if (part == "endcap_usbc") endcap(1);    // +X end cap (USB-C/SD + USB-A + DB9)
-else if (part == "feet")        feet_print(); // 4 screw-on pucks
-else if (part == "fitcheck")    fitcheck();
-else if (part == "section")     section();
-else if (part == "closed") { color("DarkSlateGray") { base(); feet(); }
-                             if (endcap_enable) color("SteelBlue") { endcap(-1); endcap(1); }
-                             color([0.7,0.7,0.7]) translate([0,0,base_h]) lid(); }
-else                            assembly();
+if      (part == "bottom")   bottom();
+else if (part == "top")      top();
+else if (part == "fitcheck") fitcheck();
+else if (part == "section")  section();
+else if (part == "closed") { color("DarkSlateGray") bottom();
+                             color([0.75,0.75,0.75]) top(); }
+else                         assembly();

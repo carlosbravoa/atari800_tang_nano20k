@@ -1,162 +1,120 @@
 # 3D-printed case — Tang Nano 20K + CH9350
 
-A parametric, two-part enclosure for this project's hardware: a **Sipeed Tang
+An Atari-styled clamshell enclosure for this project's hardware: a **Sipeed Tang
 Nano 20K** plus a **CH9350 USB-host keyboard module**, wired as in the main
 [README](../README.md) (one data wire to Pin 53, GND + 5 V, DB9 joysticks on
 GPIO pins).
 
 | | |
 |---|---|
-| ![assembly](img/assembly.png) | ![exploded](img/exploded.png) |
-| Exploded preview (lid floating) | Removable end caps pulling out of the open-ended tray |
-| ![cap](img/cap_usbc.png) | ![side](img/side_right.png) |
-| +X end cap (inside): USB-C/SD + dual-USB + DB9 + clamp lips + top boss | +X end: USB-C/SD (front), dual-USB (middle), DB9 (rear) |
-| ![side](img/side_left.png) | ![db9](img/db9_side.png) |
-| −X wall: HDMI **low** (front) + DB9 (rear) — Tang is component-side-down | Side 3/4: DB9 port detail |
-| ![section](img/section.png) | ![styled](img/lid_styled.png) |
-| Cutaway: connector gap below the PCB, pins-up headroom above, closed lid | Lid: 65XE-style top (vent band / brand strip / Fuji) — a plain cover now |
-| ![floor](img/floor.png) | ![front](img/front_wall.png) |
-| Floor: S1/S2 poke-holes + LED window (board faces down) | Front wall: LED side slot (see the LEDs from the side too) |
-| ![back](img/back_wall.png) | ![interior](img/base_interior.png) |
-| Rear wall: vent grill at the BOTTOM (components face down, heat sits low) | Tray interior: shelves, stop ribs, cap channels, sills |
-| ![closed](img/closed.png) | ![fitcheck](img/fitcheck.png) |
-| Closed case (screw-on feet) | fitcheck plate: sliced tray + both caps flat |
+| ![closed](img/closed.png) | ![rear](img/rear.png) |
+| Front: Fuji, LED window and the two button wells | Rear: vent grill, top vent band, "ATARI 800" strip |
+| ![section](img/section.png) | ![tray](img/tray.png) |
+| Cutaway (front at left): Tang on edge, jumpers, CH9350, DB9 bay | Tray with both boards dropped in |
+| ![right](img/right.png) | ![left](img/left.png) |
+| Right: USB-C + microSD, dual USB-A (keyboard), DB9 | Left: HDMI and the other DB9 |
+| ![cover](img/cover_inside.png) | ![fitcheck](img/fitcheck.png) |
+| Cover underside: screw posts, lip bars, press pads | `fitcheck` — the tray sliced at the parting line |
+
+## The two ideas that make this work
+
+**1. The Tang Nano stands on edge.** It sits upright behind the front panel with
+its component side facing *forward*. That puts the status **LEDs and both
+buttons on the front panel**, where you can see and reach them, and it turns the
+GPIO headers sideways so the Dupont jumpers lie flat behind the board instead of
+stacking up under the lid. The board rests on its lower long edge in a card
+slot.
+
+**2. It is a clamshell split through the connectors.** The parting line runs at
+Z = 15 mm, which is *below the top of every connector that overhangs its board
+edge* and *above the DB9 apertures*. Every port opening is therefore a notch
+that is open at the parting line, so **both boards simply drop in from above**
+and the cover closes over them. No end caps, no snap clips, nothing to fight.
 
 ## What's here
 
-Print **five parts, all support-free** — the two short walls are separate,
-removable **end caps** so the board can actually be fitted, and the feet are
-separate pucks (feet printed under the base would force supports beneath the
-whole floor). See *Assembly* below:
+Print **two parts** (plus a cheap test), both flat on their outer face, **no
+supports**:
 
 ```
 case/
 ├── tang_nano_20k_ch9350_case.scad   # the parametric model (edit this)
 ├── stl/
-│   ├── base.stl          # open-ended tray (floor button/LED holes, cap
-│   │                      #   channels, bottom rear vent; short ends OPEN)
-│   ├── lid.stl           # screw-down lid — plain cover (vents + branding)
-│   ├── endcap_hdmi.stl   # -X end cap: HDMI + a DB9  (hooks on)
-│   ├── endcap_usbc.stl   # +X end cap: USB-C/SD + dual USB-A + a DB9 (hooks on)
-│   ├── feet.stl          # 4 pucks, screw on from below into the lug bores
-│   └── fitcheck.stl      # test plate (sliced tray + caps) — PRINT THIS FIRST
-└── img/                  # rendered previews
+│   ├── bottom.stl     # tray: card slot, CH9350 seat, DB9 mounts, front panel
+│   ├── top.stl        # cover: vents, branding, screw posts, board press pads
+│   └── fitcheck.stl   # the tray sliced low — PRINT THIS FIRST
+└── img/               # rendered previews
 ```
 
-## ⚠️ Read this first — these are datasheet dimensions, not a measured fit
+Outer size: **≈ 60 × 90 × 28 mm**. The width is pinned by the Tang — its two
+ends carry HDMI and USB-C, so both have to reach a side wall — and the depth is
+the sum of the connector zone, the jumper stack, the CH9350 and the DB9 bay.
 
-I cannot physically measure your boards, so the model is built from published
-dimensions:
+## ⚠️ Print `fitcheck.stl` first
 
-| Board | Size used | Source |
-|-------|-----------|--------|
-| Tang Nano 20K | 54.04 × 22.55 × 1.6 mm | Sipeed datasheet |
-| CH9350 module | 49.6 × 20.5 × 1.6 mm, **stacked dual USB-A** on one short end | measured |
+`fitcheck` is the tray sliced off at the parting line: floor, card slot, CH9350
+seat and the bottom half of every opening, for a fraction of the plastic. Drop
+the Tang in **on edge, component side forward** and check that
 
-The **exact positions of the connectors, the S1/S2 buttons and the LEDs vary**
-between board revisions and CH9350 vendors. So:
+1. the board seats in the card slot and stands square,
+2. the HDMI / USB-C / microSD / dual-USB / DB9 openings line up,
+3. the LED window and the two button wells land on the LEDs, S1 and S2.
 
-1. **Print `fitcheck.stl` first.** One plate: the tray sliced low (floor +
-   shelves + cap channels + stubs) with **both end caps laid flat beside it**
-   (~20 min, little plastic). Drop the Tang in **pins-up**, hold each cap to
-   its end and check: the HDMI / USB-C / SD / dual-USB openings line up, the
-   hook-on slide-and-drop works, the clamp lips land on bare PCB (not on header
-   plastic or solder tabs), and the floor button/LED holes sit under S1/S2 and
-   the LEDs.
-2. Adjust the variables at the top of the `.scad` (every dimension is one),
-   then re-export and print the real parts.
+Then adjust the variables at the top of the `.scad` (every dimension is one) and
+print the real `bottom.stl` + `top.stl`.
 
-The button/LED/connector positions and the key heights (`standoff`, `headroom`,
-lip bands) are set from **measured** values of a real board (see
-`measure_sheet.py`). They should be close — the connector openings carry
-plug-sized clearance — but the `fitcheck` print is the final confirmation,
-especially the clamp-lip bands and the SD-slot offset (`sd_y_off`).
+Positions come from measurements of a real board, and the connector openings are
+deliberately generous — they are sized for the mating **plug**, not the bare
+connector, because FDM holes print undersized (an earlier prototype had to be
+opened up with a Dremel).
 
 ## Layout
 
-Both boards lie flat in one tray, stacked front-to-back:
-**Tang (front) → CH9350 (middle) → DB9 bay (rear)**.
+Front to back: **front panel → Tang (upright) → jumper space → CH9350 → DB9 bay**.
 
-### Tang Nano 20K is mounted component-side **down** (pins **up**)
+- **Front panel** — Fuji logo, the 6-LED window, and two 8 mm wells for **S1**
+  (low, on the LED line) and **S2** (high). The board sits ~6.5 mm behind the
+  panel — the HDMI body sets that gap — so the wells are made wide enough to get
+  a fingertip into; a pen works too.
+- **Left wall** — HDMI, plus one DB9 in the rear bay.
+- **Right wall** — USB-C and microSD merged into one stepped opening (so no
+  fragile sliver of wall is left between them), the CH9350's **stacked dual
+  USB-A** keyboard port, and the second DB9.
+- **Rear wall** — ventilation grill only. Power comes in on USB-C and the
+  GND / 5 V / Pin-53 links are internal jumpers, so nothing needs to leave the
+  case.
+- **Cooling** — a 45° vent band across the cover, upright slits around the rear
+  flanks, and floor slots under the rear bay.
 
-This is the important bit. The Tang's GPIO header pins (where the Dupont jumpers
-to the CH9350 / DB9 / power go) are on one face; the connectors, buttons and LEDs
-are on the other. To wire jumpers comfortably, the board sits **pins-up**, so the
-**component side faces the floor**. Consequences:
+### How the boards are held
 
-- **GPIO pins point up** into the headroom — easy to plug/route jumpers. (The win.)
-- **HDMI** (−X wall) and **USB-C** (+X wall) hang *below* the PCB, so their
-  openings sit **low on the walls**, just above the floor.
-- **microSD** is on the Tang's opposite face, so it flips to the **top** and its
-  slot sits just **above** the PCB on the +X wall.
-- **S1/S2 buttons** and the **status LEDs** face down → **poke-holes and a
-  viewing window in the base FLOOR**. Four **feet** lift the case so they clear
-  the desk (and the LEDs are visible).
-- **CH9350** stays component-side-up; its **stacked dual USB-A** (keyboard) exits
-  the **+X end cap** above the board. So the +X cap carries USB-C + SD (front),
-  the dual-USB (middle) and a DB9 (rear), spaced along its length.
-- **DB9 joystick ports** — one panel-mount female D-sub on each **end cap** in the
-  **rear bay** behind the CH9350 (left = Joystick 1, right = Joystick 2). Each is
-  a D-shaped aperture + two 24.99 mm-pitch screw holes.
-- The back wall has a **ventilation grill** matching the lid's, placed at the
-  **bottom** of the wall — the components face the floor, so the hot zone is
-  low. No cable notch (power is USB-C; GND/5V/Pin-53 are internal jumpers).
+- The **Tang** drops into a card slot on the floor and is pressed down by three
+  pads on the cover's underside. The slot is deliberately loose (3 mm for a
+  1.6 mm board): the header pins sit only ~1 mm in from that edge, so their
+  solder fillets reach almost to it and a tight slot would jam on solder rather
+  than on bare PCB. Side-to-side travel is limited to ±0.4 mm by the walls.
+- The **CH9350** sits in a shelf pocket with locating ribs on all four sides.
+- The **DB9 sockets** mount entirely in the tray, so they can be screwed in
+  before the cover goes on.
 
-### Removable end caps — how the board goes in
+### Assembly
 
-The board has connectors on **both** short ends that overhang its edges (the
-HDMI nose protrudes past the PCB), so it can't be dropped or slid into a closed
-box. The two short walls are therefore **separate hook-on end caps**, each
-carrying that end's connector cutouts and DB9 mount. Assembly:
+1. Wire the two DB9 sockets and screw them into the tray.
+2. Drop the **Tang** into the card slot (on edge, LEDs facing the front panel)
+   and the **CH9350** into its pocket.
+3. Plug the Dupont jumpers onto the Tang's headers — they point backwards into
+   the open bay, so this is comfortable with the cover off.
+4. Lower the **cover** straight down and fasten **3 × M3 self-tapping screws
+   from underneath** (one front centre, two in the rear bay) into the posts
+   moulded to the cover. Nothing shows on top.
 
-1. Wire the two **DB9** sockets and bolt them to their end caps.
-2. Set the **Tang** onto the long-edge shelves (both ends open — nothing blocks
-   it) and drop the **CH9350** onto its shelf. **Take the SD card out first**
-   (a protruding card would block the cap slide). The shelves deliberately grip
-   only the outer **0.3 mm** of the board's underside — the pre-soldered header
-   tails protrude on the down-facing side just ~1 mm in from each long edge, so
-   a wider shelf would sit the board on solder blobs, not PCB.
-3. **Hook each cap on**: hold it ~3 mm high, slide it inward so the connector
-   noses pass through their openings, then let it drop — its bottom edge lands
-   in a floor channel (outer sill + inner rib), locking the bottom in and out.
-   Small **clamp lips** on each cap land on bare PCB edge areas and hold the
-   boards down (placed to clear the pin headers, HDMI solder tabs and SD slot).
-4. Plug the Dupont jumpers onto the pins (they point up — do this any time).
-   Keep the pin + plug stack under **~18 mm** above the PCB or it will foul the
-   lid (`headroom` is 20 mm; measured stack ~17 mm).
-5. Screw the **lid** on: 4 corner screws + **1 screw per end cap** that goes
-   down through the lid into a boss on the cap top (the boss sits above the DB9,
-   with clear screwdriver access from above; its pilot is through-drilled so a
-   long screw can't jack the cap). That locks the cap tops.
-6. Flip the case and screw the **4 feet** on from below — each puck takes an M3
-   up into the corner-lug bore (the bores run right through). The feet lift the
-   floor button holes / LED window off the desk.
-
-To service it: remove the top 6 screws, lift the lid, lift the caps out, board
-lifts out. Every dimension is calibrate-able (`endcap_*`, `hdmi_*`/`usbc_*`/
-`sd_*`). The connector openings are sized to clear the **mating plug** (not
-just the board connector) since FDM holes print undersized — the first print
-needed every hole opened up, so they were all enlarged.
-
-Screw count: **10 × M3 self-tapping** — 4 lid corners (12–16 mm), 2 cap
-hold-downs (8–10 mm), 4 feet (8–10 mm). All pilot holes are 2.6 mm; the lid and
-feet holes are counterbored so heads sit flush. Or use machine screws into
-heat-set inserts (open `screw_pilot_d` to the insert bore). Two shallow bars
-under the lid align it front/back (kept to 2.5 mm so they clear the Dupont
-plugs). The CH9350 ledge reaches **1 mm** under that board's perimeter
-(`ledge_in`) — check your module's underside pins and adjust if needed.
-
-Outer size with defaults: **box ≈ 60 × 90 × 33 mm** (~37 mm on its feet),
-**≈ 72 × 102 mm including the corner lugs**. The depth comes from the three
-stacked zones + rear DB9 bay; the height is the connector gap below the PCB
-(8 mm, clears the ~6 mm HDMI) plus the 20 mm pins-up headroom (measured ~17 mm
-pin+Dupont stack). Turn DB9 off with `db9_enable = false` for a shorter box.
+Keep the pin + Dupont stack under ~18 mm behind the PCB (`jumper_len` is 17 mm).
 
 ### DB9 joystick ports — wiring & parts
 
 You supply **two panel-mount female DB9 connectors** (solder-cup type) and four
-M3 (or #4-40) screws + nuts. Mount each socket from the inside, screw it to the
-side wall, and wire its pins to the GPIO header per the main
+M3 (or #4-40) screws + nuts. Mount each socket from the inside and wire its pins
+to the GPIO header per the main
 [README joystick table](../README.md#atari-db9-joystick):
 
 ```
@@ -165,85 +123,41 @@ Joy1 -> pins 27 / 28 / 29 / 30 / 31     Joy2 -> pins 32 / 41 / 42 / 48 / 77
 ```
 
 All active-low; no resistors (internal FPGA pull-ups). Don't wire pin 7 (+5 V).
-Don't print DB9 ports you won't populate — set `db9_enable = false` for the
-smaller keyboard-only case.
-
-## Key parameters to tune
-
-Open `tang_nano_20k_ch9350_case.scad` — everything is at the top:
-
-| Variable | Meaning | When to change |
-|----------|---------|----------------|
-| `headroom` | clear height above the Tang PCB | **lower to ~8–10** if you don't have tall pin headers + Dupont wires; raise for chunky connectors |
-| `standoff` | gap under the boards | increase if underside parts are tall |
-| `clear` | XY fit slack around boards | loosen/tighten the board fit |
-| `hdmi_*`, `usbc_*`, `sd_*`, `usba_*` | connector opening size/position | align to your board |
-| `btn1_x/y`, `btn2_x/y` | S1/S2 lid holes | move over your actual buttons |
-| `led_win_*` | LED window | resize/move over your LED row |
-| `cable_slot_*` | rear wire-exit notch | widen / reposition for your wiring |
-| `lip_clear` | lid-to-base fit | increase if the lid is too tight to close |
-| `db9_enable` | DB9 joystick ports on/off | `false` = compact keyboard-only case |
-| `db9_zone` | rear-bay depth | grow if your connector bodies are deep |
-| `db9_apt_w/_w2/_h` | DB9 D-aperture size | match your connector shell |
-| `db9_screw_pitch`, `db9_screw_d` | DB9 mount holes | 24.99 mm is standard; set screw dia |
-| `db9_z_frac`, `db9_y_off` | DB9 position on the wall | centre the ports to taste |
-| `screw_enable` | corner screw lugs on/off | `false` = friction-fit lid (no lugs) |
-| `screw_pilot_d` | base pilot-hole dia | 2.6 mm = M3 self-tap; widen for inserts |
-| `screw_clear_d`, `screw_head_d/_h` | lid hole + counterbore | match your screw heads |
-| `lug_r`, `lug_off` | lug size / how far it sits out | shrink to reduce footprint |
-| `vent_enable` | rear diagonal vent band | turn the slot band on/off |
-| `vent_margin`, `vent_rear_gap`, `vent_band_h` | band inset / rear gap / height | size + position the band |
-| `vent_slot_w`, `vent_pitch`, `vent_angle` | slot width / spacing / angle | tune the look (default 45°) |
-| `brand_enable`, `brand_text` | recessed brand strip + text | the label wording |
-| `brand_cx/_cy`, `brand_w/_h`, `brand_depth`, `brand_txt_sz` | strip position / size / depth / text size | tune the label (`brand_cx=0` auto-centres) |
-| `logo_enable`, `logo_raised` | Fuji logo | `raised` embosses (else debossed) |
-| `logo_w/_h`, `logo_cx/_cy`, `logo_depth` | logo size / position / depth | move + scale (`logo_cx=0` auto-centres) |
-| `front_bevel`, `front_inset` | sloped front-top chamfer / keep-out from lugs | 0 = square front edge |
+Set `db9_enable = false` to drop both ports and shorten the case.
 
 ## Printing
 
-| Setting | Suggestion |
-|---------|------------|
+| | |
+|---|---|
 | Material | PLA or PETG |
 | Layer height | 0.2 mm |
-| Walls / perimeters | 3 |
+| Walls / top / bottom | 3 perimeters, 4 layers |
 | Infill | 15–20 % |
-| Supports | **none needed** — both parts print flat (base floor-down, lid plate-down) |
-| Orientation | base: cavity up; lid: top plate **on the bed** (lip + lugs up) so the counterbores print clean |
-| Hardware | 4 × M3 self-tapping screws ~12–16 mm (optional: heat-set inserts) |
+| Supports | **none** — both shells print flat on their outer face |
 
-## Re-generating the STLs
+Print the **cover top-face-down** (the vent slots and branding come out crisp
+against the bed) and the **tray floor-down**. Every port opening is open at the
+parting line, so nothing has to bridge.
 
-Requires [OpenSCAD](https://openscad.org/).
+## Regenerating the STLs
 
-```bash
-cd case
-openscad -D 'part="base"'     -o stl/base.stl     tang_nano_20k_ch9350_case.scad
-openscad -D 'part="lid"'      -o stl/lid.stl      tang_nano_20k_ch9350_case.scad
-openscad -D 'part="fitcheck"' -o stl/fitcheck.stl tang_nano_20k_ch9350_case.scad
+```sh
+openscad -o stl/bottom.stl   -D 'part="bottom"'   tang_nano_20k_ch9350_case.scad
+openscad -o stl/top.stl      -D 'part="top"'      tang_nano_20k_ch9350_case.scad
+openscad -o stl/fitcheck.stl -D 'part="fitcheck"' tang_nano_20k_ch9350_case.scad
 ```
 
-Preview parts (no STL): `part="assembly"` (exploded, `show_lid=false` drops the
-lid), `part="section"` (cutaway through the Tang, lid closed), `part="closed"`
-(finished case). Open the `.scad` in the OpenSCAD GUI to tweak interactively.
+`part="assembly"`, `"section"` and `"closed"` are preview-only views.
 
-The lid top mimics the **Atari 65XE** layout (rear → front): a **diagonal vent
-band**, an **"ATARI 800" brand strip**, a **Fuji logo**, and the **LED window**,
-with a **sloped (chamfered) front-top edge**. The vents are through-cut and the
-brand/logo are debossed, so it all prints clean lid-face-down. Tune with the
-`vent_*`, `brand_*`, `logo_*` and `front_bevel` parameters.
+## Credits
 
-> **Trademark note:** "ATARI", "ATARI 800" and the Fuji logo are Atari's
-> trademarks. This styling is for a **personal build**. Don't sell or
-> redistribute the model or prints. To make it shareable, set
-> `brand_text` to neutral wording and `logo_enable = false`.
+The styling — clamshell shells, wedge front, vent bands and split ports — is an
+homage to **wt808's "Atari-Compatible eclaire Mini" enclosures**
+([Thingiverse thing:3562690](https://www.thingiverse.com/thing:3562690), which
+are licensed CC BY-NC-SA). **No geometry from that work is used here**: every
+shape is generated from scratch by the OpenSCAD script, so this case stays under
+this repository's own licence. If you want the real thing for an eclaire board,
+go and print wt808's excellent models.
 
-## Notes & ideas
-
-- The boards have no mounting holes; they're held by the perimeter shelf +
-  locating ribs and clamped by the closed lid.
-- DB9 ports are full panel-mount sockets (D-aperture + screw holes). If you'd
-  rather just route bare joystick wires out, set `db9_enable = false` and widen
-  `cable_slot_w`.
-- Want a hinged or snap-fit lid, vent slots, or panel-mount sockets for power
-  instead of bare USB-C — ask and I can extend the model.
+"Atari" and the Fuji mark are trademarks of Atari Interactive, Inc. The mark
+here is a loose stylised approximation drawn in code, for personal use.
