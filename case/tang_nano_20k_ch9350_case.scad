@@ -152,7 +152,7 @@ slot_w    = 3.0;
 slot_h    = 2.6;
 slot_rib  = 1.6;
 
-press_w   = 8.0;    // cover pads that press the Tang's upper edge
+press_w   = 6.0;    // cover pads that press the Tang's upper edge
 press_cl  = 0.25;
 
 lip_h     = 2.5;    // parting-line lip on the cover
@@ -174,22 +174,25 @@ post_gap      = 7.0;   // the front card-slot rib is broken by this much so the
 // -----------------------------------------------------------------------------
 //  VENTILATION
 // -----------------------------------------------------------------------------
-// Louvre, XE style: a raised plinth on the cover, cut across by oblique slots.
-// The material left between the slots forms a comb of FINS standing proud of
-// the lid - that is what gives the vent its depth; slots cut into a flat lid
-// just read as scored lines. It sits directly OVER the Tang and its jumper bay
-// - where the FPGA's heat comes off - with matching intake slots in the floor.
+// Louvre, XE style. The reference's ribs are not a panel sitting on the lid -
+// they wrap the shell's CORNER: each rib runs from the top face, over the edge,
+// and dies into the side face, so the vent is part of the shell's edge rather
+// than a window cut in the middle of it. Here that corner is the FRONT-top edge
+// (complete with its wedge chamfer), which is also directly over the Tang, so
+// the same feature does the styling and the cooling.
+//
+// Every rib is therefore held at BOTH ends - to the front wall below and to the
+// top plate behind - so nothing cantilevers. The comb is split into two groups
+// by a solid divider where the cover's front screw post comes down; the
+// reference's comb has a step in it too.
 vent_enable   = true;
-vent_slot_w   = 1.8;
-vent_pitch    = 3.4;
-vent_angle    = 45;
-vent_raise    = 2.6;    // how far the louvre stands PROUD of the cover
-vent_cham     = 1.0;    // taper on the plinth's edge
-vent_border   = 3.0;    // solid rim left round the slots so the fins stay tied
-                        // to the lid at both ends (cut them free and the ribs
-                        // between the slots would be loose pieces)
-vent_side_in  = 12.5;   // inset from the side walls (clears the press pads)
-vent_corner   = 2.5;    // plinth corner radius
+comb_gap      = 1.6;    // slot width
+comb_pitch    = 3.0;    // spacing between slots
+comb_angle    = 45;     // obliqueness of the slots
+comb_depth    = 11.0;   // how far back onto the top face the ribs run
+comb_drop     = 5.0;    // how far down the front face they run
+comb_side_in  = 9.5;   // inset from the side walls (clears the press pads)
+comb_split    = 3.8;    // half-width of the solid divider at the screw post
 
 side_vent_enable = true;  // upright slits around the cover's rear flanks
 side_vent_w      = 1.8;
@@ -248,12 +251,9 @@ function ux(u) = tn_x0 + u;
 function vz(v) = tn_z0 + v;
 function ch_x0() = out_x - wall - clear - ch_len;   // USB stack against +X wall
 
-// Vent panel bounds: spans the Tang and its jumper bay, inset from the sides
-// so it never crosses the cover's press pads.
-vent_x0 = vent_side_in;
-vent_x1 = out_x - vent_side_in;
-vent_y0 = tn_y0 + 0.4;
-vent_y1 = ch_y0 - 1.5;
+// Comb bounds along the front edge, inset so it never crosses the press pads.
+comb_x0 = comb_side_in;
+comb_x1 = out_x - comb_side_in;
 
 tn_vc = tn_z0 + tn_wid/2;                      // board's vertical centre
 ch_cy = ch_y0 + ch_wid/2;
@@ -264,7 +264,7 @@ db9_y = (bay_y0 + bay_y1)/2;
 // light path.
 // X of the front post is chosen to fall in a gap between the cover's press
 // pads, and Y of the rear pair keeps them clear of the top vent band.
-scr_pts = [[22.0,        wall_front + 3.0],
+scr_pts = [[out_x/2,     wall_front + 3.0],
            [out_x*0.34,  bay_y0 + 6.8],
            [out_x*0.66,  bay_y0 + 6.8]];
 
@@ -307,48 +307,31 @@ module cavity() {
 
 module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
 
-// The raised plinth. Tapered on all four sides so it grows out of the lid
-// instead of sitting on it like a slab.
-module vent_plinth() {
-    w = vent_x1 - vent_x0;
-    h = vent_y1 - vent_y0;
-    r = vent_corner;
-    c = vent_cham;
-    hull() {
-        translate([vent_x0, vent_y0, out_z - 0.01])
-            linear_extrude(0.01)
-                translate([r, r]) offset(r = r) square([w - 2*r, h - 2*r]);
-        translate([vent_x0 + c, vent_y0 + c, out_z + vent_raise])
-            linear_extrude(0.01)
-                translate([r, r]) offset(r = r)
-                    square([w - 2*c - 2*r, h - 2*c - 2*r]);
-    }
-}
-
-// Oblique slots straight through the plinth AND the lid beneath it. What is
-// left standing between them are the fins.
-module vent_slots_cut() {
-    w  = vent_x1 - vent_x0;
-    h  = vent_y1 - vent_y0;
-    bi = vent_border;
-    ri = max(0.1, vent_corner - bi/2);
-    z0 = inner_z - 1;
-    zh = (out_z + vent_raise + 2) - z0;
+// Oblique slots cut through the FRONT-TOP CORNER: they pass through the top
+// plate (where it spans the cavity) and down through the front wall, so the
+// material left between them forms ribs that wrap the edge and end on the front
+// face. Split into two groups around the front screw post.
+module front_comb_cut() {
+    z0 = out_z - comb_drop;
+    zh = comb_drop + 2;
+    px = scr_pts[0][0];
     intersection() {
         union() {
-            dx = vent_pitch / sin(vent_angle);
-            L  = w + h + 20;
-            for (x = [vent_x0 - h : dx : vent_x1 + h])
-                translate([x, (vent_y0 + vent_y1)/2, z0])
+            dx = comb_pitch / sin(comb_angle);
+            L  = (comb_x1 - comb_x0) + comb_depth + 20;
+            for (x = [comb_x0 - comb_depth : dx : comb_x1 + comb_depth])
+                translate([x, comb_depth/2, z0])
                     linear_extrude(zh)
-                        rotate(vent_angle)
+                        rotate(comb_angle)
                             hull() for (s = [-L/2, L/2])
-                                translate([s, 0]) circle(vent_slot_w/2);
+                                translate([s, 0]) circle(comb_gap/2);
         }
-        translate([vent_x0 + bi, vent_y0 + bi, z0 - 1])
-            linear_extrude(zh + 2)
-                translate([ri, ri]) offset(r = ri)
-                    square([w - 2*bi - 2*ri, h - 2*bi - 2*ri]);
+        union() {   // left and right groups, divider between them
+            translate([comb_x0, -2, z0 - 1])
+                cube([max(0.1, (px - comb_split) - comb_x0), comb_depth + 2, zh + 2]);
+            translate([px + comb_split, -2, z0 - 1])
+                cube([max(0.1, comb_x1 - (px + comb_split)), comb_depth + 2, zh + 2]);
+        }
     }
 }
 
@@ -402,7 +385,7 @@ module front_fuji_cut() {
 }
 
 module brand_cut() {
-    by = (vent_y1 + out_y)/2;    // centred in the plain area behind the louvre
+    by = (comb_depth + out_y)/2;  // centred in the plain area behind the comb
     translate([out_x/2, by, out_z - brand_depth])
         linear_extrude(brand_depth + 1)
             offset(r = 1.2) square([brand_w - 2.4, brand_h - 2.4], center = true);
@@ -552,15 +535,12 @@ module bottom() {
 module top() {
     union() {
         difference() {
-            union() {
-                intersection() { shell_solid(); slab(split_z, out_z + 1); }
-                if (vent_enable) vent_plinth();
-            }
+            intersection() { shell_solid(); slab(split_z, out_z + 1); }
             // hollow the cover interior, leaving the top plate
             translate([wall, wall_front, split_z - 1])
                 cube([inner_x, out_y - wall_front - wall, inner_z - split_z + 1]);
             port_cuts();
-            if (vent_enable) vent_slots_cut();
+            if (vent_enable) front_comb_cut();
             if (side_vent_enable) side_vents();
             if (brand_enable) brand_cut();
         }
@@ -592,7 +572,7 @@ module lip_bars() {
 
 // Pads that press the Tang's upper edge down into its slot.
 module press_pads() {
-    for (fx = [0.08, 0.92])
+    for (fx = [0.05, 0.95])
         translate([tn_x0 + tn_len*fx - press_w/2, tn_y0 - 0.7, tn_z1 + press_cl])
             cube([press_w, tn_th + 1.4, inner_z - tn_z1 - press_cl + 0.6]);
 }

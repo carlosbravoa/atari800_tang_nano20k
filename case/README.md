@@ -8,7 +8,7 @@ GPIO pins).
 | | |
 |---|---|
 | ![closed](img/closed.png) | ![top](img/top_plan.png) |
-| Front: Fuji, LED window and the two button wells | The louvre panel sits directly over the Tang; branding behind it |
+| Front: Fuji, LED window, button wells, comb ribs over the edge | Top: the comb wraps the front edge; branding behind it |
 | ![rear](img/rear.png) | ![section](img/section.png) |
 | Rear: vent grill and flank slits | Cutaway (front at left): Tang on edge, jumpers, CH9350, DB9 bay |
 | ![tray](img/tray.png) | ![fitcheck](img/fitcheck.png) |
@@ -16,7 +16,7 @@ GPIO pins).
 | ![right](img/right.png) | ![left](img/left.png) |
 | Right: USB-C + microSD, dual USB-A (keyboard), DB9 | Left: HDMI and the other DB9 |
 | ![cover](img/cover_inside.png) | ![louvre](img/louvre.png) |
-| Cover underside: screw posts, lip bars, press pads | Louvre close-up: raised fins, not scored lines |
+| Cover underside: screw posts, lip bars, press pads | Louvre close-up: ribs wrapping the front corner |
 
 ## The two ideas that make this work
 
@@ -48,7 +48,7 @@ case/
 └── img/               # rendered previews
 ```
 
-Outer size: **≈ 60 × 90 × 28 mm** (the louvre fins add 2.6 mm locally). The width is pinned by the Tang — its two
+Outer size: **≈ 60 × 90 × 28 mm**. The width is pinned by the Tang — its two
 ends carry HDMI and USB-C, so both have to reach a side wall — and the depth is
 the sum of the connector zone, the jumper stack, the CH9350 and the DB9 bay.
 
@@ -88,15 +88,17 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
 - **Rear wall** — ventilation grill only. Power comes in on USB-C and the
   GND / 5 V / Pin-53 links are internal jumpers, so nothing needs to leave the
   case.
-- **Cooling** — an **XE-style louvre** sits in the cover *directly over the
-  Tang*, which is where the FPGA's heat comes off. It is a raised plinth
-  (2.6 mm proud, tapered on all four sides) cut across by oblique 45° slots:
-  the material left between the slots forms a comb of **fins standing above the
-  lid**. That is what gives the vent its depth — slots cut into a flat lid just
-  read as scored lines. The slots stop 3 mm short of the plinth edge so each fin
-  stays tied to the lid at both ends; cut them free and the ribs would be loose
-  pieces. Intake slots in the floor sit right underneath, giving a straight
-  chimney past the standing board, and upright slits around the rear flanks plus
+- **Cooling** — an **XE-style louvre comb wraps the front-top corner**. In the
+  reference the ribs are not a panel sitting on the lid: each one runs from the
+  top face, over the edge, and dies into the side face, so the vent is part of
+  the shell's edge rather than a window cut in the middle of it. Here that
+  corner is the front-top edge, complete with its wedge chamfer — which is also
+  directly over the Tang, so one feature does both the styling and the cooling.
+  Every rib is held at *both* ends (to the front wall below, to the top plate
+  behind), so nothing cantilevers. The comb is split into two groups by a solid
+  divider where the cover's front screw post comes down — the reference's comb
+  has a step in it too. Intake slots in the floor sit underneath, giving a
+  chimney past the standing board; upright slits around the rear flanks and
   floor slots under the rear bay vent the back half.
 
 ### How the boards are held
