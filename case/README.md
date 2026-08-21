@@ -7,14 +7,16 @@ GPIO pins).
 
 | | |
 |---|---|
-| ![closed](img/closed.png) | ![rear](img/rear.png) |
-| Front: Fuji, LED window and the two button wells | Rear: vent grill, top vent band, "ATARI 800" strip |
-| ![section](img/section.png) | ![tray](img/tray.png) |
-| Cutaway (front at left): Tang on edge, jumpers, CH9350, DB9 bay | Tray with both boards dropped in |
+| ![closed](img/closed.png) | ![top](img/top_plan.png) |
+| Front: Fuji, LED window and the two button wells | The louvre panel sits directly over the Tang; branding behind it |
+| ![rear](img/rear.png) | ![section](img/section.png) |
+| Rear: vent grill and flank slits | Cutaway (front at left): Tang on edge, jumpers, CH9350, DB9 bay |
+| ![tray](img/tray.png) | ![fitcheck](img/fitcheck.png) |
+| Tray with both boards dropped in | `fitcheck` — the tray sliced at the parting line |
 | ![right](img/right.png) | ![left](img/left.png) |
 | Right: USB-C + microSD, dual USB-A (keyboard), DB9 | Left: HDMI and the other DB9 |
-| ![cover](img/cover_inside.png) | ![fitcheck](img/fitcheck.png) |
-| Cover underside: screw posts, lip bars, press pads | `fitcheck` — the tray sliced at the parting line |
+| ![cover](img/cover_inside.png) | ![front](img/front.png) |
+| Cover underside: screw posts, lip bars, press pads | Front elevation |
 
 ## The two ideas that make this work
 
@@ -63,6 +65,9 @@ the Tang in **on edge, component side forward** and check that
 Then adjust the variables at the top of the `.scad` (every dimension is one) and
 print the real `bottom.stl` + `top.stl`.
 
+`measure_sheet.py` regenerates `img/measure_sheet.png`, the annotated diagram of
+every board dimension this model depends on — handy if you need to re-measure.
+
 Positions come from measurements of a real board, and the connector openings are
 deliberately generous — they are sized for the mating **plug**, not the bare
 connector, because FDM holes print undersized (an earlier prototype had to be
@@ -83,13 +88,18 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
 - **Rear wall** — ventilation grill only. Power comes in on USB-C and the
   GND / 5 V / Pin-53 links are internal jumpers, so nothing needs to leave the
   case.
-- **Cooling** — a 45° vent band across the cover, upright slits around the rear
-  flanks, and floor slots under the rear bay.
+- **Cooling** — an **XE-style louvre panel** sits in the cover *directly over
+  the Tang*, which is where the FPGA's heat comes off. It is a shallow sunken
+  pocket (1.2 mm) with oblique 45° slots cut through its floor, so it reads as a
+  recessed grille with real depth rather than slots scored into a flat lid.
+  Intake slots in the floor sit right underneath it, giving a straight chimney
+  up past the standing board; upright slits around the rear flanks and floor
+  slots under the rear bay vent the back half.
 
 ### How the boards are held
 
-- The **Tang** drops into a card slot on the floor and is pressed down by three
-  pads on the cover's underside. The slot is deliberately loose (3 mm for a
+- The **Tang** drops into a card slot on the floor and is pressed down by two
+  pads on the cover's underside (one near each end, clear of the louvre panel). The slot is deliberately loose (3 mm for a
   1.6 mm board): the header pins sit only ~1 mm in from that edge, so their
   solder fillets reach almost to it and a tight slot would jam on solder rather
   than on bare PCB. Side-to-side travel is limited to ±0.4 mm by the walls.

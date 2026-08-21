@@ -125,7 +125,7 @@ wall       = 2.4;
 wall_front = 4.0;   // thicker: carries the LED window, button wells and logo,
                     // and gives the front wedge something to bite into
 floor_th   = 2.0;
-top_th     = 2.0;
+top_th     = 2.6;   // thicker: the sunken vent panel eats 1.2 mm of it
 clear      = 0.4;   // XY fit clearance around the boards
 conn_gap   = 0.6;   // slack between the front wall and the deepest connector
 gap_tj     = 2.5;   // gap between the jumper stack and the CH9350
@@ -174,13 +174,19 @@ post_gap      = 7.0;   // the front card-slot rib is broken by this much so the
 // -----------------------------------------------------------------------------
 //  VENTILATION
 // -----------------------------------------------------------------------------
-vent_slot_w   = 2.0;
-vent_pitch    = 3.8;
+// Louvre panel, XE style: a shallow sunken pocket in the cover with oblique
+// slots cut through its floor, so the vent reads as a recessed grille with real
+// depth rather than slots scored into a flat lid. It sits directly OVER the
+// Tang and its jumper bay - that is where the FPGA's heat comes off - with
+// matching intake slots in the floor underneath.
+vent_enable   = true;
+vent_slot_w   = 1.6;
+vent_pitch    = 3.0;
 vent_angle    = 45;
-vent_enable   = true;   // angled band across the cover
-vent_margin   = 9.0;
-vent_rear_gap = 7.0;
-vent_band_h   = 16.0;
+vent_recess   = 1.2;    // depth of the sunken panel
+vent_border   = 2.8;    // flat margin inside the pocket before the slots start
+vent_side_in  = 12.5;   // inset from the side walls (clears the press pads)
+vent_corner   = 2.5;    // pocket corner radius
 
 side_vent_enable = true;  // upright slits around the cover's rear flanks
 side_vent_w      = 1.8;
@@ -239,6 +245,13 @@ function ux(u) = tn_x0 + u;
 function vz(v) = tn_z0 + v;
 function ch_x0() = out_x - wall - clear - ch_len;   // USB stack against +X wall
 
+// Vent panel bounds: spans the Tang and its jumper bay, inset from the sides
+// so it never crosses the cover's press pads.
+vent_x0 = vent_side_in;
+vent_x1 = out_x - vent_side_in;
+vent_y0 = tn_y0 + 0.4;
+vent_y1 = ch_y0 - 1.5;
+
 tn_vc = tn_z0 + tn_wid/2;                      // board's vertical centre
 ch_cy = ch_y0 + ch_wid/2;
 db9_y = (bay_y0 + bay_y1)/2;
@@ -291,20 +304,35 @@ module cavity() {
 
 module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
 
-// Band of parallel 45-degree slots clipped to a rectangle, cut through +Z.
-module vent_band(x0, x1, y0, y1, depth) {
-    r  = vent_slot_w/2;
-    dx = vent_pitch / sin(vent_angle);
-    L  = (x1 - x0) + (y1 - y0) + 10;
-    yc = (y0 + y1)/2;
+// XE-style louvre panel: a sunken pocket plus oblique slots through its floor.
+// Cut from the cover's top face; `vent_x0/x1, vent_y0/y1` bound the pocket.
+module vent_panel() {
+    w = vent_x1 - vent_x0;
+    h = vent_y1 - vent_y0;
+    r = vent_corner;
+    // (a) the sunken pocket
+    translate([vent_x0, vent_y0, out_z - vent_recess])
+        linear_extrude(vent_recess + 1)
+            translate([r, r]) offset(r = r) square([w - 2*r, h - 2*r]);
+    // (b) oblique slots straight through the pocket floor, held back from the
+    //     pocket edge by vent_border so a clean rim survives all the way round
+    bi = vent_border;
+    ri = max(0.1, r - bi/2);
     intersection() {
-        union()
-            for (x = [x0 - (y1-y0) : dx : x1 + (y1-y0)])
-                translate([x, yc, -1])
-                    linear_extrude(depth + 2)
+        union() {
+            dx = vent_pitch / sin(vent_angle);
+            L  = w + h + 20;
+            for (x = [vent_x0 - h : dx : vent_x1 + h])
+                translate([x, (vent_y0 + vent_y1)/2, inner_z - 1])
+                    linear_extrude(top_th + vent_recess + 3)
                         rotate(vent_angle)
-                            hull() for (s = [-L/2, L/2]) translate([s,0]) circle(r);
-        translate([x0, y0, -2]) cube([x1 - x0, y1 - y0, depth + 4]);
+                            hull() for (s = [-L/2, L/2])
+                                translate([s, 0]) circle(vent_slot_w/2);
+        }
+        translate([vent_x0 + bi, vent_y0 + bi, inner_z - 2])
+            linear_extrude(top_th + vent_recess + 5)
+                translate([ri, ri]) offset(r = ri)
+                    square([w - 2*bi - 2*ri, h - 2*bi - 2*ri]);
     }
 }
 
@@ -358,7 +386,7 @@ module front_fuji_cut() {
 }
 
 module brand_cut() {
-    by = out_y - vent_rear_gap - vent_band_h - 3.5 - brand_h/2;
+    by = (vent_y1 + out_y)/2;    // centred in the plain area behind the louvre
     translate([out_x/2, by, out_z - brand_depth])
         linear_extrude(brand_depth + 1)
             offset(r = 1.2) square([brand_w - 2.4, brand_h - 2.4], center = true);
@@ -481,10 +509,14 @@ module bottom() {
                     translate([p[0], p[1], -0.01])
                         cylinder(h = screw_head_h, d = screw_head_d);
                 }
-            if (floor_vent_enable)
+            if (floor_vent_enable) {
+                for (i = [0 : 2])   // intake directly under the Tang's bay
+                    translate([out_x*0.25, tn_y1 + 3.5 + i*4.4, -1])
+                        cube([out_x*0.5, 2.2, floor_th + 2]);
                 for (i = [0 : 3])   // behind the rear screw bosses
                     translate([out_x*0.2, bay_y0 + 12.8 + i*4.4, -1])
                         cube([out_x*0.6, 2.2, floor_th + 2]);
+            }
         }
         // furniture, added after the cavity so it survives
         difference() {
@@ -509,11 +541,7 @@ module top() {
             translate([wall, wall_front, split_z - 1])
                 cube([inner_x, out_y - wall_front - wall, inner_z - split_z + 1]);
             port_cuts();
-            if (vent_enable)
-                translate([0, 0, inner_z])
-                    vent_band(vent_margin, out_x - vent_margin,
-                              out_y - vent_rear_gap - vent_band_h,
-                              out_y - vent_rear_gap, top_th);
+            if (vent_enable) vent_panel();
             if (side_vent_enable) side_vents();
             if (brand_enable) brand_cut();
         }
@@ -545,7 +573,7 @@ module lip_bars() {
 
 // Pads that press the Tang's upper edge down into its slot.
 module press_pads() {
-    for (fx = [0.22, 0.5, 0.78])
+    for (fx = [0.08, 0.92])
         translate([tn_x0 + tn_len*fx - press_w/2, tn_y0 - 0.7, tn_z1 + press_cl])
             cube([press_w, tn_th + 1.4, inner_z - tn_z1 - press_cl + 0.6]);
 }
