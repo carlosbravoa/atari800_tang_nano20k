@@ -105,9 +105,11 @@ Front to back: **front panel → Tang (upright) → jumper space → CH9350 → 
   and dies into the front face — which is what makes it read as part of the
   shell rather than a window cut in the lid. Their top plate is 2.0 mm, the
   same as ours, so it grafts flush; the cover's own wedge chamfer is pocketed
-  away underneath the band. Slots are **1.0 mm wide on a 4.0 mm pitch and run
-  straight**, perpendicular to the edge — the oblique "//////" look in the
-  reference renders is perspective, not geometry. The band sits directly over
+  away underneath the band. Their slots are 1.0 mm wide on a 4.0 mm pitch and
+  are cut **straight** (upright); here the whole band is **sheared 26° in the
+  X–Z plane** (`louvre_slant`) so the ribs lean and read as the angled "//////"
+  louvre of a real 65XE front. Set `louvre_slant = 0` for the source geometry
+  exactly as wt808 drew it. The band sits directly over
   the Tang, and intake slots in the floor sit underneath it, giving a chimney
   past the standing board; upright slits around the rear flanks and floor slots
   under the rear bay vent the back half.

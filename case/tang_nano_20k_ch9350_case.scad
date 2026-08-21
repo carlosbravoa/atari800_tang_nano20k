@@ -202,6 +202,14 @@ tile_ymax     = 467.978;
 tile_depth    = 12.078;
 tile_height   = 6.000;
 
+// Slant. The source comb is cut with straight, upright slots; this shears the
+// grafted band in the X-Z plane so the ribs lean, giving the angled "//////"
+// louvre of a real 65XE front. The shear is applied about the cover's top
+// surface, so the top face stays flat and only the depth of the band leans.
+// 0 = the source geometry exactly as wt808 drew it.
+louvre_slant  = 26;      // degrees off vertical
+louvre_shear  = tan(louvre_slant);
+
 side_vent_enable = true;  // upright slits around the cover's rear flanks
 side_vent_w      = 1.8;
 side_vent_pitch  = 4.4;
@@ -327,6 +335,7 @@ module slab(z0, z1) { translate([-2, -2, z0]) cube([out_x+4, out_y+4, z1-z0]); }
 // above) into ours (material below out_z) and swings their rear edge round to
 // our front edge.
 module louvre_band() {
+    multmatrix([[1,0,louvre_shear,-louvre_shear*out_z],[0,1,0,0],[0,0,1,0]])
     translate([louvre_bx, 0, out_z])
         rotate([180, 0, 0])
             translate([-tile_x0, -tile_ymax, 0])
@@ -338,6 +347,7 @@ module louvre_band() {
 // The hole the band drops into. Held back 0.1 mm on every buried face so the
 // cover's own material overlaps the graft instead of merely touching it.
 module louvre_pocket() {
+    multmatrix([[1,0,louvre_shear,-louvre_shear*out_z],[0,1,0,0],[0,0,1,0]])
     translate([louvre_bx + 0.1, -2, out_z - tile_height + 0.1])
         cube([louvre_w - 0.2, 2 + tile_depth - 0.1, tile_height + 2]);
 }
