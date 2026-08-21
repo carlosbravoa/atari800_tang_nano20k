@@ -666,14 +666,33 @@ atari800_tang_nano20k_parallel/
 
 ## Credits & Licences
 
-- **Atari 800 core** — [Atari800_MiSTer](https://github.com/MiSTer-devel/Atari800_MiSTer) by Mark Watson (GPL)
-- **HDMI library** — [hdl-util/hdmi](https://github.com/hdl-util/hdmi) (MIT)
-- **USB HID host** — [nand2mario/usb_hid_host](https://github.com/nand2mario/usb_hid_host) (Apache 2.0)
-- **PicoRV32** — [YosysHQ/picorv32](https://github.com/YosysHQ/picorv32) (ISC)
-- **IO subsystem** — adapted from [nand2mario/nestang](https://github.com/nand2mario/nestang)
-- **Low-latency SDRAM controller** — adapted from **nand2mario**'s NESTang Tang Nano 20K controller
-  ([sdram-tang-nano-20k](https://github.com/nand2mario/sdram-tang-nano-20k)). Our `sdram_nestang.v`
-  is that controller with a 32-bit masked-write path and half-rate BL2 burst reads added.
-  Huge thanks — this is what made the low-latency, corruption-free core possible.
+> **Non-commercial project.** The Atari core this port is built on is offered by its
+> author for non-commercial use only, so the repository and the released `.fs`
+> bitstreams may be used and shared for **non-commercial purposes only**. Commercial
+> use needs explicit permission from Mark Watson (`scrameta@gmail.com`) — and from the
+> other copyright holders whose licences don't already allow it.
+> **[`LICENSE`](LICENSE) is the authoritative, per-component map.**
 
-This Tang Nano 20K port: see upstream projects for their respective licence terms.
+| Component | Author | Terms |
+|---|---|---|
+| **Atari 8-bit core** — [Atari800_MiSTer](https://github.com/MiSTer-devel/Atari800_MiSTer) / atari800core (`rtl/`, ~45 files) | Mark Watson | Custom **non-commercial** notice ([text](LICENSES/Mark-Watson-NonCommercial.txt)) |
+| **6502 core** — FPGA 64 `cpu_65xx.vhd` | Peter Wendrich | "All Rights Reserved" header, reaches us via the core above |
+| **Cart bank switching / PBI ROM** | Matthias Reichl, Wojciech Mostowski | LGPL v2-or-later |
+| **IO subsystem** (PicoRV32 host, OSD text display, SPI/UART) — adapted from [nestang](https://github.com/nand2mario/nestang) | nand2mario | **GPL-3.0** |
+| **Firmware base** (`firmware/`) — [firmware-picorv32](https://github.com/nand2mario/firmware-picorv32) | nand2mario | No licence file upstream; ships in NESTang under GPL-3.0 and is treated as such here |
+| **PicoRV32** — [YosysHQ/picorv32](https://github.com/YosysHQ/picorv32) | Claire Xenia Wolf | ISC |
+| **FatFs** (`firmware/fatfs/`) | ChaN | 1-clause BSD |
+| **USB HID host** — [nand2mario/usb_hid_host](https://github.com/nand2mario/usb_hid_host) | nand2mario | Apache 2.0 |
+| **Low-latency SDRAM controller** — [sdram-tang-nano-20k](https://github.com/nand2mario/sdram-tang-nano-20k) | nand2mario | Apache 2.0 |
+| **HDMI library** — [hdl-util/hdmi](https://github.com/hdl-util/hdmi) | Sameer Puri | MIT **or** Apache 2.0 |
+| **SD-card reader** (in tree, not built) — [FPGA-SDcard-Reader](https://github.com/WangXuan95/FPGA-SDcard-Reader) | WangXuan95 | GPL-3.0 |
+| **This Tang Nano 20K port** — everything else | Carlos Bravo | **CC BY-NC-SA 4.0 _or_ GPL-3.0-or-later**, your choice ([`LICENSE-PORT`](LICENSE-PORT)) |
+
+Our `sdram_nestang.v` is nand2mario's controller with a 32-bit masked-write path and
+half-rate BL2 burst reads added — huge thanks, this is what made the low-latency,
+corruption-free core possible. `rtl/common/a8core/antic.vhdl` also carries our own
+one-line fix to an upstream ANTIC bug (mode-8 HSCROL); as a derived work it stays
+under Mark Watson's terms.
+
+Full licence texts live in [`LICENSES/`](LICENSES/). Every source file's own header
+notice is authoritative for that file — please keep them intact.
