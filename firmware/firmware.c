@@ -504,6 +504,7 @@ int load_cartridge(char *filepath) {
     uint32_t fsize = f_size(&f);
     uint32_t data_size = fsize;
     uint8_t mode = 0;
+    uint32_t car_type = 0;                  // 0 = raw .rom (no header)
 
     char *ext = strrchr(filepath, '.');
     if (ext && strcasecmp(ext, ".car") == 0) {
@@ -514,8 +515,8 @@ int load_cartridge(char *filepath) {
             message("Not a valid .CAR file", 1);
             return -2;
         }
-        uint32_t car_type = ((uint32_t)hdr[4] << 24) | ((uint32_t)hdr[5] << 16) |
-                            ((uint32_t)hdr[6] << 8)  |  (uint32_t)hdr[7];
+        car_type = ((uint32_t)hdr[4] << 24) | ((uint32_t)hdr[5] << 16) |
+                   ((uint32_t)hdr[6] << 8)  |  (uint32_t)hdr[7];
         for (unsigned i = 0; i < sizeof(car_type_map)/2; i++)
             if (car_type_map[i][0] == car_type) { mode = car_type_map[i][1]; break; }
         if (mode == 0) {
@@ -555,12 +556,12 @@ int load_cartridge(char *filepath) {
     r = f_read(&f, (void *)CART_SDRAM_BASE, data_size, &br);
     f_close(&f);
     if (r != FR_OK || br != data_size) {
-        uart_printf("cart: read failed %d (br=%u/%u)\n", r, br, (unsigned)data_size);
+        uart_printf("cart: read failed %d (br=%d/%d)\n", r, (int)br, (int)data_size);
         message("Cartridge read error", 1);
         return -6;
     }
     reg_cart_mode = mode;
-    uart_printf("cart: '%s' loaded, %u bytes, mode 0x%x\n", filepath, (unsigned)data_size, mode);
+    uart_printf("cart: '%s' loaded, %d bytes, CAR type %d, mode 0x%b\n", filepath, (int)data_size, car_type, mode);   // printf has no %u/%02x: %d + %b
     return 0;
 }
 
