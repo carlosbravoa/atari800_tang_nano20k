@@ -1,0 +1,20 @@
+Mark Watson's licence notice for the atari800core / Atari800_MiSTer VHDL
+=======================================================================
+
+Reproduced verbatim from the COPYRIGHT_NOTICE file of
+https://github.com/MiSTer-devel/Atari800_MiSTer and from the header of every
+affected source file:
+
+    (c) 2013-14 Mark Watson
+    I am happy for anyone to use these for non-commercial use.
+    If my vhdl files are used commercially or sold please contact me for
+    explicit permission at scrameta@gmail.com.
+    This applies for source and binary form and derived works.
+
+This notice covers the great majority of the Atari 8-bit machine implementation
+in rtl/ (ANTIC, GTIA, POKEY, PIA, the 6502 wrapper, the SIO emulation and the
+shared components), and src/address_decoder.vhdl plus the src/fifo_*.vhd copies.
+
+Because it applies to "derived works", it also governs this port's local
+modifications to those files (for example the ANTIC HSCROL fix in
+rtl/common/a8core/antic.vhdl).

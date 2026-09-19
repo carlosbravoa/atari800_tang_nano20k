@@ -1,7 +1,8 @@
 // sdram_nestang.v — low-latency SDRAM controller for the Tang Nano 20K embedded SDRAM.
 //
 // Adapted from nand2mario's NESTang controller (../sdram-tang-nano-20k/src/sdram.v),
-// MIT/BSD. Changes from the original:
+// Copyright nand2mario, Apache License 2.0 (see LICENSES/Apache-2.0.txt).
+// Changes from the original:
 //   - 32-bit masked write: `din` is 32-bit and `wmask[3:0]` selects bytes (DQM = ~wmask),
 //     instead of the original byte-only write (the Atari core does byte writes, but the
 //     firmware/iosys does 32-bit masked writes, so we need the full path).

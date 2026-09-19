@@ -1,201 +1,156 @@
-                                 Apache License
-                           Version 2.0, January 2004
-                        http://www.apache.org/licenses/
+Atari 800 / 800XL / 65XE / 130XE for the Sipeed Tang Nano 20K
+=============================================================
+LICENSING OVERVIEW
 
-   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+This repository is NOT under a single licence. It combines an upstream Atari
+8-bit core, several third-party FPGA and firmware components, and original work
+written for this Tang Nano 20K port. Each part keeps the licence its author gave
+it. This file is the map; the full texts are in LICENSES/.
 
-   1. Definitions.
+Every source file's own header notice is authoritative for that file. Do not
+remove or alter those headers.
 
-      "License" shall mean the terms and conditions for use, reproduction,
-      and distribution as defined by Sections 1 through 9 of this document.
 
-      "Licensor" shall mean the copyright owner or entity authorized by
-      the copyright owner that is granting the License.
+-----------------------------------------------------------------------------
+1. EFFECTIVE TERMS OF THE COMBINED WORK — NON-COMMERCIAL
+-----------------------------------------------------------------------------
 
-      "Legal Entity" shall mean the union of the acting entity and all
-      other entities that control, are controlled by, or are under common
-      control with that entity. For the purposes of this definition,
-      "control" means (i) the power, direct or indirect, to cause the
-      direction or management of such entity, whether by contract or
-      otherwise, or (ii) ownership of fifty percent (50%) or more of the
-      outstanding shares, or (iii) beneficial ownership of such entity.
+The Atari machine implementation this project is built on (Mark Watson's
+atari800core, as distributed in Atari800_MiSTer) is offered for NON-COMMERCIAL
+USE ONLY, in source and binary form and for derived works.
 
-      "You" (or "Your") shall mean an individual or Legal Entity
-      exercising permissions granted by this License.
+Therefore the project as a whole — this repository, and any bitstream built
+from it, including the .fs files published on the Releases page — may be used
+and redistributed for NON-COMMERCIAL PURPOSES ONLY.
 
-      "Source" form shall mean the preferred form for making modifications,
-      including but not limited to software source code, documentation
-      source, and configuration files.
+Selling this core, selling boards preloaded with it, or otherwise using it
+commercially requires explicit permission from Mark Watson (scrameta@gmail.com),
+and additionally from the other copyright holders listed below whose licences do
+not already permit it.
 
-      "Object" form shall mean any form resulting from mechanical
-      transformation or translation of a Source form, including but
-      not limited to compiled object code, generated documentation,
-      and conversions to other media types.
+Note that this is stricter than the licences of several individual components:
+a permissively licensed file (Apache-2.0, MIT, ISC, BSD) may of course still be
+taken from this tree and used commercially under its own terms, on its own.
 
-      "Work" shall mean the work of authorship, whether in Source or
-      Object form, made available under the License, as indicated by a
-      copyright notice that is included in or attached to the work
-      (an example is provided in the Appendix below).
 
-      "Derivative Works" shall mean any work, whether in Source or Object
-      form, that is based on (or derived from) the Work and for which the
-      editorial revisions, annotations, elaborations, or other modifications
-      represent, as a whole, an original work of authorship. For the purposes
-      of this License, Derivative Works shall not include works that remain
-      separable from, or merely link (or bind by name) to the interfaces of,
-      the Work and Derivative Works thereof.
+-----------------------------------------------------------------------------
+2. COMPONENTS AND THEIR LICENCES
+-----------------------------------------------------------------------------
 
-      "Contribution" shall mean any work of authorship, including
-      the original version of the Work and any modifications or additions
-      to that Work or Derivative Works thereof, that is intentionally
-      submitted to Licensor for inclusion in the Work by the copyright owner
-      or by an individual or Legal Entity authorized to submit on behalf of
-      the copyright owner. For the purposes of this definition, "submitted"
-      means any form of electronic, verbal, or written communication sent
-      to the Licensor or its representatives, including but not limited to
-      communication on electronic mailing lists, source code control systems,
-      and issue tracking systems that are managed by, or on behalf of, the
-      Licensor for the purpose of discussing and improving the Work, but
-      excluding communication that is conspicuously marked or otherwise
-      designated in writing by the copyright owner as "Not a Contribution."
+  Atari 8-bit core — Mark Watson, (c) 2013-14
+    rtl/common/a8core/*, rtl/common/components/*, rtl/common/sioemu/*
+    (~45 files: antic*, gtia*, pokey*, pia, cpu, atari800core*, the shared
+    components and the SIO emulation), plus src/address_decoder.vhdl and the
+    src/fifo_receive.vhd, src/fifo_transmit.vhd, src/fifo_tape.vhd copies.
+    Custom non-commercial permission notice — LICENSES/Mark-Watson-NonCommercial.txt
+    Upstream: https://github.com/MiSTer-devel/Atari800_MiSTer
 
-      "Contributor" shall mean Licensor and any individual or Legal Entity
-      on behalf of whom a Contribution has been received by Licensor and
-      subsequently incorporated within the Work.
+  6502/6510 CPU core — Peter Wendrich (FPGA 64), (c) 2005-2011
+    rtl/common/a8core/cpu_65xx.vhd
+    Header reads "All Rights Reserved" and carries no explicit grant; the file
+    reaches us as part of the upstream core above. http://www.syntiac.com/fpga64.html
 
-   2. Grant of Copyright License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      copyright license to reproduce, prepare Derivative Works of,
-      publicly display, publicly perform, sublicense, and distribute the
-      Work and such Derivative Works in Source or Object form.
+  Cartridge bank-switching logic — Matthias Reichl, (c) 2011-2014,
+  and PBI ROM — Wojciech Mostowski, (c) 2025
+    rtl/common/a8core/cart_logic.vhd, rtl/common/a8core/pbi_rom.vhdl
+    GNU Lesser General Public License, version 2 or later — LICENSES/LGPL-2.1.txt
 
-   3. Grant of Patent License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      (except as stated in this section) patent license to make, have made,
-      use, offer to sell, sell, import, and otherwise transfer the Work,
-      where such license applies only to those patent claims licensable
-      by such Contributor that are necessarily infringed by their
-      Contribution(s) alone or by combination of their Contribution(s)
-      with the Work to which such Contribution(s) was submitted. If You
-      institute patent litigation against any entity (including a
-      cross-claim or counterclaim in a lawsuit) alleging that the Work
-      or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
-      as of the date such litigation is filed.
+  MiSTer glue not used by this port (present in the tree, NOT in build.tcl)
+    rtl/hps_ext.v         — Wojciech Mostowski / Alexey Melnikov, GPL-3.0-or-later
+    rtl/articolor.sv      — Alexey Melnikov, GPL-2.0-or-later
+    LICENSES/GPL-3.0.txt
 
-   4. Redistribution. You may reproduce and distribute copies of the
-      Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You
-      meet the following conditions:
+  IO subsystem (PicoRV32 host, OSD text display, SPI/UART peripherals)
+    src/iosys_picorv32.v, src/textdisp.v, src/gowin_dpb_menu.v,
+    src/simpleuart.v, src/simplespimaster.v, src/spiflash.v, src/spi_master.v
+    Adapted from nand2mario's NESTang/SNESTang — GNU General Public License v3.0
+    LICENSES/GPL-3.0.txt
+    Upstream: https://github.com/nand2mario/nestang (COPYING = GPL-3.0)
 
-      (a) You must give any other recipients of the Work or
-          Derivative Works a copy of this License; and
+  PicoRV32 CPU core — Claire Xenia Wolf, (c) 2015
+    src/picorv32.v — ISC licence, in the file header.
+    Upstream: https://github.com/YosysHQ/picorv32
 
-      (b) You must cause any modified files to carry prominent notices
-          stating that You changed the files; and
+  SD-card firmware base (firmware/) — nand2mario
+    firmware/firmware.c, firmware.h, picorv32.c, picorv32.h, spi_sd.c,
+    spiflash.c, start.S, baremetal.ld, Makefile, build.bat, clean.bat
+    Derived from https://github.com/nand2mario/firmware-picorv32, which carries
+    no licence file of its own; the same code is distributed inside NESTang and
+    SNESTang under GPL-3.0, and this port treats it as GPL-3.0-or-later.
+    Substantially extended here (SIO disk emulation, cartridges, OSD menus,
+    printer, PC link, .xex loader) — those additions are derivative works and
+    stay under the same terms.
 
-      (c) You must retain, in the Source form of any Derivative Works
-          that You distribute, all copyright, patent, trademark, and
-          attribution notices from the Source form of the Work,
-          excluding those notices that do not pertain to any part of
-          the Derivative Works; and
+  FatFs — ChaN, (c) 2022
+    firmware/fatfs/* — 1-clause BSD licence, in the file headers.
 
-      (d) If the Work includes a "NOTICE" text file as part of its
-          distribution, then any Derivative Works that You distribute must
-          include a readable copy of the attribution notices contained
-          within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one
-          of the following places: within a NOTICE text file distributed
-          as part of the Derivative Works; within the Source form or
-          documentation, if provided along with the Derivative Works; or,
-          within a display generated by the Derivative Works, if and
-          wherever such third-party notices normally appear. The contents
-          of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
+  USB HID host — nand2mario
+    src/usb_hid_host.v, src/usb_hid_host_rom.v, src/usb_hid_host_rom.hex
+    Apache License 2.0 — LICENSES/Apache-2.0.txt
+    Upstream: https://github.com/nand2mario/usb_hid_host
 
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
+  Low-latency SDRAM controller — nand2mario
+    src/sdram_nestang.v (32-bit masked writes and half-rate BL2 burst reads
+    added here)
+    Apache License 2.0 — LICENSES/Apache-2.0.txt
+    Upstream: https://github.com/nand2mario/sdram-tang-nano-20k
 
-   5. Submission of Contributions. Unless You explicitly state otherwise,
-      any Contribution intentionally submitted for inclusion in the Work
-      by You to the Licensor shall be under the terms and conditions of
-      this License, without any additional terms or conditions.
-      Notwithstanding the above, nothing herein shall supersede or modify
-      the terms of any separate license agreement you may have executed
-      with Licensor regarding such Contributions.
+  HDMI transmitter library — Sameer Puri, (c) 2019
+    src/hdmi2/*
+    Dual licensed MIT OR Apache-2.0 — LICENSES/MIT-hdl-util-hdmi.txt,
+    LICENSES/Apache-2.0.txt
+    Upstream: https://github.com/hdl-util/hdmi
 
-   6. Trademarks. This License does not grant permission to use the trade
-      names, trademarks, service marks, or product names of the Licensor,
-      except as required for reasonable and customary use in describing the
-      origin of the Work and reproducing the content of the NOTICE file.
+  SD-card reader (present in the tree, NOT in build.tcl)
+    src/sd_reader.sv, src/sdcmd_ctrl.sv — WangXuan95, GNU GPL v3.0
+    LICENSES/GPL-3.0.txt
+    Upstream: https://github.com/WangXuan95/FPGA-SDcard-Reader
 
-   7. Disclaimer of Warranty. Unless required by applicable law or
-      agreed to in writing, Licensor provides the Work (and each
-      Contributor provides its Contributions) on an "AS IS" BASIS,
-      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
-      PARTICULAR PURPOSE. You are solely responsible for determining the
-      appropriateness of using or redistributing the Work and assume any
-      risks associated with Your exercise of permissions under this License.
+  Gowin IP / toolchain output
+    src/sdrc_hs_defines.v, src/sdrc_hs_name.v and the rPLL instantiations are
+    Gowin IDE generated; they are subject to Gowin's own IP terms.
 
-   8. Limitation of Liability. In no event and under no legal theory,
-      whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
-      Work (including but not limited to damages for loss of goodwill,
-      work stoppage, computer failure or malfunction, or any and all
-      other commercial damages or losses), even if such Contributor
-      has been advised of the possibility of such damages.
+  Everything else — original to this port, (c) 2026 Carlos Bravo
+    Dual licensed: CC-BY-NC-SA-4.0 OR GPL-3.0-or-later, at your option.
+    See LICENSE-PORT for the grant and the covered-file list.
+    LICENSES/CC-BY-NC-SA-4.0.txt, LICENSES/GPL-3.0.txt
 
-   9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may choose to offer,
-      and charge a fee for, acceptance of support, warranty, indemnity,
-      or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, You may act only
-      on Your own behalf and on Your sole responsibility, not on behalf
-      of any other Contributor, and only if You agree to indemnify,
-      defend, and hold each Contributor harmless for any liability
-      incurred by, or claims asserted against, such Contributor by reason
-      of your accepting any such warranty or additional liability.
 
-   END OF TERMS AND CONDITIONS
+-----------------------------------------------------------------------------
+3. COMPATIBILITY NOTE — READ THIS BEFORE REDISTRIBUTING
+-----------------------------------------------------------------------------
 
-   APPENDIX: How to apply the Apache License to your work.
+The upstream Atari core's non-commercial condition and the GPL of the NESTang
+IO subsystem are not strictly compatible: the GPL forbids imposing further
+restrictions on GPL-covered code, and "non-commercial" is such a restriction.
+This tension is inherited from the upstream projects that this port combines —
+it is not created by the port itself, and it exists identically in
+Atari800_MiSTer-derived cores built on nand2mario's Tang IO subsystem.
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+This project's response is to be maximally transparent rather than to paper
+over it:
 
-   Copyright [yyyy] [name of copyright owner]
+  * every upstream copyright and licence notice is preserved in place;
+  * complete corresponding source for every component is in this public
+    repository, satisfying the GPL's source-availability obligations;
+  * the whole is distributed free of charge, for non-commercial use;
+  * no additional restriction is asserted over any individual third-party file
+    beyond what its own licence already says;
+  * the port's own original files are dual licensed CC-BY-NC-SA-4.0 OR
+    GPL-3.0-or-later, so that they add no new incompatibility of their own —
+    anyone who needs GPL-compatible terms for this port's work can simply take
+    the GPL option (LICENSE-PORT).
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+If you are a copyright holder of any component here and want your code handled
+differently, please open an issue — it will be honoured.
 
-       http://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+-----------------------------------------------------------------------------
+4. FOR CONTRIBUTORS
+-----------------------------------------------------------------------------
+
+Contributions to files original to this port are accepted under BOTH options of
+LICENSE-PORT (CC-BY-NC-SA-4.0 OR GPL-3.0-or-later); by submitting a change you
+licence it under both. Contributions to third-party files stay under that file's own
+licence. Keep every existing header notice intact, and add the upstream licence
+to the table above whenever a new third-party file enters the tree.
