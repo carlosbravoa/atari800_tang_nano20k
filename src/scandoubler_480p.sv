@@ -63,7 +63,8 @@ module scandoubler_480p #(
     output reg  [7:0]  r_out, g_out, b_out,
     output reg         hs_out, vs_out, de_out,
     output wire [7:0]  osd_x,
-    output wire [7:0]  osd_y
+    output wire [7:0]  osd_y,
+    output wire        osd_win          // 1 = inside the 256-col OSD window (aligned with osd_x)
 );
 
 // 8-line ring buffer (slot = line mod 8) — read may trail write by up to 7 lines.
@@ -238,6 +239,11 @@ always_ff @(posedge clk_pix) begin
 end
 assign osd_x = osd_x_r;
 assign osd_y = src_row;
+// Window flag for the OSD panel (dimmed background) — same comparators as the clamp above.
+reg osd_win_r;
+always_ff @(posedge clk_pix)
+    osd_win_r <= (src_col >= 9'd48) && (src_col < 9'd304);
+assign osd_win = osd_win_r;
 
 // ── ring buffer (clk_core write / clk_pix read), 8-bit colour code ──
 reg [7:0] linebuf [0:RING_LINES*512-1];

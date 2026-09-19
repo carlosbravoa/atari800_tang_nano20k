@@ -17,10 +17,13 @@ module textdisp(
 	input      [31:0] reg_char_di
 );
 
-// BGR
-localparam [14:0] COLOR_BACK    = 15'b00000_00000_00000;
-localparam [14:0] COLOR_TEXT    = 15'b10000_11111_11111;    // yellow
-localparam [14:0] COLOR_CURSOR  = 15'b10000_11000_11111;    // orange
+// BGR (5 bits each). Black = transparent in the tang_top mixer (the dimmed panel shows).
+localparam [14:0] COLOR_BACK     = 15'b00000_00000_00000;
+localparam [14:0] COLOR_TEXT     = 15'b11100_11100_11100;   // light grey text
+localparam [14:0] COLOR_HL_BG    = 15'b10110_01010_00100;   // selection bar: deep Atari blue
+localparam [14:0] COLOR_HL_TEXT  = 15'b11111_11111_11111;   // white on the selection bar
+localparam [14:0] COLOR_INV_BG   = 15'b11010_01110_00100;   // title/footer bars (char bit 7)
+localparam [14:0] COLOR_INV_TEXT = 15'b11111_11111_11111;
 parameter [14:0] COLOR_LOGO    = 15'b00000_10101_00000;    // green
 
 // 72x14 pixels 1bpp logo
@@ -35,8 +38,9 @@ localparam LOGO_Y = 220;   // logo rows 220-233 (OSD window is 240 rows tall)
 //
 reg [10:0] mem_addr_b;
 reg [7:0] mem_do_b;
-reg is_cursor;
-reg [14:0] overlay_color_buf;
+reg inv;                        // char bit 7 = inverse attribute (title/footer bars)
+reg hl;                         // current char row == hilite_row (selection bar)
+reg [4:0] hilite_row = 5'd31;   // 0-27 = highlighted row, 31 = none (cmd 3 from firmware)
 
 wire [1:0] cmd = reg_char_di[31:24];
 wire [4:0] text_x = reg_char_di[20:16];
@@ -58,6 +62,11 @@ gowin_dpb_menu menu_mem (
     .dinb(), .doutb(mem_do_b)
 );
 
+// cmd 3: set the highlighted (selection) row. Written on clk, read on hclk; it changes
+// only on user navigation so the multi-bit crossing can at worst tear for one frame.
+always @(posedge clk)
+    if (reg_char_we[0] && cmd == 2'd3) hilite_row <= reg_char_di[4:0];
+
 reg [6:0] logo_addr;
 reg [2:0] logo_xoff;
 reg logo_active;
@@ -75,7 +84,7 @@ always @* begin             // address and output logic
     color = color_buf;
     case (state)
     MAIN:           mem_addr_b = {1'b0, y[7:3], x[7:3]};   
-    FETCH_FONT:     mem_addr_b = {1'b1, mem_do_b[7] ? 7'h3F : mem_do_b[6:0], y[2:0]};  
+    FETCH_FONT:     mem_addr_b = {1'b1, mem_do_b[6:0], y[2:0]};   // bit 7 is the attribute
     FETCH_LOGO:     mem_addr_b = {4'b0111, logo_addr};
     OUTPUT: begin
         mem_addr_b = {1'b0, y[7:3], x[7:3]};
@@ -83,8 +92,12 @@ always @* begin             // address and output logic
             color = mem_do_b[logo_xoff] ? COLOR_LOGO : COLOR_BACK;
         else if (y[7:3] >= 5'd28)
             color = COLOR_BACK;
+        else if (hl)
+            color = mem_do_b[x[2:0]] ? COLOR_HL_TEXT : COLOR_HL_BG;
+        else if (inv)
+            color = mem_do_b[x[2:0]] ? COLOR_INV_TEXT : COLOR_INV_BG;
         else
-            color = mem_do_b[x[2:0]] ? (is_cursor ? COLOR_CURSOR : COLOR_TEXT) : COLOR_BACK;
+            color = mem_do_b[x[2:0]] ? COLOR_TEXT : COLOR_BACK;
     end
     default: mem_addr_b = 0;
     endcase
@@ -112,10 +125,11 @@ always @(posedge hclk) begin    // actual state machine
         logo_y = y - LOGO_Y;
         logo_addr <= {logo_y, 3'b0} + logo_y + logo_x[6:3];
         logo_xoff <= logo_x[2:0];
-        is_cursor <= x[7:3] == 0;
+        hl <= (y[7:3] == hilite_row);
     end
 
-    FETCH_FONT, FETCH_LOGO: state <= OUTPUT;
+    FETCH_FONT: begin state <= OUTPUT; inv <= mem_do_b[7]; end   // mem_do_b = char byte here
+    FETCH_LOGO: begin state <= OUTPUT; inv <= 1'b0; end
 
     default: ;
     endcase

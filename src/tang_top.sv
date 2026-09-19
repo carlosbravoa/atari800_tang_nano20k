@@ -724,6 +724,7 @@ wire        overlay;
 wire [15:0] overlay_color;
 wire [7:0]  osd_x;
 wire [7:0]  osd_y;
+wire        osd_win;
 
 // SIO register interface wires
 wire        sio_reg_sel;
@@ -1245,7 +1246,7 @@ scandoubler_480p scandoubler (
     .h_offset(h_offset),
     .r_out(hdmi_r), .g_out(hdmi_g), .b_out(hdmi_b),
     .hs_out(hdmi_hs), .vs_out(hdmi_vs), .de_out(hdmi_de),
-    .osd_x(osd_x), .osd_y(osd_y)
+    .osd_x(osd_x), .osd_y(osd_y), .osd_win(osd_win)
 );
 
 // OSD RGB colors conversion from BGR5:
@@ -1256,12 +1257,15 @@ wire [7:0] osd_r = {overlay_color[4:0],   overlay_color[4:2]};
 wire [7:0] osd_g = {overlay_color[9:5],   overlay_color[9:7]};
 wire [7:0] osd_b = {overlay_color[14:10], overlay_color[14:12]};
 
-// Draw OSD character/logo pixel if overlay is enabled, active, and color is not transparent (black)
-wire       osd_active = overlay && (overlay_color[14:0] != 15'd0) && hdmi_de;
+// Draw OSD character/logo pixel if overlay is enabled, inside the OSD window, active, and
+// color is not transparent (black). Elsewhere inside the window the live video is dimmed
+// to 1/4 with a slight blue cast (the "panel"); outside the window video passes untouched.
+wire       osd_active = overlay && osd_win && (overlay_color[14:0] != 15'd0) && hdmi_de;
+wire       osd_panel  = overlay && osd_win && hdmi_de;
 
-wire [7:0] mixed_r = osd_active ? osd_r : hdmi_r;
-wire [7:0] mixed_g = osd_active ? osd_g : hdmi_g;
-wire [7:0] mixed_b = osd_active ? osd_b : hdmi_b;
+wire [7:0] mixed_r = osd_active ? osd_r : (osd_panel ? {2'b00, hdmi_r[7:2]}          : hdmi_r);
+wire [7:0] mixed_g = osd_active ? osd_g : (osd_panel ? {2'b00, hdmi_g[7:2]}          : hdmi_g);
+wire [7:0] mixed_b = osd_active ? osd_b : (osd_panel ? ({2'b00, hdmi_b[7:2]} | 8'h10) : hdmi_b);
 
 // Pipeline register to eliminate the setup violation from the OSD RAM
 // all the way to the HDMI TMDS encoders.

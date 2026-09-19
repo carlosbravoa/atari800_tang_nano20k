@@ -72,6 +72,8 @@ extern void print_hex_digits(uint32_t v, int n);
 extern void print_dec(int v);
 extern int  print(const char *s);
 extern void clear();
+extern void hilite(int row);      // OSD selection bar row (31 = none)
+extern int  print_inv;            // 1 = print with the inverse attribute (bars)
 extern void overlay(int on);
 extern char *trimwhitespace(char *str);
 extern void delay(int ms);

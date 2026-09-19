@@ -206,6 +206,17 @@ void install_sio_test_stub(void) {
     for (unsigned i = 0; i < sizeof(stub); i++) ram[i] = stub[i];
 }
 
+// Full-width inverse bar (title at row 1, footer at row 26): left text at col 1,
+// right text right-aligned at col 30. Uses the textdisp inverse attribute (char bit 7).
+void bar_row(int row, const char *left, const char *right) {
+    print_inv = 1;
+    cursor(0, row);
+    for (int i = 0; i < 32; i++) putchar(' ');
+    if (left)  { cursor(1, row); print((char *)left); }
+    if (right) { int n = strlen(right); cursor(31 - n, row); print((char *)right); }
+    print_inv = 0;
+}
+
 void status(char *msg) {
     cursor(0, 27);
     for (int i = 0; i < 32; i++)
@@ -236,7 +247,8 @@ void message(char *msg, int center) {
             break;
         }		
     }
-    // draw a box 
+    // draw a solid inverse panel (bar colour) with the text on it
+    print_inv = 1;
     int y0 = 14 - ((lines + 2) >> 1);
     int y1 = y0 + lines + 2;
     int x0 = 16 - ((maxw + 2) >> 1);
@@ -244,14 +256,7 @@ void message(char *msg, int center) {
     for (int y = y0; y < y1; y++)
         for (int x = x0; x < x1; x++) {
             cursor(x, y);
-            if ((x == x0 || x == x1-1) && (y == y0 || y == y1-1))
-                putchar('+');
-            else if (x == x0 || x == x1-1)
-                putchar('|');
-            else if (y == y0 || y == y1-1)
-                putchar('-');
-            else
-                putchar(' ');
+            putchar(' ');
         }
     // print text
     char *s = msg;
@@ -266,6 +271,7 @@ void message(char *msg, int center) {
         }
         s++;
     }
+    print_inv = 0;
     // wait for a keypress
     delay(300);
     for (;;) {
@@ -1037,8 +1043,11 @@ int menu_loadrom(int *choice, int carts, int slot) {
         int r = load_dir(pwd, page*PAGESIZE, PAGESIZE, &total, carts);
         if (r == 0) {
             pages = (total+PAGESIZE-1) / PAGESIZE;
-            status("Page ");
+            bar_row(0, carts ? "ATTACH CARTRIDGE" : "ATTACH DISK", 0);
+            print_inv = 1;                       // page counter, right end of the title bar
+            cursor(25, 0);
             printf("%d/%d", page+1, pages);
+            print_inv = 0;
             if (active > file_len-1)
                 active = file_len-1;
             for (int i = 0; i < PAGESIZE; i++) {
@@ -1161,7 +1170,25 @@ int load_system_roms(void) {
     // Hold Atari core in reset
     reg_romload_ctrl = 1;
     delay(10);
-    
+
+    // Power-cycle the emulated cartridge. The core's CartLogic bank latch is NOT
+    // reset by the system reset (faithful: the XL cart port has no reset line,
+    // so a real cart keeps its bank/enable across RESET - Altirra F5 matches).
+    // Its only reset is a cart_mode CHANGE, so without this a cold boot with a
+    // multicart that had disabled itself (e.g. Atarimax "Turbo Oro", .car type
+    // 75) came up with no cart -> BASIC / Self Test instead of the cart menu.
+    // A real power cycle (and Altirra Shift+F5) restores bank 0 + enabled; do
+    // the same here while the core is held in reset.
+    {
+        uint32_t cart_mode = reg_cart_mode & 0xff;
+        if (cart_mode != 0) {
+            reg_cart_mode = 0;
+            delay(1);
+            reg_cart_mode = cart_mode;
+            delay(1);
+        }
+    }
+
     // Force cold boot on next boot
     *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1
     
@@ -2372,6 +2399,7 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
     int choice = 0;
     while (1) {
         clear();
+        bar_row(1, "DISK DRIVE", 0);
         cursor(2, 9);
         printf("D%d: %s%s", slot + 1, cur_name,
                (atr_mounted[slot] && atr_readonly[slot]) ? " (RO)" : "");
@@ -2452,6 +2480,7 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
     int choice = 0;
     while (1) {
         clear();
+        bar_row(1, "CARTRIDGE", 0);
         cursor(2, 9);
         printf("Cart: %s", cur_name);
         cursor(2, 11);
@@ -2506,8 +2535,7 @@ void menu_options() {
     int options_dirty = 0;   // a change was applied live but not yet written to SD
     while (1) {
         clear();
-        cursor(8, 10);
-        print("--- Options ---");
+        bar_row(1, "OPTIONS", 0);
 
         cursor(2, 12);
         print("<< Return to main menu");
@@ -3232,28 +3260,27 @@ int main() {
         if (!booted) {
             overlay(1);
             clear();
-            cursor(2, 6);
-            print("=== Tang Atari 800 ===");
+            bar_row(1, "TANG ATARI 800", __DATE__);
 
-            cursor(2, 8);
+            cursor(2, 4);
             printf("1) D1: %s%s", mounted_atr_name[0],
                    (atr_mounted[0] && atr_readonly[0]) ? " (RO)" : "");
-            cursor(2, 9);
+            cursor(2, 5);
             printf("2) D2: %s%s", mounted_atr_name[1],
                    (atr_mounted[1] && atr_readonly[1]) ? " (RO)" : "");
-            cursor(2, 10);
+            cursor(2, 6);
             printf("3) Cart: %s", mounted_cart_name);
-            cursor(2, 11);
+            cursor(2, 7);
             print("4) Boot to OS (No BASIC)\n");
-            cursor(2, 12);
+            cursor(2, 8);
             print("5) Boot to BASIC\n");
-            cursor(2, 13);
+            cursor(2, 9);
             print("6) Soft Reset\n");
-            cursor(2, 14);
+            cursor(2, 10);
             print("7) Hard Reset\n");
-            cursor(2, 15);
+            cursor(2, 11);
             print("8) Options\n");
-            cursor(2, 16);
+            cursor(2, 12);
             print("9) Return to Atari (F12)\n");
 
             // SIO triage line (uart_tx is unwired on HW — this is the only way to
@@ -3268,9 +3295,7 @@ int main() {
             if (stack_canary_dead())
                 print("!");   // stack hit bottom = bss corruption likely
 
-            cursor(2, 26);
-            print("Enter:Select   V:");
-            print(__DATE__);
+            bar_row(26, "Up/Down move  Enter select  F12", 0);
 
             delay(300);
 
@@ -3279,7 +3304,7 @@ int main() {
                 uart_keyboard_poll();
                 sio_poll();   // Atari runs live behind the menu — keep disk I/O alive
                 bridge_poll();
-                int r = joy_choice(8, 9, &choice);
+                int r = joy_choice(4, 9, &choice);
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);

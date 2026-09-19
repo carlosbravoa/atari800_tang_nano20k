@@ -54,7 +54,7 @@ the keyboard alone covers everything.
 - **Dual-POKEY stereo** (v2.2) — the classic second-POKEY-at-`$D210` stereo upgrade (POKEY1→left, POKEY2→right); OSD toggle, **default mono** so all existing software is unaffected. Enable it *before* loading stereo-aware software
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
-- **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open)
+- **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open). **New look in v3.0:** the menu sits on a dimmed panel over the live picture, with title/footer bars and a full-width selection bar, so it stays readable over any game
 - **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F11 = arrows/joystick toggle**, **F12 = OSD menu**
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** on the 2.54 mm headers (no DB9 connectors on the board — see [wiring](#atari-db9-joystick))
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
@@ -71,7 +71,7 @@ the keyboard alone covers everything.
 - **Remote telemetry & debugging** (v2.6) — `status` (boot stage, mounts, SIO counters), `screen` (a text dump of the Atari's display read from its own memory), `peek`/`poke` (inspect/modify Atari RAM live), boot-stage log markers, and the bridge answers everywhere — even at the ROM-failure screen, which can be rescued remotely by sending the ROM files over the cable
 - **Desktop app** (v2.6) — `tools/atari_gui.py`: everything above in a Linux/Windows GUI — progress bars, a paste-to-BASIC box, a live-keyboard zone, and a live log pane
 - **Firmware headroom ×5** (v2.5) — the PicoRV32 boot RAM now uses its full 64 KB (was 48), quintupling stack headroom (the tightness behind the v2.4-era corruption class) and leaving room for future features
-- **Cartridge loading** — `.car` (50 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 4 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen
+- **Cartridge loading** — `.car` (50 mapper types: XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, MegaCart up to 4 MB, SIC, Turbosoft…) and raw `.rom` (2/4/8/16K) from the SD card; select it and the machine cold-boots into the cart. Unsupported CAR types show their type id on screen. **Hard Reset acts as a power cycle for the cartridge** (v3.0): banked multicarts that switch themselves off to run a game come back to their menu on *Hard Reset*, exactly like a real power cycle. *Soft Reset* / **F9** behave like the real RESET key, which a cartridge cannot see — a multicart that disabled itself therefore drops to BASIC or Self Test on RESET, on real hardware and here alike
 - **`.xex` executables** (v2.0) — boot Atari binary-load programs directly from the SD card: a baked-in 6502 loader is served as a virtual boot disk on D1:, handling the multi-segment `$FFFF`/INITAD/RUNAD format
 - **Hardware SIO command capture** (v2.0) — the 5-byte SIO command frame is assembled in the FPGA, so disk loading no longer depends on the firmware polling in time
 - **Long filenames** on the SD card (FatFs LFN); file browser with folders, 24 entries/page, instant Left/Right paging
@@ -200,6 +200,7 @@ Get to a BASIC prompt in a few minutes:
 
 **To boot a disk:** open the OSD → **1) D1:** → **Attach disk...** → pick your `.atr` → **7) Hard Reset**.
 **To run a cartridge:** open the OSD → **3) Cart:** → **Attach cartridge...** → pick — it boots immediately.
+To get back to a multi-game cartridge's menu after a game, use **7) Hard Reset** (F9 is the real RESET key and usually lands in BASIC — that's what a real Atari does too).
 
 > **Input wiring note:** the board has no DB9 or USB connectors — the joystick and keyboard
 > attach to **GPIO header pins** (see the wiring sections below). A DB9 joystick alone is enough

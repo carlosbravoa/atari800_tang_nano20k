@@ -25,11 +25,20 @@ int overlay_status() {
    return _overlay_status;
 }
 
+int print_inv = 0;
+
+// OSD selection bar: textdisp cmd 3 highlights one whole 32-col row (31 = none)
+void hilite(int row) {
+   reg_textdisp = 0x03000000 | (row & 31);
+}
+
 int putchar(int c)
 {
+   unsigned ch = (unsigned)c & 0xff;
+   if (ch >= 128) ch = '?';            // 128-glyph font; bit 7 is the inverse attribute
 	if (curx >= 0 && curx < 32 && cury >= 0 && cury < 28) {
-      reg_textdisp = (curx << 16) + (cury << 8) + c;
-      if (c >= 32 && c < 128)
+      reg_textdisp = (curx << 16) + (cury << 8) + (print_inv ? (ch | 0x80) : ch);
+      if (ch >= 32 && ch < 128)
          curx++;
    }
    // new line
@@ -138,6 +147,7 @@ int printf(const char *fmt,...)
 }
 
 void clear() {
+   hilite(31);
    for (int i = 0; i < 28; i++) {
       cursor(0, i);
       for (int j = 0; j < 32; j++)
@@ -239,13 +249,9 @@ int joy_choice(int start_line, int len, int *active) {
    if ((joy1 & 0x1) || (joy1 & 0x100) || (joy2 & 0x1) || (joy2 & 0x100))
       return 1;      // confirm
 
-   cursor(0, start_line + (*active));
-   print(">");
-   if (last != *active) {
-      cursor(0, start_line + last);
-      print(" ");
+   hilite(start_line + (*active));   // full-width selection bar (was a '>' in col 0)
+   if (last != *active)
       delay(100);     // button debounce
-   }
 
    // DEBUG("joy_choice: return\n");
 

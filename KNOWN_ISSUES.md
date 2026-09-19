@@ -1,5 +1,14 @@
 # Known issues
 
+## RESET (F9 / Soft Reset) inside a multi-game cartridge lands in BASIC or Self Test
+
+This is faithful, not a bug. The XL/XE cartridge port has no reset line, so a cartridge
+cannot see the RESET key; a multicart that switched itself off to run a game (Atarimax
+compilations do this) is still off after RESET, and the XL OS then boots BASIC (or Self Test if
+BASIC is disabled). Altirra does exactly the same on F5. Use **Hard Reset** instead: since v3.0
+it power-cycles the emulated cartridge (bank 0, enabled) and brings the multicart menu back,
+like a real power cycle (Altirra Shift+F5).
+
 ## F12 (OSD menu) can be unresponsive while a PC serial session is engaged
 
 With the PC Link actively engaged (v2.5+; e.g. a live keyboard session or app
