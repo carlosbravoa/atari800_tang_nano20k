@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>6. Disks — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html" class="cur"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>6. Disks</h1>
+<p class="lead">Disk images on the SD card are served to the Atari as SIO floppy drives D1: to D4: — you can read, write, format and swap them while the machine runs.</p>
+
+<h2>Supported formats</h2>
+<div class="tbl"><table>
+<tr><th>Extension</th><th>What it is</th></tr>
+<tr><td><code>.atr</code></td><td>The standard Atari disk image: a 16-byte header followed by the sectors. The header gives the sector size.</td></tr>
+<tr><td><code>.xfd</code></td><td>A raw sector dump with no header. The geometry is taken from the file size: 92,160 bytes = single density, 133,120 bytes = enhanced density, 183,936 bytes = double density. Any other size that is a multiple of 128 is treated as a 128-byte-sector image; other sizes are refused (<code>Unsupported .xfd size</code>).</td></tr>
+</table></div>
+<p>Copy your images anywhere on the SD card — the root or any folder, long names are fine — and attach them from the OSD.</p>
+
+<h2>Densities</h2>
+<p>All three classic densities work:</p>
+<ul>
+<li><strong>SD</strong> — single density, 720 sectors of 128 bytes (90K).</li>
+<li><strong>ED</strong> — enhanced density, 1040 sectors of 128 bytes (130K).</li>
+<li><strong>DD</strong> — double density, 256-byte sectors. Both file conventions for DD images are handled automatically — the <em>packed</em> layout and the <em>full-boot-area</em> layout (the firmware tells them apart from the file size). MyDOS 4.5 images boot.</li>
+</ul>
+
+<h2>Drives D1: to D4:</h2>
+<p>The Atari sees four drives. Only the first two are shown in the OSD:</p>
+<div class="tbl"><table>
+<tr><th>Drive</th><th>Where it is managed</th></tr>
+<tr><td><strong>D1:</strong>, <strong>D2:</strong></td><td>The OSD main menu (items <strong>1) D1:</strong> and <strong>2) D2:</strong>), and the PC link.</td></tr>
+<tr><td><strong>D3:</strong>, <strong>D4:</strong></td><td>Not in the OSD. D4: is the automatic <a href="#hdd">HDD.ATR</a> "hard drive"; D3: and D4: also serve automounts and the PC link.</td></tr>
+</table></div>
+<p>Use D2: for data disks or for disk 2 of a two-disk game. When a game asks for the next disk, attach it to D1: live instead.</p>
+
+<h2>Mounting and swapping</h2>
+<p>Open the OSD, select the drive, choose <strong>Attach (.atr/.xfd/.xex)...</strong> and pick the image (the browser is described in <a href="04-osd.html#browser">The OSD menu</a>). The image is in the drive at once; nothing is rebooted. To replace it, attach another one; to empty the drive, choose <strong>Detach</strong>. The main menu's <code>D1:</code>/<code>D2:</code> lines always show what is mounted.</p>
+<p>Because the Atari keeps running behind the menu, a load that was in progress continues while you browse.</p>
+
+<h2>Booting from a disk</h2>
+<ol>
+<li>Copy the <code>.atr</code> to the SD card.</li>
+<li>Power on — the Atari boots to BASIC — then press <kbd>F12</kbd> or S2 to open the OSD.</li>
+<li><strong>1) D1:</strong> → <strong>Attach (.atr/.xfd/.xex)...</strong> → pick the image → <kbd>Enter</kbd>/Fire.</li>
+<li>Back on the main menu, choose <strong>7) Hard Reset</strong>. The Atari cold-boots from D1: (into DOS, or into the game).</li>
+</ol>
+<p>Most DOS disks and bootable games work. If a disk expects BASIC to be out of the way, use <strong>4) Boot to OS (No BASIC)</strong> instead of Hard Reset — it boots with OPTION held.</p>
+
+<h2>Writing, and read-only images</h2>
+<p>Writes are reliable since v2.4: SAVE from BASIC, saving from DOS, copying files, and formatting all work on mounted images, on every drive. A few rules keep your data safe:</p>
+<ul>
+<li><strong>PC read-only attribute.</strong> Images copied from a PC sometimes carry the FAT "read-only" attribute. The firmware clears it when it can and mounts the disk writable. If it cannot get write access, the disk is mounted read-only: the pop-up <code>Disk is read-only / Writes will fail (144)</code> appears, the drive line shows <code>(RO)</code>, the drive reports write-protect in its status, and any write returns <strong>error 144</strong> — exactly like a write-protected floppy.</li>
+<li><strong>The same image on two drives.</strong> If you mount an image that is already mounted in another drive, the second mount is made read-only automatically (and marked <code>(RO)</code>). Two writable handles on one file can corrupt the SD card's own filesystem, so this is refused on purpose. Mount a copy under another name if you really need two writable instances.</li>
+<li><strong>Out-of-range sectors</strong> are rejected like a real drive would; they can no longer grow the image file.</li>
+</ul>
+<div class="warn"><strong>Older firmware</strong>Before v2.4, writing could corrupt disk images and even the SD card's FAT filesystem. If your card was damaged by an earlier version, reformat it (full FAT32) and copy your files again. See <a href="15-known-issues.html">Known issues</a>.</div>
+
+<h2>New blank disk</h2>
+<p>Each drive menu has <strong>2) New blank disk (90K)</strong>. It creates an empty, unformatted single-density ATR (90K, 720 × 128-byte sectors) in the root of the SD card, named <code>BLANK01.ATR</code>, <code>BLANK02.ATR</code>, … up to <code>BLANK99.ATR</code> (first free name), and mounts it in that drive. Any disk that was in the drive is detached first.</p>
+<p>The new image is unformatted. Boot a DOS and use its format command on that drive — the SIO FORMAT commands are implemented, so DOS 2.5's "Format disk" and friends work — and you have a writable disk without ever touching a PC.</p>
+
+<h2>DOS formatting</h2>
+<p>The disk FORMAT commands used by DOS (single and enhanced density) are supported on any mounted image, not just blank ones. Formatting rewrites the whole image, so make sure the right drive is selected in your DOS.</p>
+
+<h2 id="hdd">HDD.ATR — an always-on hard drive on D4:</h2>
+<p>Put a disk image named exactly <code>HDD.ATR</code> (case does not matter) in the <strong>root of the SD card</strong>. At every power-on the firmware mounts it on <strong>D4:</strong> automatically — no menu interaction, ever. Your DOS simply sees a permanent extra drive: list it, save and load files, and everything survives reboots.</p>
+<ul>
+<li><strong>Which image?</strong> Any <code>.atr</code> works, but a <strong>MyDOS</strong>-formatted image is the ideal choice: MyDOS can address images up to <strong>16 MB</strong>, a genuinely big hard disk.</li>
+<li><strong>Making one from the PC:</strong> copy any large MyDOS ATR to the SD card as <code>HDD.ATR</code> (or send it over the cable with <code>python3 tools/atari.py send mydos_big.atr HDD.ATR</code>), then power-cycle — the automount runs once at firmware start.</li>
+<li><strong>Making one on the Atari:</strong> use <em>New blank disk</em> on a drive to get a 90K ATR and rename it to <code>HDD.ATR</code> later on a PC.</li>
+<li><strong>Backup is one file:</strong> keep a copy of <code>HDD.ATR</code> on your PC. If the disk ever gets scrambled, copy it back and power-cycle.</li>
+</ul>
+<h3>Without an HDD.ATR, or with the wrong kind</h3>
+<p>The automount is fail-safe and opt-in; it can never stop the machine from booting.</p>
+<ul>
+<li><strong>No <code>HDD.ATR</code> on the card:</strong> nothing happens. D4: is simply not there, and a DOS that asks for D4: gets "drive not present". A corrupt file or a non-ATR file with that name is checked and quietly not mounted.</li>
+<li><strong>A valid image formatted for a different DOS than the one you boot:</strong> D4: does mount and its sectors are served faithfully, but your running DOS may not read it — a garbled directory, "not a DOS disk" or <code>0000 FREE SECTORS</code>. Typical mismatches: a big MyDOS image while you booted DOS 2.5 (DOS 2.5 caps at 90K/130K and, by default, only polls D1:/D2: — it needs <code>POKE 1802,15</code> to even look at D4:), or a SpartaDOS image read by MyDOS and vice versa.</li>
+</ul>
+<div class="tip"><strong>Recommended pairing</strong>Format <code>HDD.ATR</code> with the <em>same</em> DOS you boot. <strong>MyDOS 4.5x</strong> is the recommended choice: format the image with MyDOS and boot MyDOS, and its full capacity is usable.</div>
+
+<h2>The H: device — a folder shared with the PC</h2>
+<p>Separate from the disk drives, the <strong>H:</strong> device is a CIO device (a peer of P:, E: and K:) whose files are plain files in the <code>/HDD</code> folder of the SD card — the same folder the PC link writes to, so the Atari and the PC share one file space for text and data. It is installed from the PC with <code>atari.py hdd-install</code> and used from BASIC with the usual <code>OPEN #1,8,0,"H:NOTES.TXT"</code>, <code>LIST "H:PROG.LST"</code> / <code>ENTER "H:PROG.LST"</code> and so on. Setup and examples are in <a href="13-pc-link.html">PC Link</a>.</p>
+
+<footer class="pn"><a href="05-options.html">← Previous: Options &amp; atari.ini</a><a href="07-cartridges.html">Next: Cartridges →</a></footer>
+</main></div></body></html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>9. Keyboard — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html" class="cur"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>9. Keyboard</h1>
+<p class="lead">A standard USB keyboard becomes the Atari's keyboard: every key sits where an Atari key sits, and a handful of PC keys stand in for the Atari's function, console and Break keys.</p>
+
+<h2>How the keyboard reaches the machine</h2>
+<p>The board has no USB host of its own. Your USB keyboard plugs into a small adapter — a <strong>CH9350</strong> USB-host module or a <strong>Raspberry Pi Pico</strong> — which sends the raw keyboard reports as CH9350 serial frames (115200 baud, 8N1) over <strong>one wire to pin 53</strong>. The frames are decoded in hardware inside the FPGA. Wiring and adapter setup are in <a href="02-hardware.html">Hardware setup</a>. A keyboard is optional for browsing and mounting disks: a joystick on port 1 can drive the whole OSD menu on its own.</p>
+
+<h2>Mapping philosophy: your keyboard is an Atari keyboard</h2>
+<p>The PC keyboard is mapped to the Atari keyboard <strong>by position</strong>, not by the legends printed on the keys. Each physical key does what the key in the same place does on a real Atari XL keyboard. Letters, digits, the four rows of keys and the modifiers all line up, so touch-typing feels like the real machine. The difference shows in the symbols: the Atari puts its shifted symbols and its punctuation keys in different places from a PC, and here they are where the <em>Atari</em> has them.</p>
+<p>Some consequences worth knowing:</p>
+<ul>
+<li><kbd>Shift</kbd>+<kbd>2</kbd> types a double quote <code>"</code> (the Atari's Shift-2), not <code>@</code>.</li>
+<li><kbd>Shift</kbd>+<kbd>8</kbd> types <code>@</code> (the Atari's Shift-8), not <code>*</code>.</li>
+<li><kbd>Shift</kbd>+<kbd>7</kbd> types an apostrophe <code>'</code> and <kbd>Shift</kbd>+<kbd>6</kbd> types <code>&amp;</code>.</li>
+<li>The two keys right of <kbd>0</kbd> (PC <kbd>-</kbd> and <kbd>=</kbd>) are the Atari <strong>&lt;</strong> (Clear) and <strong>&gt;</strong> (Insert) keys.</li>
+<li>The two keys right of <kbd>P</kbd> (PC <kbd>[</kbd> and <kbd>]</kbd>) are the Atari <strong>&minus;</strong> and <strong>=</strong> keys — the cursor-up and cursor-down keys when held with <kbd>Ctrl</kbd>.</li>
+<li>The two keys right of <kbd>L</kbd> and <kbd>;</kbd> (PC <kbd>'</kbd> and <kbd>\</kbd>) are the Atari <strong>+</strong> and <strong>*</strong> keys — cursor-left and cursor-right with <kbd>Ctrl</kbd>. On an ISO keyboard the <kbd>#</kbd>/<kbd>~</kbd> key next to Enter is the <strong>*</strong> key.</li>
+<li>Square brackets are typed the Atari way: <kbd>Shift</kbd>+<kbd>,</kbd> gives <code>[</code> and <kbd>Shift</kbd>+<kbd>.</kbd> gives <code>]</code>. The colon is <kbd>Shift</kbd>+<kbd>;</kbd>.</li>
+</ul>
+<div class="tip"><strong>Think Atari, not PC</strong>If a symbol is not where you expect it, look at where it lives on an Atari XL keyboard and press that position. The key table below lists what every PC key becomes; the shifted symbols are then whatever the Atari prints on that key.</div>
+
+<h2>Key mapping table</h2>
+<div class="tbl"><table>
+<tr><th>PC key</th><th>Atari key / function</th></tr>
+<tr><td><kbd>A</kbd>–<kbd>Z</kbd></td><td>A–Z</td></tr>
+<tr><td><kbd>0</kbd>–<kbd>9</kbd></td><td>0–9</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Return</td></tr>
+<tr><td><kbd>Escape</kbd></td><td>Escape</td></tr>
+<tr><td><kbd>Backspace</kbd></td><td>Delete / Back Space</td></tr>
+<tr><td><kbd>Tab</kbd></td><td>Tab</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Space</td></tr>
+<tr><td><kbd>-</kbd> (right of 0)</td><td>&lt; (Clear)</td></tr>
+<tr><td><kbd>=</kbd></td><td>&gt; (Insert)</td></tr>
+<tr><td><kbd>[</kbd></td><td>&minus; key (cursor up with <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>]</kbd></td><td>= key (cursor down with <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>'</kbd></td><td>+ key (cursor left with <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>\</kbd> (ANSI) or ISO <kbd>#</kbd>/<kbd>~</kbd> (next to ISO Enter)</td><td>* key (cursor right with <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>;</kbd> <kbd>,</kbd> <kbd>.</kbd> <kbd>/</kbd></td><td>; , . / (same positions on the Atari)</td></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Atari cursor keys — move the cursor directly, <kbd>Ctrl</kbd> is implied</td></tr>
+<tr><td><kbd>F1</kbd>–<kbd>F4</kbd></td><td>Atari F1–F4</td></tr>
+<tr><td><kbd>F5</kbd> or <kbd>Insert</kbd></td><td>Help</td></tr>
+<tr><td><kbd>F6</kbd></td><td>Start (console key)</td></tr>
+<tr><td><kbd>F7</kbd></td><td>Select (console key)</td></tr>
+<tr><td><kbd>F8</kbd></td><td>Option (console key)</td></tr>
+<tr><td><kbd>`</kbd> (grave/tilde) or <kbd>Num Lock</kbd></td><td>Break</td></tr>
+<tr><td>Left / Right <kbd>Shift</kbd></td><td>Shift</td></tr>
+<tr><td>Left / Right <kbd>Ctrl</kbd></td><td>Control</td></tr>
+<tr><td>Right <kbd>Alt</kbd></td><td>Inverse Video (the Atari logo key)</td></tr>
+<tr><td><kbd>Caps Lock</kbd></td><td>Caps Lock</td></tr>
+<tr><td><kbd>F9</kbd></td><td>Soft reset (warm start, in-game hotkey)</td></tr>
+<tr><td><kbd>F11</kbd></td><td>Arrow keys ↔ joystick live toggle (see below)</td></tr>
+<tr><td><kbd>F12</kbd></td><td>OSD menu open / close</td></tr>
+</table></div>
+<p>Keys not listed here (for example <kbd>F10</kbd>, <kbd>Home</kbd>, <kbd>Page Up</kbd> and the numeric keypad) are ignored. Up to four keys can be held at the same time.</p>
+
+<h2>Special keys</h2>
+<ul>
+<li><strong>Atari function keys F1–F4</strong> are on <kbd>F1</kbd>–<kbd>F4</kbd>.</li>
+<li><strong>Help</strong> is on <kbd>F5</kbd> and also on <kbd>Insert</kbd>.</li>
+<li><strong>Console keys</strong>: <kbd>F6</kbd> = Start, <kbd>F7</kbd> = Select, <kbd>F8</kbd> = Option. Hold <kbd>F8</kbd> during a boot where you would hold Option on a real machine.</li>
+<li><strong>Break</strong> is on the grave/tilde key <kbd>`</kbd> (top-left, below Escape) and on <kbd>Num Lock</kbd>.</li>
+<li><strong>Inverse Video</strong> is on <kbd>Right Alt</kbd>.</li>
+<li><strong>Caps Lock</strong> is the Atari Caps key.</li>
+<li><strong>Cursor movement</strong>: the arrow keys move the cursor directly — on a real Atari the cursor keys are the &minus; = + * keys held with Control, and the arrow keys supply that Control for you. Holding a real <kbd>Ctrl</kbd> as well changes nothing. The <kbd>[</kbd> <kbd>]</kbd> <kbd>'</kbd> <kbd>\</kbd> keys reach the same Atari keys but type the bare symbol; add <kbd>Ctrl</kbd> to move the cursor with them.</li>
+<li><strong>Hotkeys</strong> that never reach the Atari: <kbd>F9</kbd> soft reset, <kbd>F11</kbd> arrows/joystick toggle, <kbd>F12</kbd> OSD menu. See <a href="04-osd.html">The OSD menu</a> for what Soft Reset does with a cartridge attached.</li>
+</ul>
+<div class="note"><strong>Inside the OSD</strong>While the menu is open, keyboard input is masked from the Atari: the keys navigate the menu and nothing is typed into the running program.</div>
+
+<h2>Arrow keys as joystick</h2>
+<p>For games that need a joystick when you only have a keyboard, the arrow keys can drive <strong>Joystick 1</strong>. In the OSD choose <strong>Options</strong> and set <strong>Arrow keys</strong> from <strong>NORMAL</strong> to <strong>JOYSTICK</strong> (see <a href="05-options.html">Options &amp; atari.ini</a>). While JOYSTICK is selected:</p>
+<ul>
+<li><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> move the stick on port 1, alongside any physical joystick wired to port 1;</li>
+<li><kbd>Left Alt</kbd> is the fire button;</li>
+<li>the arrow keys are suppressed from the Atari keyboard, so they only move the stick and never type stray cursor movements;</li>
+<li>everything else on the keyboard keeps working as normal.</li>
+</ul>
+<p>Set it back to <strong>NORMAL</strong> to use the arrows as cursor keys again. The setting is written to <code>atari.ini</code> by <strong>Save changes</strong> (key <code>joystick=</code>, 0 = NORMAL, 1 = JOYSTICK; default 0) and survives reboots.</p>
+<div class="tip"><strong>F11: flip it mid-game</strong>Press <kbd>F11</kbd> to switch arrows ↔ joystick live, without opening the OSD. <kbd>F11</kbd> is a live-only switch: it is not saved, so the machine returns to the setting stored in <code>atari.ini</code> at the next boot.</div>
+
+<h2>Keyboard with the Atari legend</h2>
+<div class="placeholder">Photo: a PC keyboard with Atari-position legends (Shift symbols on 2/6/7/8, &lt; &gt; right of 0, − = right of P, + * right of ;, F5 Help, F6/F7/F8 Start/Select/Option, ` Break, Right Alt Inverse) (to be supplied)</div>
+
+<footer class="pn"><a href="08-executables.html">← Previous: Executables (.xex)</a><a href="10-video.html">Next: Video →</a></footer>
+</main></div></body></html>

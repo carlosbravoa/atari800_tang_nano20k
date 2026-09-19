@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>14. Troubleshooting — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html" class="cur"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>14. Troubleshooting</h1>
+<p class="lead">Find your symptom below; each entry gives the likely cause and what to do.</p>
+
+<div class="tip"><strong>Read the LEDs first</strong>Normal operation is LED5 (pin 20) blinking about once a second, LED3 (pin 18) solid, and LED2/LED4 flickering during disk access. If LED5 is not blinking, the FPGA is not running at all; if LED3 is off, the Atari has not booted. See the LED table in <a href="02-hardware.html">Hardware setup</a>.</div>
+
+<h2>No picture at power-on (black screen / "no signal")</h2>
+<p><strong>Symptom:</strong> the monitor shows nothing, or reports "no signal", "unsupported" or "out of range" right after power-on.</p>
+<p><strong>Likely cause:</strong> one of two things.</p>
+<ul>
+<li>On some cold starts the HDMI output may briefly drop and recover by itself while the machine keeps running.</li>
+<li>The display, or something between the board and the display, rejects the non-standard timing (1056×720 declared as 720p). Strict or older displays and pass-through gear — HDMI splitters, AV receivers, capture cards — are the usual culprits.</li>
+</ul>
+<p><strong>What to do:</strong></p>
+<ol>
+<li>Wait a moment — a cold-start drop recovers on its own.</li>
+<li>Unplug the USB-C cable and plug it back in (power cycle). Check that LED5 blinks and LED3 comes on solid.</li>
+<li>Connect the board <em>directly</em> to the monitor or TV, without splitters or receivers.</li>
+<li>If the display still refuses the signal, flash the standard-720p v1.1 release instead (higher latency, but fully CEA-standard). See <a href="10-video.html">Video</a>.</li>
+</ol>
+
+<h2>The Atari does not boot (no BASIC prompt)</h2>
+<p><strong>Symptom:</strong> the screen stays blank or shows the ROM-error screen instead of the BASIC READY prompt; LED3 (pin 18) is off.</p>
+<p><strong>Likely cause:</strong> the firmware could not read the SD card or could not find the ROM files.</p>
+<p><strong>What to do:</strong></p>
+<ol>
+<li>Check that the SD card is <strong>FAT32</strong> formatted (32 GB or smaller) and fully inserted.</li>
+<li>Check that <code>ATARIXL.ROM</code> (exactly 16384 bytes) and <code>BASIC.ROM</code> (exactly 8192 bytes) are in the <strong>root</strong> directory of the card. Names are case-insensitive; sizes are not negotiable.</li>
+<li>Reinsert the card and press <strong>S1</strong> or power-cycle the board.</li>
+<li>If the on-screen menu appears by itself at power-on, that is the symptom of a failed ROM load — not normal behaviour.</li>
+</ol>
+<p><strong>Remote rescue via the PC Link:</strong> the serial bridge answers even at the ROM-error screen. With the board on the USB-C cable, <code>python3 tools/atari.py status</code> names the boot stage and <code>atari.py log</code> shows the stage markers (<code>boot: sd ok</code> → <code>boot: roms 0</code> → <code>boot: running</code>). You can <code>send</code> the missing ROM files over the cable and press a key to retry. Total serial silence means the machine never reached the firmware at all — power-cycle it. See <a href="13-pc-link.html">PC Link</a>.</p>
+
+<h2>The keyboard does nothing</h2>
+<p><strong>Symptom:</strong> the Atari boots to BASIC but typing has no effect, or only some keys work.</p>
+<p><strong>Likely cause:</strong> wiring or module configuration; or the input is being masked on purpose.</p>
+<p><strong>What to do:</strong></p>
+<ol>
+<li>Check the wiring: the module's <strong>UART TX</strong> must go to <strong>pin 53</strong>, plus GND to a GND pin and 5V to a 5V pin. Nothing else is needed — no resistors.</li>
+<li>CH9350 module: the DIP switches must select <strong>State 0 (Host Mode / Direct Data Transmit)</strong> at <strong>115200 baud</strong>. Pi Pico: the sketch must send CH9350 frames at 115200 baud, 8N1 (frame format in <a href="02-hardware.html">Hardware setup</a>).</li>
+<li>Close the OSD. While the menu is open, keyboard and joystick input is masked from the Atari so that navigating the menu does not play the game. Press <kbd>F12</kbd> or <strong>S2</strong> to return to the Atari.</li>
+<li>If only the <strong>arrow keys</strong> are dead: the <em>Arrow keys: JOYSTICK</em> mode is on. In that mode ↑ ↓ ← → drive Joystick 1 and are suppressed from the keyboard (Left-Alt is fire). Press <kbd>F11</kbd> to flip back live, or set <em>Arrow keys: NORMAL</em> in OSD → Options. See <a href="05-options.html">Options</a>.</li>
+<li>Remember that the mapping is by <em>position</em>: the PC keyboard acts as an Atari keyboard, so some keys are not where their PC legend says. See the table in <a href="09-keyboard.html">Keyboard</a>.</li>
+</ol>
+
+<h2>The joystick moves by itself / games skip their intros</h2>
+<p><strong>Symptom:</strong> the cursor or player moves without touching the stick, fire seems to be held, games auto-skip intros or cutscenes.</p>
+<p><strong>Likely cause:</strong> a joystick signal is wired to a pin driven by the on-board BL616 MCU — <strong>pins 69–76 or 79</strong> (its UART/HSPI and the WS2812 LED). The BL616 is always on, so those pins carry phantom input.</p>
+<p><strong>What to do:</strong> re-wire the joystick to the documented pins only — Joystick 1: 27, 28, 25, 26, 29; Joystick 2: 42, 41, 56, 54, 48; GND to any GND pin. Also stay off pin 51 (PLL clock input) and pin 32 (LCD flex connector). See <a href="02-hardware.html">Hardware setup</a>.</p>
+
+<h2>Disk errors</h2>
+<p><strong>Symptom:</strong> a write fails with <strong>error 144</strong>; the drive line in the menu shows <strong>(RO)</strong>; SAVE or FORMAT refuses to work on one drive; a double-density image does not boot.</p>
+<p><strong>Likely cause and what to do:</strong></p>
+<ul>
+<li><strong>"(RO)" and error 144</strong> — the image is write-protected. The firmware clears a PC-inherited read-only attribute when it can; when it cannot, the drive shows "(RO)", reports write-protect in its status and writes return error 144, exactly like a protected disk. Clear the read-only attribute on the file from the PC, or use a different image.</li>
+<li><strong>Same image on two drives</strong> — mounting the same file on two drives makes the second mount read-only on purpose (two write handles on one file could corrupt the SD card's filesystem). Detach the duplicate, or copy the image under a new name.</li>
+<li><strong>Double-density image will not boot</strong> — 256-byte-sector ATRs work in both DD file conventions (packed and full-boot-area) since v2.8, and MyDOS 4.5 images boot. If you run an older release, update.</li>
+<li><strong>Need a writable disk</strong> — use the drive menu's <em>New blank disk (90K)</em> to create <code>BLANKnn.ATR</code> on the card and mount it, then format it from DOS.</li>
+<li><strong>Load stuck mid-way</strong> — if LED2 goes dark while LED4 keeps flashing, the load is stuck. Try Hard Reset from the OSD.</li>
+</ul>
+<p>Details in <a href="06-disks.html">Disks</a>.</p>
+
+<h2>HDMI goes black mid-session and comes back</h2>
+<p><strong>Symptom:</strong> the picture drops out for a moment (the monitor loses sync) and then returns; the sound and the game keep going.</p>
+<p><strong>Likely cause:</strong> the same cold-start HDMI drop described above — the output may briefly drop and recover while the machine keeps running. It is not a crash: the Atari itself was never interrupted.</p>
+<p><strong>What to do:</strong> nothing is lost; wait for the picture to return. If it recurs, power-cycle the board so the outputs start fresh.</p>
+<div class="placeholder">TODO: whether anything beyond a power cycle reduces the frequency of mid-session drops (to be confirmed)</div>
+
+<h2>The PC Link does not answer</h2>
+<p><strong>Symptom:</strong> <code>atari.py ping</code> does not return <code>A8OK</code>; the desktop app cannot connect; no serial port appears.</p>
+<p><strong>Likely cause:</strong> driver, wrong port, another program holding the port, or a stalled bridge chip.</p>
+<p><strong>What to do:</strong></p>
+<ol>
+<li>Install the Python dependency: <code>pip install pyserial</code>.</li>
+<li>Linux: if no <code>/dev/ttyUSB*</code> appears, load the driver with <code>sudo modprobe ftdi_sio</code> (make it permanent with <code>echo ftdi_sio | sudo tee /etc/modules-load.d/ftdi_sio.conf</code>). Windows gets the FTDI VCP driver through Windows Update.</li>
+<li>The board shows up as a <strong>pair</strong> of serial ports; the <strong>second</strong> one is the bridge. The tools auto-pick it.</li>
+<li>Only one session can hold the port: close <code>log</code>, <code>kbd</code> or the desktop app before starting another tool, and close them all before using the Gowin programmer.</li>
+<li>If the bridge chip stops answering after a burst of USB traffic, <strong>unplug the board's USB cable for ten seconds</strong> and plug it back in.</li>
+<li>Complete serial silence, including no reply to <code>status</code>, means the machine never reached the firmware — power-cycle the board.</li>
+</ol>
+<p>See <a href="13-pc-link.html">PC Link</a>.</p>
+
+<h2>F12 does not open the OSD during a PC session</h2>
+<p><strong>Symptom:</strong> with a live PC Link session engaged (for example <code>atari.py kbd</code> or the desktop app's Live Keys tab), <kbd>F12</kbd> on the physical keyboard sometimes does not open the menu.</p>
+<p><strong>Likely cause:</strong> a known issue under investigation (see <a href="15-known-issues.html">Known issues</a>).</p>
+<p><strong>What to do:</strong> press the on-board <strong>S2</strong> button — it always works. Closing the PC session restores <kbd>F12</kbd> immediately.</p>
+
+<footer class="pn"><a href="13-pc-link.html">← Previous: PC Link</a><a href="15-known-issues.html">Next: Known issues →</a></footer>
+</main></div></body></html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4. The OSD menu — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html" class="cur"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>4. The OSD menu</h1>
+<p class="lead">The on-screen display (OSD) is where you attach disks and cartridges, reboot the machine and change options — all while the Atari keeps running behind it.</p>
+
+<h2>Opening and closing the menu</h2>
+<p>The Atari boots first, with no menu shown. To open the OSD, press <kbd>F12</kbd> on the keyboard or the onboard <strong>S2</strong> button (the rightmost button on the Tang Nano). Either one opens <em>and</em> closes the menu, from any screen inside it. The last main-menu item, <strong>9) Return to Atari (F12)</strong>, also closes it.</p>
+<div class="note"><strong>The Atari keeps running behind the menu</strong>While the OSD is open the machine is not paused: you will hear a game continue, and a disk load in progress carries on. Keyboard and joystick input is masked from the Atari while the menu is open, so moving around the menu does not play the game.</div>
+<div class="warn"><strong>If the menu appears by itself at power-on</strong>That is not normal. It means the machine did not auto-boot — usually because the OS or BASIC ROM could not be loaded from the SD card. See <a href="14-troubleshooting.html">Troubleshooting</a>.</div>
+
+<h2>Navigating</h2>
+<p>You can drive the whole OSD from a keyboard, from a DB9 joystick on port 1, or both:</p>
+<div class="tbl"><table>
+<tr><th>Action</th><th>Keyboard</th><th>Joystick 1</th></tr>
+<tr><td>Move the selection up / down</td><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Stick up / down</td></tr>
+<tr><td>Select the highlighted item</td><td><kbd>Enter</kbd></td><td>Fire</td></tr>
+<tr><td>Previous / next page (file browser)</td><td><kbd>←</kbd> <kbd>→</kbd></td><td>Stick left / right</td></tr>
+<tr><td>Change a left/right value (Options)</td><td><kbd>←</kbd> <kbd>→</kbd></td><td>Stick left / right</td></tr>
+<tr><td>Open / close the OSD</td><td><kbd>F12</kbd></td><td>S2 button on the board</td></tr>
+</table></div>
+<p>Every submenu has a <strong>&lt;&lt; Back</strong> entry, and the file browser has <strong>..</strong> (or <strong>&lt;&lt; Back</strong> at the top level). This is enough to boot games and mount disks with no keyboard attached at all.</p>
+
+<h2>The look</h2>
+<figure><img src="img/osd_main.png" alt="The OSD main menu drawn over a running BASIC session"><figcaption>The main menu (v3.0). The menu sits on a dimmed panel over the live picture; the title bar shows the firmware build date.</figcaption></figure>
+<p>Since v3.0 the menu is drawn on a dimmed panel over the live Atari picture, so it stays readable over any game. The blue title bar names the current screen (<code>TANG ATARI 800</code> on the main menu, with the firmware build date at the right), the footer bar reminds you of the keys (<code>Up/Down move  Enter select  F12</code>), and the selected row is a full-width blue bar. Pop-up messages are solid panels in the same blue.</p>
+
+<h2>The main menu</h2>
+<div class="menu"><span class="bar"> TANG ATARI 800                  Sep 18 2026 </span><span class="sel"> 1) D1: MONTEZUMA.ATR </span> 2) D2: None
+ 3) Cart: None
+ 4) Boot to OS (No BASIC)
+ 5) Boot to BASIC
+ 6) Soft Reset
+ 7) Hard Reset
+ 8) Options
+ 9) Return to Atari (F12)
+<span class="bar"> Up/Down move  Enter select  F12 </span></div>
+<div class="tbl"><table>
+<tr><th>Item</th><th>What it does</th></tr>
+<tr><td><strong>1) D1:</strong> / <strong>2) D2:</strong></td><td>Show what is attached to disk drive 1 and 2 (<code>None</code> when empty; a read-only image is marked <code>(RO)</code>). Selecting one opens the <a href="#drive">drive menu</a>.</td></tr>
+<tr><td><strong>3) Cart:</strong></td><td>Shows the attached cartridge (<code>None</code> when empty). Selecting it opens the <a href="#cart">cartridge menu</a>.</td></tr>
+<tr><td><strong>4) Boot to OS (No BASIC)</strong></td><td>Reloads the OS and BASIC ROMs and cold-boots the Atari with the <em>OPTION</em> key held, so BASIC is disabled — the same as holding OPTION on a real XL. Use it to boot a DOS disk or a game disk that does not want BASIC in the way.</td></tr>
+<tr><td><strong>5) Boot to BASIC</strong></td><td>Reloads the ROMs and cold-boots into BASIC (OPTION not held).</td></tr>
+<tr><td><strong>6) Soft Reset</strong></td><td>A warm start — the same thing the RESET key does on a real Atari. <kbd>F9</kbd> does this from inside a game without opening the menu.</td></tr>
+<tr><td><strong>7) Hard Reset</strong></td><td>A cold start: the machine restarts as if powered off and on, and the emulated cartridge is power-cycled too (see below). Also applies a changed RAM size.</td></tr>
+<tr><td><strong>8) Options</strong></td><td>Opens the <a href="05-options.html">Options</a> screen.</td></tr>
+<tr><td><strong>9) Return to Atari (F12)</strong></td><td>Closes the menu. <kbd>F12</kbd> and S2 do the same from anywhere.</td></tr>
+</table></div>
+
+<h3>Boot OS vs Boot BASIC — with a cartridge attached</h3>
+<p>Both Boot items reload the ROMs from the SD card and restart the machine cold. With a cartridge attached, <strong>both boot the cartridge</strong> — a real XL does the same, because the cartridge takes over the boot. Detach the cartridge if you want BASIC back.</p>
+
+<h3>Soft Reset vs Hard Reset</h3>
+<div class="tbl"><table>
+<tr><th></th><th>Soft Reset / <kbd>F9</kbd></th><th>Hard Reset</th></tr>
+<tr><td>Kind of start</td><td>Warm start (like the RESET key)</td><td>Cold start (like a power cycle)</td></tr>
+<tr><td>Cartridge</td><td>Cannot see the reset — the XL cartridge port has no reset line. A multicart that switched itself off to run a game stays off, so you land in BASIC or the Self Test, exactly like real hardware (and Altirra's F5).</td><td>Power-cycled: bank 0, enabled. A multicart's menu comes back, like a real power cycle (Altirra Shift+F5).</td></tr>
+<tr><td>RAM size change</td><td>Not applied</td><td>Applied</td></tr>
+</table></div>
+<div class="tip"><strong>Back to a multicart's menu?</strong>Use <strong>7) Hard Reset</strong>, not <kbd>F9</kbd>.</div>
+
+<h2 id="drive">The drive menu (D1: / D2:)</h2>
+<figure><img src="img/osd_drive.png" alt="The DISK DRIVE menu for D1:"><figcaption>The drive menu. The header line shows what is currently in the drive.</figcaption></figure>
+<div class="menu"><span class="bar"> DISK DRIVE </span> D1: MONTEZUMA.ATR
+
+<span class="sel"> 1) Attach (.atr/.xfd/.xex)... </span> 2) New blank disk (90K)
+ 3) Detach
+ &lt;&lt; Back</div>
+<ul>
+<li><strong>Attach (.atr/.xfd/.xex)...</strong> — opens the file browser filtered to disk images and executables. Picking an <code>.atr</code> or <code>.xfd</code> mounts it in this drive immediately, <em>without</em> rebooting: the Atari keeps running, and the new disk is simply there — swap disk 2 of a game in D1: when the game asks for it. If a disk was already in the drive it is replaced. Picking a <code>.xex</code> on D1: cold-boots straight into the program (see <a href="08-executables.html">Executables</a>).</li>
+<li><strong>New blank disk (90K)</strong> — creates a fresh, unformatted 90K single-density ATR in the root of the SD card, named <code>BLANK01.ATR</code>, <code>BLANK02.ATR</code>, … (the first free name up to 99), and mounts it in this drive. Format it from your DOS and you have a writable disk without touching a PC. The disk previously in the drive is detached. If all 99 names are taken the menu shows <code>No free name</code>.</li>
+<li><strong>Detach</strong> — removes the image from the drive, live, without a reboot. If the drive is empty you get <code>Drive is empty</code>.</li>
+<li><strong>&lt;&lt; Back</strong> — return to the main menu.</li>
+</ul>
+<p>Attaching and detaching disks never restarts the machine. To <em>boot</em> from the disk you attached, use <strong>7) Hard Reset</strong> (or Boot to OS) from the main menu — see <a href="06-disks.html">Disks</a>.</p>
+
+<h2 id="cart">The cartridge menu (Cart:)</h2>
+<figure><img src="img/osd_cart.png" alt="The CARTRIDGE menu"><figcaption>The cartridge menu.</figcaption></figure>
+<div class="menu"><span class="bar"> CARTRIDGE </span> Cart: None
+
+<span class="sel"> 1) Attach cartridge... </span> 2) Detach
+ &lt;&lt; Back</div>
+<ul>
+<li><strong>Attach cartridge...</strong> — opens the file browser filtered to <code>.car</code> and <code>.rom</code>. As soon as a cartridge is loaded the Atari <strong>cold-boots straight into it</strong> and the menu closes. If the file is rejected (too large, unsupported type, bad size) a pop-up explains why and you stay in the browser.</li>
+<li><strong>Detach</strong> — removes the cartridge and <strong>cold-boots back to BASIC</strong>. With no cartridge attached you get <code>No cartridge inserted</code>.</li>
+<li><strong>&lt;&lt; Back</strong> — return to the main menu.</li>
+</ul>
+<p>Unlike disks, a cartridge change always restarts the machine — the cartridge is part of the memory map at boot. Details, formats and limits are in <a href="07-cartridges.html">Cartridges</a>.</p>
+
+<h2 id="browser">The file browser</h2>
+<figure><img src="img/osd_browser.png" alt="The ATTACH DISK file browser, page 1 of 2"><figcaption>The file browser in disk context. The page counter is at the right of the title bar.</figcaption></figure>
+<p>The browser opens at the root of the SD card. Its title bar reads <code>ATTACH DISK</code> or <code>ATTACH CARTRIDGE</code> depending on where you came from, with a page counter <code>n/N</code> at the right.</p>
+<ul>
+<li><strong>What is listed:</strong> folders (shown with a trailing <code>/</code>) and only the files that make sense in this context — <code>.atr</code>, <code>.xfd</code> and <code>.xex</code> for a drive, <code>.car</code> and <code>.rom</code> for the cartridge. Hidden and system files are skipped.</li>
+<li><strong>Folders:</strong> select a folder to enter it. The first entry, <strong>..</strong>, goes back to the parent folder; at the root it reads <strong>&lt;&lt; Back</strong> and returns to the menu.</li>
+<li><strong>Pages:</strong> 24 entries per page. <kbd>←</kbd>/<kbd>→</kbd> (or stick left/right) flip pages immediately; moving <kbd>↓</kbd> past the last entry goes to the next page and <kbd>↑</kbd> past the first goes to the previous one.</li>
+<li><strong>Long names:</strong> long filenames are shown, truncated to 28 characters. Files can live anywhere on the card, in any folder.</li>
+<li><strong>Leaving:</strong> <kbd>F12</kbd> or S2 returns to the main menu at any time.</li>
+</ul>
+<p>If a disk image fails to mount, a short <code>Mount failed</code> line appears at the bottom of the browser and you can pick another file.</p>
+
+<h2>Pop-up messages</h2>
+<figure><img src="img/osd_popup.png" alt="A solid blue pop-up saying the cartridge is too large"><figcaption>A pop-up message. It stays until you dismiss it.</figcaption></figure>
+<p>Errors and confirmations appear as a solid panel in the middle of the screen, for example <code>Cartridge too large (&gt;4MB)</code>, <code>Unsupported CAR type 42</code> or <code>Disk is read-only / Writes will fail (144)</code>. Press <kbd>Enter</kbd> or Fire to dismiss it and carry on.</p>
+
+<footer class="pn"><a href="03-getting-started.html">← Previous: Getting started</a><a href="05-options.html">Next: Options &amp; atari.ini →</a></footer>
+</main></div></body></html>

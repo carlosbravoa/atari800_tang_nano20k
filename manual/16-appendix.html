@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A. Appendix — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html" class="cur"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>A. Appendix</h1>
+<p class="lead">Reference tables: supported cartridge types, emulated devices, file formats, FPGA pins, a glossary, the release history and the credits.</p>
+
+<h2 id="a1">A.1 Supported cartridge types</h2>
+<p>The <code>.car</code> header carries a type id; the table lists every id the machine accepts. Names follow the CAR format specification; 52 types. Images up to 4 MB load; The!Cart 32/64/128 MB cannot fit and are rejected. An unsupported type shows its id on screen.</p>
+<div class="tbl"><table>
+<thead><tr><th>Type id</th><th>Name</th><th>Size</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Standard</td><td>8 KB</td></tr>
+<tr><td>2</td><td>Standard</td><td>16 KB</td></tr>
+<tr><td>8</td><td>Williams</td><td>64 KB</td></tr>
+<tr><td>9</td><td>Express</td><td>64 KB</td></tr>
+<tr><td>10</td><td>Diamond</td><td>64 KB</td></tr>
+<tr><td>11</td><td>SpartaDOS X</td><td>64 KB</td></tr>
+<tr><td>12</td><td>XEGS</td><td>32 KB</td></tr>
+<tr><td>13</td><td>XEGS</td><td>64 KB</td></tr>
+<tr><td>14</td><td>XEGS</td><td>128 KB</td></tr>
+<tr><td>15</td><td>OSS one-chip (034M)</td><td>16 KB</td></tr>
+<tr><td>17</td><td>Atrax</td><td>128 KB</td></tr>
+<tr><td>21</td><td>Right slot</td><td>8 KB</td></tr>
+<tr><td>22</td><td>Williams</td><td>32 KB</td></tr>
+<tr><td>23</td><td>XEGS</td><td>256 KB</td></tr>
+<tr><td>24</td><td>XEGS</td><td>512 KB</td></tr>
+<tr><td>25</td><td>XEGS</td><td>1 MB</td></tr>
+<tr><td>26</td><td>MegaCart</td><td>16 KB</td></tr>
+<tr><td>27</td><td>MegaCart</td><td>32 KB</td></tr>
+<tr><td>28</td><td>MegaCart</td><td>64 KB</td></tr>
+<tr><td>29</td><td>MegaCart</td><td>128 KB</td></tr>
+<tr><td>30</td><td>MegaCart</td><td>256 KB</td></tr>
+<tr><td>31</td><td>MegaCart</td><td>512 KB</td></tr>
+<tr><td>32</td><td>MegaCart</td><td>1 MB</td></tr>
+<tr><td>33</td><td>Switchable XEGS</td><td>32 KB</td></tr>
+<tr><td>34</td><td>Switchable XEGS</td><td>64 KB</td></tr>
+<tr><td>35</td><td>Switchable XEGS</td><td>128 KB</td></tr>
+<tr><td>36</td><td>Switchable XEGS</td><td>256 KB</td></tr>
+<tr><td>37</td><td>Switchable XEGS</td><td>512 KB</td></tr>
+<tr><td>38</td><td>Switchable XEGS</td><td>1 MB</td></tr>
+<tr><td>39</td><td>Phoenix</td><td>8 KB</td></tr>
+<tr><td>40</td><td>Blizzard</td><td>16 KB</td></tr>
+<tr><td>41</td><td>Atarimax Flash</td><td>128 KB</td></tr>
+<tr><td>42</td><td>Atarimax Flash</td><td>1 MB</td></tr>
+<tr><td>43</td><td>SpartaDOS X</td><td>128 KB</td></tr>
+<tr><td>44</td><td>OSS</td><td>8 KB</td></tr>
+<tr><td>45</td><td>OSS two-chip (043M)</td><td>16 KB</td></tr>
+<tr><td>46</td><td>Blizzard</td><td>4 KB</td></tr>
+<tr><td>50</td><td>Turbosoft</td><td>64 KB</td></tr>
+<tr><td>51</td><td>Turbosoft</td><td>128 KB</td></tr>
+<tr><td>52</td><td>Ultracart</td><td>32 KB</td></tr>
+<tr><td>54</td><td>SIC!</td><td>128 KB</td></tr>
+<tr><td>55</td><td>SIC!</td><td>256 KB</td></tr>
+<tr><td>56</td><td>SIC!</td><td>512 KB</td></tr>
+<tr><td>57</td><td>Standard</td><td>2 KB</td></tr>
+<tr><td>58</td><td>Standard</td><td>4 KB</td></tr>
+<tr><td>59</td><td>Right slot</td><td>4 KB</td></tr>
+<tr><td>60</td><td>Blizzard</td><td>32 KB</td></tr>
+<tr><td>63</td><td>MegaCart</td><td>4 MB</td></tr>
+<tr><td>64</td><td>MegaCart</td><td>2 MB</td></tr>
+<tr><td>69</td><td>aDawliah</td><td>32 KB</td></tr>
+<tr><td>70</td><td>aDawliah</td><td>64 KB</td></tr>
+<tr><td>75</td><td>Atarimax Flash (new, bank 0 initial)</td><td>1 MB</td></tr>
+</tbody></table></div>
+<p>Raw <code>.rom</code> dumps carry no mapper information and are accepted only at 2, 4, 8 and 16 KB. Convert bigger dumps to <code>.car</code>. See <a href="07-cartridges.html">chapter 7</a>.</p>
+
+<h2 id="a2">A.2 Emulated SIO/CIO devices</h2>
+<div class="tbl"><table>
+<thead><tr><th>Device</th><th>What it is</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><code>D1:</code>–<code>D4:</code></td><td>Disk drives (SIO). D1:/D2: are attached from the OSD; D3:/D4: serve automounts and the PC link (<code>/HDD.ATR</code> auto-mounts on D4:).</td><td><a href="06-disks.html">Ch. 6</a></td></tr>
+<tr><td><code>P:</code></td><td>Printer (SIO device <code>$40</code>, 820-style). Output goes to the PC over the USB-C link.</td><td><a href="13-pc-link.html#printer">§13.6</a></td></tr>
+<tr><td><code>H:</code></td><td>Shared folder (CIO handler installed from the PC with <code>hdd-install</code>). Files are plain files in <code>/HDD</code> on the SD card.</td><td><a href="13-pc-link.html#h">§13.8</a></td></tr>
+<tr><td><code>R:</code></td><td>850 modem for BobTerm and other R:-aware software. Opt-in (Options → Modem), work in progress.</td><td><a href="13-pc-link.html#net">§13.9</a></td></tr>
+<tr><td><code>N:</code></td><td>Network device, relayed to a PC-side network processor. Prototype, not yet released.</td><td><a href="13-pc-link.html#net">§13.9</a></td></tr>
+</tbody></table></div>
+
+<h2 id="a3">A.3 File formats</h2>
+<div class="tbl"><table>
+<thead><tr><th>File</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>.atr</code></td><td>Disk image with a 16-byte header. Single, enhanced and double density; both double-density layouts. Attaches to D1:/D2: from the OSD.</td></tr>
+<tr><td><code>.xfd</code></td><td>Raw, headerless disk dump. Density is detected from the file size. Attaches like an <code>.atr</code>.</td></tr>
+<tr><td><code>.car</code></td><td>Cartridge image with a header that names the mapper type (table A.1). Up to 4 MB.</td></tr>
+<tr><td><code>.rom</code></td><td>Raw cartridge dump without mapper information. Only 2/4/8/16 KB are accepted.</td></tr>
+<tr><td><code>.xex</code></td><td>Atari binary-load executable (multi-segment <code>$FFFF</code>/INITAD/RUNAD). Attached on D1: it cold-boots straight into the program with BASIC disabled; served through a baked-in loader as a virtual boot disk.</td></tr>
+<tr><td><code>atari.ini</code></td><td>Saved OSD options on the SD card, written by Options → Save changes: <code>joystick=</code>, <code>scanlines=</code>, <code>hpos=</code>, <code>stereo=</code>, <code>ram=</code>, <code>modem=</code>. See <a href="05-options.html">chapter 5</a>.</td></tr>
+<tr><td><code>HDD.ATR</code></td><td>A disk image of that exact name in the SD card root; auto-mounted on D4: at every boot. MyDOS can format it up to 16 MB.</td></tr>
+</tbody></table></div>
+
+<h2 id="a4">A.4 FPGA pin reference</h2>
+<div class="tbl"><table>
+<thead><tr><th>Function</th><th>FPGA pin</th><th>IO name</th><th>Dir</th></tr></thead>
+<tbody>
+<tr><td>System clock (27 MHz)</td><td>4</td><td>LPLL1_T_in</td><td>in</td></tr>
+<tr><td>Reset button S1</td><td>88</td><td>—</td><td>in</td></tr>
+<tr><td>Spare button S2 (OSD)</td><td>87</td><td>—</td><td>in</td></tr>
+<tr><td>Status LEDs LED2–LED5</td><td>17–20</td><td>IOL49A–IOL51B</td><td>out</td></tr>
+<tr><td>HDMI TMDS CLK +/−</td><td>33, 34</td><td>IOB24A/B</td><td>out</td></tr>
+<tr><td>HDMI TMDS D0 +/−</td><td>35, 36</td><td>IOB30A/B</td><td>out</td></tr>
+<tr><td>HDMI TMDS D1 +/−</td><td>37, 38</td><td>IOB34A/B</td><td>out</td></tr>
+<tr><td>HDMI TMDS D2 +/−</td><td>39, 40</td><td>IOB40A/B</td><td>out</td></tr>
+<tr><td>SD CLK</td><td>83</td><td>—</td><td>out</td></tr>
+<tr><td>SD MOSI</td><td>82</td><td>—</td><td>out</td></tr>
+<tr><td>SD MISO</td><td>84</td><td>—</td><td>in</td></tr>
+<tr><td>SD CS</td><td>81</td><td>—</td><td>out</td></tr>
+<tr><td>Keyboard UART RX (CH9350/Pico TX)</td><td>53</td><td>IOR38B</td><td>in</td></tr>
+<tr><td>PC Link TX (→ BL616 UART → USB-C serial)</td><td>69</td><td>IOT44B</td><td>out</td></tr>
+<tr><td>PC Link RX (← BL616 UART ← USB-C serial)</td><td>70</td><td>IOT50A</td><td>in</td></tr>
+<tr><td>(reserved — legacy USB D−, unused)</td><td>49</td><td>IOR49A</td><td>—</td></tr>
+<tr><td>Joy1 Up / Down / Left / Right / Fire</td><td>27 / 28 / 25 / 26 / 29</td><td>—</td><td>in</td></tr>
+<tr><td>Joy2 Up / Down / Left / Right / Fire</td><td>42 / 41 / 56 / 54 / 48</td><td>—</td><td>in</td></tr>
+</tbody></table></div>
+<p>Joystick GND goes to any header GND; passive sticks need no +5 V. LED pins map to the board's silkscreen labels: 17 = LED2 (SIO data activity), 18 = LED3 (Atari booted), 19 = LED4 (SIO command frames), 20 = LED5 (heartbeat). Wiring details are in <a href="02-hardware.html">chapter 2</a>.</p>
+
+<h2 id="a5">A.5 Glossary</h2>
+<dl>
+<dt>OSD</dt><dd>On-Screen Display: the machine's menu, drawn over the live Atari picture. Opened with <kbd>F12</kbd> or the S2 button.</dd>
+<dt>SIO</dt><dd>Serial Input/Output, the Atari's peripheral bus. Disks (D:) and the printer (P:) are SIO devices; here they are emulated by the firmware.</dd>
+<dt>ATR</dt><dd>The common Atari disk-image file format: a 16-byte header followed by the sectors.</dd>
+<dt>CAR</dt><dd>Cartridge-image file format: a header that identifies the bank-switching type, then the ROM data.</dd>
+<dt>XEX</dt><dd>Atari DOS binary-load executable: segments with load addresses, optionally with INITAD/RUNAD run vectors.</dd>
+<dt>ANTIC</dt><dd>The Atari's display-list processor; it fetches screen memory and builds the picture line by line.</dd>
+<dt>GTIA</dt><dd>The Atari's colour and player/missile (sprite) chip; turns ANTIC's output into the final video.</dd>
+<dt>POKEY</dt><dd>The sound, keyboard, paddle and serial-port chip. A second POKEY at <code>$D210</code> gives stereo.</dd>
+<dt>PIA</dt><dd>Peripheral Interface Adapter: the chip behind the joystick ports and, on XL/XE machines, memory-bank selection.</dd>
+<dt>Genlock</dt><dd>Locking the video output's timing to the emulated machine's own timing, so the HDMI frame is exactly one Atari frame — no jitter or tearing, and no frame buffer.</dd>
+<dt>RAMBO</dt><dd>A classic XL/XE memory-expansion scheme; the 320/576/1088 KB options use it.</dd>
+<dt>MEMLO</dt><dd>OS pointer to the lowest free RAM address. Handlers such as H: and R: are installed above it and raise it; BASIC re-reads it on <code>NEW</code>.</dd>
+<dt>CIO</dt><dd>Central Input/Output: the OS layer that programs use to talk to any device by name (E:, K:, P:, D:, H:…) with OPEN/GET/PUT/CLOSE.</dd>
+</dl>
+
+<h2 id="a6">A.6 Release history</h2>
+<ul>
+<li><strong>v1.0</strong> — first official release: a complete Atari 800/XL/XE on the board.</li>
+<li><strong>v1.1</strong> — quality-of-life: second disk drive, friendlier menu and keyboard.</li>
+<li><strong>v2.0</strong> — genlocked low-latency video, hardware SIO, <code>.xex</code> loading.</li>
+<li><strong>v2.1</strong> — 4 MB cartridges and <code>.xfd</code> disk images.</li>
+<li><strong>v2.2</strong> — dual-POKEY stereo, RAM up to 1088 KB, vertical centering fix.</li>
+<li><strong>v2.2.1</strong> — OSD options persist across a power cycle.</li>
+<li><strong>v2.3</strong> — on-screen SIO activity indicator; reliable <code>.xex</code> loading.</li>
+<li><strong>v2.3.1</strong> — smooth fine scrolling in ANTIC mode 8 (accuracy fix).</li>
+<li><strong>v2.4</strong> — disks you can actually write to; SD-card safety fixes.</li>
+<li><strong>v2.5</strong> — PC Link over the board's own USB-C cable.</li>
+<li><strong>v2.5.1</strong> — typing fix and the desktop app.</li>
+<li><strong>v2.6</strong> — telemetry, remote debugging (<code>status</code>/<code>screen</code>/<code>peek</code>/<code>poke</code>) and the desktop app grows.</li>
+<li><strong>v2.7</strong> — printer emulation (<code>P:</code>) with dot-matrix PDF.</li>
+<li><strong>v2.7.1</strong> — cold boots no longer gamble (reliable cold-start sequence).</li>
+<li><strong>v2.8</strong> — hard drive on D4:, the H: shared folder, MyDOS support.</li>
+<li><strong>v2.8.1</strong> — PC Link reliability fix.</li>
+<li><strong>v2.9</strong> — two-controller joysticks on header pins, <kbd>F11</kbd> quick toggle, experimental BobTerm modem.</li>
+<li><strong>v2.9.1</strong> — OSD menu cleanup (vestigial hot-key option removed).</li>
+<li><strong>v3.0</strong> (built 2026-09-18) — redesigned OSD and cartridge power-cycle on Hard Reset.</li>
+</ul>
+<p>Downloads and full notes: <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases">github.com/carlosbravoa/atari800_tang_nano20k/releases</a>.</p>
+
+<h2 id="a7">A.7 Credits and licences</h2>
+<div class="note"><strong>Non-commercial project</strong>The Atari core this port is built on is offered by its author for non-commercial use only, so the repository and the released bitstreams may be used and shared for <strong>non-commercial purposes only</strong>. Commercial use needs explicit permission from Mark Watson (<code>scrameta@gmail.com</code>) and from the other copyright holders whose licences do not already allow it. The repository's <code>LICENSE</code> file is the authoritative, per-component map.</div>
+<div class="tbl"><table>
+<thead><tr><th>Component</th><th>Author</th><th>Terms</th></tr></thead>
+<tbody>
+<tr><td>Atari 8-bit core — Atari800_MiSTer / atari800core</td><td>Mark Watson</td><td>Custom non-commercial notice</td></tr>
+<tr><td>6502 core — FPGA 64 <code>cpu_65xx.vhd</code></td><td>Peter Wendrich</td><td>"All Rights Reserved" header, via the core above</td></tr>
+<tr><td>Cart bank switching / PBI ROM</td><td>Matthias Reichl, Wojciech Mostowski</td><td>LGPL v2 or later</td></tr>
+<tr><td>IO subsystem (PicoRV32 host, OSD text display, SPI/UART) — from nestang</td><td>nand2mario</td><td>GPL-3.0</td></tr>
+<tr><td>Firmware base — firmware-picorv32</td><td>nand2mario</td><td>No licence file upstream; treated as GPL-3.0</td></tr>
+<tr><td>PicoRV32</td><td>Claire Xenia Wolf</td><td>ISC</td></tr>
+<tr><td>FatFs</td><td>ChaN</td><td>1-clause BSD</td></tr>
+<tr><td>USB HID host</td><td>nand2mario</td><td>Apache 2.0</td></tr>
+<tr><td>Low-latency SDRAM controller — sdram-tang-nano-20k</td><td>nand2mario</td><td>Apache 2.0</td></tr>
+<tr><td>HDMI library — hdl-util/hdmi</td><td>Sameer Puri</td><td>MIT or Apache 2.0</td></tr>
+<tr><td>SD-card reader (in tree, not built)</td><td>WangXuan95</td><td>GPL-3.0</td></tr>
+<tr><td>This Tang Nano 20K port — everything else</td><td>Carlos Bravo</td><td>CC BY-NC-SA 4.0 or GPL-3.0-or-later, your choice</td></tr>
+</tbody></table></div>
+<p>The SDRAM controller is nand2mario's with a 32-bit masked-write path and half-rate burst reads added. The ANTIC file carries the port's own one-line fix to an upstream bug (mode-8 HSCROL) and, as a derived work, stays under Mark Watson's terms. Full licence texts live in the repository's <code>LICENSES/</code> folder; every source file's own header notice is authoritative for that file.</p>
+
+<footer class="pn"><a href="15-known-issues.html">← Previous: 15. Known issues</a><a href="index.html">Next: Contents →</a></footer>
+</main></div></body></html>

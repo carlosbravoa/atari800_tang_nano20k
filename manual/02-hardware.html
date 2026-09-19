@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2. Hardware setup — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html" class="cur"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>2. Hardware setup</h1>
+<p class="lead">What to plug in, what to wire to the header pins, and which pins to leave alone.</p>
+
+<h2>What you need</h2>
+<div class="tbl"><table>
+<tr><th>Item</th><th>Notes</th></tr>
+<tr><td>Sipeed Tang Nano 20K</td><td>GW2AR-LV18 FPGA (GW2AR-LV18QN88PC8/I7)</td></tr>
+<tr><td>Micro-SD / TF card</td><td>FAT32, 32 GB or smaller</td></tr>
+<tr><td>HDMI cable and monitor</td><td>Any HDMI 1.3 or later monitor (see the display note below)</td></tr>
+<tr><td>Keyboard (recommended)</td><td>USB keyboard via a CH9350 USB-host board or a Raspberry Pi Pico — one wire to <strong>pin 53</strong></td></tr>
+<tr><td>DB9 joystick(s)</td><td>Standard Atari/Commodore digital joystick, wired to header pins (the board has no DB9 connector). One stick on port 1 is enough to drive the OSD.</td></tr>
+<tr><td>Dupont jumper wires</td><td>To wire the joystick and keyboard to the GPIO header</td></tr>
+</table></div>
+<div class="placeholder">Photo: the Tang Nano 20K board with the header pins used by this project labelled (53, 25–29, 41/42, 48, 54/56, GND, 5V) and the S1/S2 buttons and LEDs identified (to be supplied)</div>
+
+<h2>The board</h2>
+<p>The Tang Nano 20K provides everything except the input connectors on board:</p>
+<ul>
+<li><strong>HDMI</strong> — video and audio out. Connect it directly to the monitor or TV.</li>
+<li><strong>USB-C</strong> — powers the board, is used to flash the bitstream, and carries the <a href="13-pc-link.html">PC Link</a> serial port. No other power supply is needed.</li>
+<li><strong>Micro-SD (TF) slot</strong> — holds the ROMs, disk images, cartridges and <code>atari.ini</code>. Format the card as <strong>FAT32</strong>; cards up to <strong>32 GB</strong> are supported.</li>
+<li><strong>Two buttons</strong> S1 and S2 and a row of LEDs — see below.</li>
+<li><strong>2.54 mm GPIO headers</strong> — where the keyboard adapter and joysticks attach.</li>
+</ul>
+<div class="note"><strong>Display compatibility</strong>To stay jitter-free, the video output uses a non-standard timing (1056×720 active, declared as 720p) rather than exact CEA 720p. Most modern TVs and monitors accept it on a direct connection, but some strict or older displays — and pass-through gear such as HDMI splitters, AV receivers and capture cards — may reject it ("no signal", "unsupported", "out of range"). If your display will not show it, the standard-720p v1.1 release can be flashed instead, at the cost of higher latency. See <a href="10-video.html">Video</a>.</div>
+
+<h2>Keyboard adapter</h2>
+<p>The board has no USB keyboard port. A small external module acts as the USB host for your keyboard and streams standard <strong>CH9350 serial frames</strong> (115200 baud, 8N1) of raw USB HID reports into the FPGA, where they are decoded in hardware. Only <strong>one data wire</strong> is needed — no resistors. Two modules are supported.</p>
+<h3>Wiring (both modules)</h3>
+<pre><code>External module                    Tang Nano 20K GPIO header
+──────────────────                 ──────────────────────────
+GND            ─────────────────►  GND  (any GND pin)
+5V/VCC         ─────────────────►  5V   (powers the module)
+UART TX        ─────────────────►  Pin 53 (IOR38B)</code></pre>
+<div class="placeholder">Photo: CH9350 module wired to the board — GND, 5V and TXD → pin 53 (to be supplied)</div>
+<h3>Option A: CH9350 module</h3>
+<p>The CH9350 is a plug-and-play USB-host-to-UART converter.</p>
+<ol>
+<li>Set the DIP switches on the CH9350 board to <strong>State 0 (Host Mode / Direct Data Transmit)</strong> and <strong>115200 baud</strong>. (On typical CH9350L boards the configuration switches <code>S1</code> and <code>S2</code> select Host Mode at 115200 baud.)</li>
+<li>Plug your USB keyboard into the USB-A port on the CH9350 board.</li>
+<li>Connect the CH9350's <code>TXD</code> pin directly to <strong>pin 53</strong> on the Tang Nano 20K, plus GND and 5V as above.</li>
+</ol>
+<h3>Option B: Raspberry Pi Pico (RP2040)</h3>
+<p>A Pi Pico can act as a programmable drop-in replacement for the CH9350.</p>
+<ol>
+<li>Connect a USB keyboard to the Pico's micro-USB port with a micro-USB-to-USB-A OTG adapter.</li>
+<li>Program the Pico with a sketch that uses the <code>TinyUSB</code> library in host mode to capture keyboard events and, for every key press or release, sends the 8-byte HID report as a CH9350 packet:
+<div class="tbl"><table>
+<tr><th>Field</th><th>Bytes</th><th>Value</th></tr>
+<tr><td>Header</td><td>2</td><td><code>0x57 0xAB</code></td></tr>
+<tr><td>Command</td><td>1</td><td><code>0x88</code></td></tr>
+<tr><td>Length</td><td>1</td><td><code>0x0B</code></td></tr>
+<tr><td>Keyboard ID</td><td>1</td><td><code>0x10</code></td></tr>
+<tr><td>HID report</td><td>8</td><td><code>[modifiers, 0x00, key1, key2, key3, key4, key5, key6]</code></td></tr>
+<tr><td>Serial number</td><td>1</td><td><code>0x00</code></td></tr>
+<tr><td>Checksum</td><td>1</td><td>Sum of the bytes from the Keyboard ID through the serial number</td></tr>
+</table></div>
+The frame goes out on the Pico's UART TX pin at <strong>115200 baud</strong>.</li>
+<li>Connect the Pico's UART TX pin directly to <strong>pin 53</strong>.</li>
+</ol>
+<p>Key mapping is by <em>position</em>: the PC keyboard behaves like an Atari keyboard. See <a href="09-keyboard.html">Keyboard</a> for the full table.</p>
+
+<h2>Joysticks</h2>
+<p>Standard Atari/Commodore <strong>DB9 digital</strong> joysticks connect directly to header pins. Each controller uses <strong>five signal pins</strong> (Up, Down, Left, Right, Fire) plus a shared <strong>GND</strong>. No resistors are needed — the FPGA holds each pin high with an internal pull-up and the joystick's switch pulls it to GND when pressed (the signals are <strong>active-low</strong>).</p>
+<p>A digital joystick is <em>passive</em>: every direction and the fire button is just a switch to a common line, and that common is GND. <strong>No +5 V is required</strong> — leave DB9 pin 7 unconnected. (Pin 7 / +5 V is only for <em>powered</em> controllers such as paddles, mice and active autofire pads, which this core does not support.) Connect the DB9's GND (pin 8) to any GPIO-header GND.</p>
+<div class="tbl"><table>
+<tr><th>DB9 pin</th><th>Signal</th><th>Joystick 1 → board pin</th><th>Joystick 2 → board pin</th></tr>
+<tr><td>1</td><td>Up</td><td><strong>27</strong></td><td><strong>42</strong></td></tr>
+<tr><td>2</td><td>Down</td><td><strong>28</strong></td><td><strong>41</strong></td></tr>
+<tr><td>3</td><td>Left</td><td><strong>25</strong></td><td><strong>56</strong></td></tr>
+<tr><td>4</td><td>Right</td><td><strong>26</strong></td><td><strong>54</strong></td></tr>
+<tr><td>6</td><td>Fire</td><td><strong>29</strong></td><td><strong>48</strong></td></tr>
+<tr><td>8</td><td>GND</td><td>any GND</td><td>any GND</td></tr>
+<tr><td>7</td><td>+5 V</td><td>not connected</td><td>not connected</td></tr>
+</table></div>
+<p>Joystick 1 sits on the left header and Joystick 2 on the right header, each as a block of consecutive pins.</p>
+<div class="placeholder">Photo: a DB9 socket wired to the header — the five signal wires and GND for Joystick 1 (to be supplied)</div>
+<div class="warn"><strong>Never wire to these pins</strong>
+<ul>
+<li><strong>Pins 69–76 and 79</strong> — they belong to the on-board BL616 MCU (UART/HSPI and the WS2812 LED). The BL616 is always on and drives them, which produces phantom joystick input.</li>
+<li><strong>Pin 51</strong> — the PLL clock input.</li>
+<li><strong>Pin 32</strong> — it is on the LCD flex connector, not a solderable header.</li>
+</ul>
+Joystick 1 Left/Right use pins 25 and 26, which were the analogue audio-out pins in earlier releases; analogue GPIO audio is no longer present — audio comes over HDMI (see <a href="11-audio.html">Audio</a>).</div>
+
+<h2>Buttons</h2>
+<div class="tbl"><table>
+<tr><th>Button</th><th>Pin</th><th>Function</th></tr>
+<tr><td><strong>S1</strong></td><td>88</td><td>Hardware reset of the whole board (FPGA and firmware restart; the ROMs are reloaded from the SD card)</td></tr>
+<tr><td><strong>S2</strong></td><td>87</td><td>Open / close the OSD menu (same as <kbd>F12</kbd>). It is the rightmost button on the board and always works, even without a keyboard.</td></tr>
+</table></div>
+
+<h2>LEDs</h2>
+<p>Four of the board's LEDs are used. They are active-low, on pins 17–20; the physical labels are LED2–LED5.</p>
+<div class="tbl"><table>
+<tr><th>Pin</th><th>Physical LED</th><th>Meaning</th></tr>
+<tr><td>17</td><td>LED2</td><td><strong>SIO data activity</strong> — blinks in rhythm with the disk-load sounds. If it goes dark mid-load while LED4 keeps flashing, the load is stuck.</td></tr>
+<tr><td>18</td><td>LED3</td><td><strong>Atari booted</strong> (ROMs loaded) — solid ON in normal operation.</td></tr>
+<tr><td>19</td><td>LED4</td><td><strong>SIO command frames</strong> — one flash per drive request.</td></tr>
+<tr><td>20</td><td>LED5</td><td><strong>Heartbeat</strong> (~0.8 Hz) — the FPGA is alive.</td></tr>
+</table></div>
+<p>Normal good state: heartbeat blinking, LED3 solid, LED2/LED4 flickering during disk access. LED0 and LED1 are not used (their pins are PLL feedback pads and stay dark).</p>
+
+<h2>Pin reference</h2>
+<div class="tbl"><table>
+<tr><th>Function</th><th>FPGA pin</th><th>IO name</th><th>Dir</th></tr>
+<tr><td>System clock (27 MHz)</td><td>4</td><td>LPLL1_T_in</td><td>in</td></tr>
+<tr><td>Reset button S1</td><td>88</td><td>—</td><td>in</td></tr>
+<tr><td>OSD button S2</td><td>87</td><td>—</td><td>in</td></tr>
+<tr><td>LEDs LED2–LED5</td><td>17–20</td><td>IOL49A–IOL51B</td><td>out</td></tr>
+<tr><td>HDMI TMDS CLK +/−</td><td>33, 34</td><td>IOB24A/B</td><td>out</td></tr>
+<tr><td>HDMI TMDS D0 +/−</td><td>35, 36</td><td>IOB30A/B</td><td>out</td></tr>
+<tr><td>HDMI TMDS D1 +/−</td><td>37, 38</td><td>IOB34A/B</td><td>out</td></tr>
+<tr><td>HDMI TMDS D2 +/−</td><td>39, 40</td><td>IOB40A/B</td><td>out</td></tr>
+<tr><td>SD CLK</td><td>83</td><td>—</td><td>out</td></tr>
+<tr><td>SD MOSI</td><td>82</td><td>—</td><td>out</td></tr>
+<tr><td>SD MISO</td><td>84</td><td>—</td><td>in</td></tr>
+<tr><td>SD CS</td><td>81</td><td>—</td><td>out</td></tr>
+<tr><td>Keyboard UART RX (CH9350/Pico TX)</td><td>53</td><td>IOR38B</td><td>in</td></tr>
+<tr><td>PC Link TX (→ BL616 UART → USB-C serial)</td><td>69</td><td>IOT44B</td><td>out</td></tr>
+<tr><td>PC Link RX (← BL616 UART ← USB-C serial)</td><td>70</td><td>IOT50A</td><td>in</td></tr>
+<tr><td>(reserved — legacy USB D−, unused)</td><td>49</td><td>IOR49A</td><td>—</td></tr>
+<tr><td>Joy1 Up</td><td>27</td><td>IOB8A</td><td>in</td></tr>
+<tr><td>Joy1 Down</td><td>28</td><td>IOB8B</td><td>in</td></tr>
+<tr><td>Joy1 Left</td><td>25</td><td>IOB6A</td><td>in</td></tr>
+<tr><td>Joy1 Right</td><td>26</td><td>IOB6B</td><td>in</td></tr>
+<tr><td>Joy1 Fire</td><td>29</td><td>IOB14A</td><td>in</td></tr>
+<tr><td>Joy2 Up</td><td>42</td><td>IOB42B</td><td>in</td></tr>
+<tr><td>Joy2 Down</td><td>41</td><td>IOB43A</td><td>in</td></tr>
+<tr><td>Joy2 Left</td><td>56</td><td>IOR36A</td><td>in</td></tr>
+<tr><td>Joy2 Right</td><td>54</td><td>IOR38A</td><td>in</td></tr>
+<tr><td>Joy2 Fire</td><td>48</td><td>IOR49B</td><td>in</td></tr>
+</table></div>
+<p>The SD card and the PC Link pins are wired on the board itself; you only ever connect pin 53 (keyboard) and the ten joystick pins, plus GND and 5V.</p>
+
+<footer class="pn"><a href="01-overview.html">← Previous: Overview</a><a href="03-getting-started.html">Next: Getting started →</a></footer>
+</main></div></body></html>

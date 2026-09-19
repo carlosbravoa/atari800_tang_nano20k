@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5. Options and atari.ini — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html" class="cur"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>5. Options and atari.ini</h1>
+<p class="lead">The Options screen sets input, video, audio, memory and modem preferences; "Save changes" stores them in <code>atari.ini</code> on the SD card.</p>
+
+<h2>The Options screen</h2>
+<p>Open the OSD (<kbd>F12</kbd> or S2) and select <strong>8) Options</strong>.</p>
+<figure><img src="img/osd_options.png" alt="The OPTIONS screen"><figcaption>The Options screen with the defaults.</figcaption></figure>
+<div class="menu"><span class="bar"> OPTIONS </span> &lt;&lt; Return to main menu
+ Arrow keys:   NORMAL
+<span class="sel"> Scanlines:    OFF </span> H position:   0  &lt;- -&gt;
+ Stereo:       OFF
+ RAM:          128 KB  &lt;- -&gt;
+ Modem (R:):   OFF
+ Save changes
+<span class="bar"> Up/Down move  Enter select  F12 </span></div>
+<p>Move with <kbd>↑</kbd>/<kbd>↓</kbd> and press <kbd>Enter</kbd> (or Fire) to toggle an item. The two items marked <code>&lt;- -&gt;</code> are changed with <kbd>←</kbd>/<kbd>→</kbd> (or the stick) instead. <kbd>F12</kbd>, S2 or <strong>&lt;&lt; Return to main menu</strong> takes you back.</p>
+<p>Every change is applied at once so you can see or hear it — except RAM, which needs a cold boot — but <strong>nothing is written to the SD card until you select Save changes</strong>.</p>
+
+<h2>Arrow keys</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>NORMAL</code> (default) / <code>JOYSTICK</code></td></tr>
+<tr><th>Applies</th><td>Live</td></tr>
+<tr><th>ini key</th><td><code>joystick=0</code> / <code>joystick=1</code></td></tr>
+</table></div>
+<p>With <code>JOYSTICK</code>, the keyboard's arrow keys drive Joystick 1 (alongside any real stick on port 1) and <kbd>Left Alt</kbd> is the fire button. Those keys are then suppressed from the Atari keyboard so they don't type stray characters. Set it back to <code>NORMAL</code> to type again.</p>
+<div class="tip"><strong>Quick toggle: F11</strong><kbd>F11</kbd> flips arrows ↔ joystick live, mid-game, without opening the OSD. It is a live-only switch: it is never saved, so the setting reverts to what <code>atari.ini</code> says at the next boot.</div>
+
+<h2>Scanlines</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>OFF</code> (default) / <code>25%</code> / <code>50%</code> / <code>75%</code> — each press of Enter steps to the next</td></tr>
+<tr><th>Applies</th><td>Live</td></tr>
+<tr><th>ini key</th><td><code>scanlines=0</code> … <code>scanlines=3</code></td></tr>
+</table></div>
+<p>Adds CRT-style dark scanlines to the picture at the chosen strength. See <a href="10-video.html">Video</a>.</p>
+
+<h2>H position</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>0</code> (default) to <code>48</code>, with <kbd>←</kbd>/<kbd>→</kbd></td></tr>
+<tr><th>Applies</th><td>Live — the picture slides as you hold the key</td></tr>
+<tr><th>ini key</th><td><code>hpos=0</code> … <code>hpos=48</code></td></tr>
+</table></div>
+<p>Shifts the picture horizontally to centre it on your display. <kbd>←</kbd> moves the picture to the left (a bigger number), <kbd>→</kbd> moves it back to the right. Pressing Enter on this item does nothing.</p>
+
+<h2>Stereo</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>OFF</code> (default, mono) / <code>ON</code></td></tr>
+<tr><th>Applies</th><td>Live</td></tr>
+<tr><th>ini key</th><td><code>stereo=0</code> / <code>stereo=1</code></td></tr>
+</table></div>
+<p>Enables the classic dual-POKEY stereo upgrade: a second POKEY at <code>$D210</code>, POKEY 1 on the left channel and POKEY 2 on the right. Off by default so ordinary software is unaffected. Turn it on <em>before</em> loading stereo-aware software, or the second POKEY stays silent. See <a href="11-audio.html">Audio</a>.</p>
+
+<h2>RAM</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>128 KB</code> (default, 130XE) / <code>320</code> / <code>576</code> / <code>1088 KB</code> (RAMBO) — pick with <kbd>←</kbd>/<kbd>→</kbd></td></tr>
+<tr><th>Applies</th><td>On the cold boot that <kbd>Enter</kbd> performs on this item (a running machine cannot change its RAM size)</td></tr>
+<tr><th>ini key</th><td><code>ram=128</code> / <code>ram=320</code> / <code>ram=576</code> / <code>ram=1088</code></td></tr>
+</table></div>
+<p>Choose the size with <kbd>←</kbd>/<kbd>→</kbd>, then press <kbd>Enter</kbd> on the RAM row: the message <code>Rebooting with new RAM size...</code> appears and the Atari cold-boots with the new size. Remember to Save changes afterwards if you want it to stick. See <a href="12-ram.html">RAM expansion</a>.</p>
+
+<h2>Modem (R:)</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>OFF</code> (default) / <code>ON</code></td></tr>
+<tr><th>Applies</th><td>On the next cold boot</td></tr>
+<tr><th>ini key</th><td><code>modem=0</code> / <code>modem=1</code></td></tr>
+</table></div>
+<p>Opt-in support for the <strong>R:</strong> serial device (850-style modem) over the USB-C cable, so a terminal program such as BobTerm can dial a telnet BBS through the PC. When OFF (the default) it has no effect on normal use. This feature is a work in progress; see <a href="13-pc-link.html">PC Link</a> and <a href="15-known-issues.html">Known issues</a>.</p>
+<div class="placeholder">TODO: the Modem option needs the two Altirra 850 handler <code>.bin</code> files on the SD card (see <code>tools/fujinet_850/README.md</code> in the repository) — exact file names and location to be confirmed</div>
+
+<h2>Save changes and the "*" marker</h2>
+<p>As soon as you change anything, the last row reads <code>Save changes *</code> — the star means there are changes that have not been written to the SD card. Select it to write all options to <code>/atari.ini</code>; the row shows <code>Options saved.</code> and the star disappears. If the card cannot be written you get the pop-up <code>Cannot save options to SD</code>.</p>
+<div class="note"><strong>Unsaved changes are temporary</strong>Changes you do not save stay in effect for the current session only. At the next power-on (or after the S1 hardware reset restarts the firmware) the values from <code>atari.ini</code> are loaded again.</div>
+
+<h2>The atari.ini file</h2>
+<p>The file lives at <code>/atari.ini</code> in the root of the SD card. The firmware creates it the first time you Save changes and marks it as a <em>hidden</em> file, so you may need to show hidden files on your PC to see it. It is a plain text file with one <code>key=value</code> per line. Blank lines and lines starting with <code>;</code>, <code>#</code> or <code>[</code> are ignored; unknown keys are ignored too. Any other line without an <code>=</code> makes the firmware treat the file as corrupt.</p>
+<p>A complete file with the defaults:</p>
+<pre><code>joystick=0
+scanlines=0
+hpos=0
+stereo=0
+modem=0
+ram=128
+</code></pre>
+<div class="tbl"><table>
+<tr><th>Key</th><th>Values</th><th>Option</th></tr>
+<tr><td><code>joystick</code></td><td>0 / 1</td><td>Arrow keys NORMAL / JOYSTICK</td></tr>
+<tr><td><code>scanlines</code></td><td>0 – 3</td><td>Scanlines OFF / 25% / 50% / 75%</td></tr>
+<tr><td><code>hpos</code></td><td>0 – 48</td><td>H position (values outside the range are clamped)</td></tr>
+<tr><td><code>stereo</code></td><td>0 / 1</td><td>Stereo OFF / ON</td></tr>
+<tr><td><code>ram</code></td><td>128 / 320 / 576 / 1088</td><td>RAM size (any other value falls back to 128)</td></tr>
+<tr><td><code>modem</code></td><td>0 / 1</td><td>Modem (R:) OFF / ON</td></tr>
+</table></div>
+<p>You can edit the file on a PC if you prefer; it is read once when the board powers on. If the file is missing, all options take their defaults.</p>
+
+<footer class="pn"><a href="04-osd.html">← Previous: The OSD menu</a><a href="06-disks.html">Next: Disks →</a></footer>
+</main></div></body></html>

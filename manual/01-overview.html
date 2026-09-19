@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1. Overview — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html" class="cur"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>1. Overview</h1>
+<p class="lead">Tang Atari 800 turns a Sipeed Tang Nano 20K board into a complete Atari 800XL/130XE-class computer with HDMI output, SD-card disks and cartridges, and a PC link over the USB-C cable.</p>
+
+<h2>What the machine is</h2>
+<p>The board runs an FPGA implementation of the Atari 8-bit computers — the 800, 800XL, 65XE and 130XE family. The custom chips are all emulated in hardware: the <strong>6502</strong> CPU, <strong>ANTIC</strong> (display list processor), <strong>GTIA</strong> (colour and player/missile graphics), <strong>POKEY</strong> (sound, keyboard, serial I/O) and <strong>PIA</strong> (joystick ports and memory banking). The core is the Atari800_MiSTer core by Mark Watson, adapted to the Gowin FPGA on the Tang Nano 20K.</p>
+<p>The machine is <strong>NTSC</strong> and runs at exact NTSC speed (59.94 Hz frames). It passes the <strong>ACID800</strong> conformance suite — <strong>57 of 57</strong> tests — on real hardware. The default memory configuration is 128 KB, like a 130XE, and can be expanded from the menu up to 1088 KB (see <a href="12-ram.html">RAM expansion</a>).</p>
+
+<h2>What ships inside the bitstream</h2>
+<p>Everything the board needs, apart from the Atari ROMs, is contained in a single bitstream file (<code>atari800_tn20k.fs</code>):</p>
+<ul>
+<li>the Atari core itself (CPU, ANTIC, GTIA, POKEY, PIA, SIO);</li>
+<li>the HDMI video and audio output;</li>
+<li>the keyboard decoder and joystick inputs;</li>
+<li>a small management firmware that reads the SD card, serves disks and cartridges, draws the on-screen menu (OSD) and talks to the PC over USB-C. This firmware is baked into the bitstream — there is <strong>no separate firmware to flash</strong>.</li>
+</ul>
+
+<h2>What you must supply</h2>
+<p>The Atari system ROMs are <strong>not included</strong>. You need two files in the root of a FAT32 micro-SD card:</p>
+<div class="tbl"><table>
+<tr><th>File</th><th>Size</th><th>What it is</th></tr>
+<tr><td><code>ATARIXL.ROM</code></td><td>exactly 16384 bytes</td><td>Atari XL/XE operating system ROM</td></tr>
+<tr><td><code>BASIC.ROM</code></td><td>exactly 8192 bytes</td><td>Atari BASIC ROM</td></tr>
+</table></div>
+<p>File names are matched case-insensitively. Without these files the machine cannot boot; see <a href="03-getting-started.html">Getting started</a> for the SD card layout.</p>
+
+<h2>Feature tour</h2>
+<p><strong><a href="02-hardware.html">Hardware setup</a></strong> — the board has HDMI, a micro-SD slot and USB-C power on board. A keyboard connects through a small USB-host adapter with one wire to a header pin; two DB9 joysticks wire directly to header pins. Two on-board buttons give you a hardware reset and the menu.</p>
+<p><strong><a href="04-osd.html">The OSD menu</a></strong> — the Atari boots straight to BASIC with no menu. Press <kbd>F12</kbd> or the S2 button to open the on-screen display over the live picture: attach disks and cartridges, reboot to OS or BASIC, soft or hard reset, and change options. A joystick on port 1 alone is enough to drive it.</p>
+<p><strong><a href="05-options.html">Options &amp; atari.ini</a></strong> — arrow keys as joystick, CRT scanlines, horizontal picture position, stereo, RAM size and the R: modem, saved to <code>atari.ini</code> on the SD card.</p>
+<p><strong><a href="06-disks.html">Disks</a></strong> — <code>.atr</code> and raw <code>.xfd</code> images in single, enhanced and double density on four drives D1: to D4:. Disks can be swapped live, written to and formatted from DOS, and a blank disk can be created from the menu. An image named <code>/HDD.ATR</code> auto-mounts on D4: at every boot as a permanent hard drive.</p>
+<p><strong><a href="07-cartridges.html">Cartridges</a></strong> — <code>.car</code> images up to 4 MB (including banked multicarts and the 4 MB MegaCart) and raw <code>.rom</code> dumps of 2, 4, 8 or 16 KB. Attaching a cartridge cold-boots straight into it.</p>
+<p><strong><a href="08-executables.html">Executables (.xex)</a></strong> — Atari binary-load programs run directly from the SD card; a built-in loader is served as a virtual boot disk on D1:.</p>
+<p><strong><a href="09-keyboard.html">Keyboard</a></strong> — a standard USB keyboard, decoded in hardware, mapped by key position so that it behaves like an Atari keyboard. <kbd>F9</kbd> is soft reset, <kbd>F11</kbd> toggles arrows-as-joystick, <kbd>F12</kbd> opens the menu.</p>
+<p><strong><a href="10-video.html">Video</a></strong> — a genlocked, low-latency HDMI picture at an integer 3× of the Atari frame (1056×720 active), with no frame buffer, no jitter and no tearing. Optional scanlines and horizontal position adjust live.</p>
+<p><strong><a href="11-audio.html">Audio</a></strong> — 48 kHz stereo PCM over HDMI, with an optional dual-POKEY stereo mode (second POKEY at $D210).</p>
+<p><strong><a href="12-ram.html">RAM expansion</a></strong> — 128 KB (130XE), 320, 576 or 1088 KB (RAMBO), chosen from the menu and applied with a cold boot.</p>
+<p><strong><a href="13-pc-link.html">PC Link</a></strong> — over the same USB-C cable that powers the board: send files to the SD card, push and boot <code>.xex</code> builds, paste text as keystrokes, use a live remote keyboard, reset and eject remotely, read the screen and memory, share an H: folder, and capture printer output as text or PDF. A command-line tool and a desktop app are provided.</p>
+<p><strong><a href="14-troubleshooting.html">Troubleshooting</a></strong> and <strong><a href="15-known-issues.html">Known issues</a></strong> — what to check when something does not work, and the documented limitations.</p>
+
+<h2>Licence</h2>
+<p>This is a <strong>non-commercial</strong> project: the Atari core it is built on is offered by its author for non-commercial use only, so the released bitstreams may be used and shared for non-commercial purposes only — see the <a href="16-appendix.html">Appendix</a> for the per-component licence map.</p>
+
+<footer class="pn"><a href="index.html">← Previous: Contents</a><a href="02-hardware.html">Next: Hardware setup →</a></footer>
+</main></div></body></html>

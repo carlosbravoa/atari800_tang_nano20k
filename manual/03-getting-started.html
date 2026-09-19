@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3. Getting started — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html" class="cur"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>3. Getting started</h1>
+<p class="lead">From an empty SD card to a BASIC prompt, a booted disk and a running cartridge in a few minutes.</p>
+
+<h2>1. Prepare the SD card</h2>
+<p>Format a micro-SD card as <strong>FAT32</strong> (32 GB or smaller) and put the two ROM files in the root directory. Everything else is optional:</p>
+<pre><code>/
+├── ATARIXL.ROM   ← Atari XL/XE OS ROM, exactly 16384 bytes
+├── BASIC.ROM     ← Atari BASIC ROM, exactly 8192 bytes
+├── HDD.ATR       ← optional: auto-mounts on D4: at every boot — your
+│                    permanent "hard drive" (any ATR; MyDOS-formatted is ideal)
+├── HDD/          ← optional: the H: device's folder — files here are
+│                    shared between the Atari (H:) and the PC link
+├── games/        ← your .atr disks and .car/.rom cartridges, any folders,
+└── ...              long filenames fine</code></pre>
+<div class="note"><strong>ROMs are not included</strong>You must supply your own <code>ATARIXL.ROM</code> and <code>BASIC.ROM</code>. Names are matched case-insensitively (<code>atarixl.rom</code> works too), but the sizes must be exact. The firmware loads both ROMs from the card at every power-on.</div>
+
+<h2>2. Flash the bitstream</h2>
+<p>Download the zip from the <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest">latest release</a> on GitHub and unpack <code>atari800_tn20k.fs</code>. Connect the board to the PC with the USB-C cable and flash it with openFPGALoader:</p>
+<pre><code>openFPGALoader -b tangnano20k -f atari800_tn20k.fs</code></pre>
+<p>The Gowin Programmer can flash the same <code>.fs</code> file if you prefer it (close any PC Link session first). The firmware is baked into the bitstream — there is <strong>no separate firmware to flash</strong>.</p>
+
+<h2>3. First power-on</h2>
+<ol>
+<li>Insert the SD card and connect the HDMI cable to the monitor.</li>
+<li>Power the board from the USB-C port.</li>
+</ol>
+<p>A healthy boot looks like this:</p>
+<ul>
+<li>The screen shows the Atari BASIC <strong>READY</strong> prompt. No menu appears — the machine auto-boots straight to BASIC.</li>
+<li><strong>LED3</strong> (pin 18) is <strong>solid on</strong>: the ROMs loaded and the Atari is running.</li>
+<li><strong>LED5</strong> (pin 20) <strong>blinks</strong> at about 0.8 Hz: the FPGA heartbeat.</li>
+</ul>
+<div class="tip"><strong>No keyboard yet?</strong>Press the on-board <strong>S2</strong> button to open the menu. A DB9 joystick on port 1 (up/down and fire) can drive the whole OSD on its own.</div>
+
+<h3>The ROM-error screen</h3>
+<p>If the firmware cannot load the ROMs, the Atari does not start and the menu shows the failure instead of BASIC. Check that:</p>
+<ul>
+<li>the SD card is FAT32 formatted and fully inserted;</li>
+<li><code>ATARIXL.ROM</code> (16384 bytes) and <code>BASIC.ROM</code> (8192 bytes) are in the <strong>root</strong> directory.</li>
+</ul>
+<p>Fix the card, reinsert it and press <strong>S1</strong> (hardware reset) or power-cycle the board. With the <a href="13-pc-link.html">PC Link</a> you can also rescue it without touching the card: the bridge answers at the ROM-error screen, so you can <code>send</code> the missing ROMs over the cable and press a key to retry.</p>
+<div class="placeholder">TODO: exact wording of the ROM-error screen and which key retries (to be confirmed)</div>
+<div class="placeholder">Photo: the ROM-error screen (to be supplied)</div>
+
+<h2>4. Boot a disk in 60 seconds</h2>
+<ol>
+<li>Copy an <code>.atr</code> disk image anywhere on the SD card (root or a subfolder).</li>
+<li>Power on — the Atari boots to BASIC.</li>
+<li>Open the OSD with <strong>S2</strong> (or <kbd>F12</kbd> on a keyboard).</li>
+<li>Choose <strong>1) D1:</strong> → <strong>Attach disk...</strong>, browse to your <code>.atr</code>, press <strong>Fire</strong> / <kbd>Enter</kbd> to mount it.</li>
+<li>Choose <strong>7) Hard Reset</strong> — the Atari cold-boots from the mounted disk (for example into DOS).</li>
+</ol>
+<p>The mounted image shows on the <code>D1:</code> line of the menu. Use <code>D2:</code> for data disks or disk 2 of multi-disk games, or swap <code>D1:</code> live when a game asks for the next disk. See <a href="06-disks.html">Disks</a>.</p>
+<figure><img src="img/osd_main.png" alt="The OSD main menu with a disk attached on D1:"><figcaption>The main menu: D1:, D2: and Cart: show their current attachment.</figcaption></figure>
+
+<h2>5. Run a cartridge in 60 seconds</h2>
+<ol>
+<li>Copy a <code>.car</code> (or a 2/4/8/16 KB raw <code>.rom</code>) to the SD card.</li>
+<li>Open the OSD with <strong>S2</strong> / <kbd>F12</kbd>.</li>
+<li>Choose <strong>3) Cart:</strong> → <strong>Attach cartridge...</strong> → pick the file — it boots immediately.</li>
+</ol>
+<p>To get back to a multi-game cartridge's menu after a game, use <strong>7) Hard Reset</strong>. <kbd>F9</kbd> is the real RESET key and usually lands in BASIC — that is what a real Atari does too. See <a href="07-cartridges.html">Cartridges</a>.</p>
+
+<h2>Where to go next</h2>
+<ul>
+<li><a href="02-hardware.html">Hardware setup</a> — wire a keyboard (one wire to pin 53) and joysticks.</li>
+<li><a href="04-osd.html">The OSD menu</a> — every menu item explained.</li>
+<li><a href="05-options.html">Options &amp; atari.ini</a> — arrows as joystick, scanlines, picture position, stereo, RAM.</li>
+<li><a href="08-executables.html">Executables (.xex)</a> — run binary-load programs straight from the card.</li>
+<li><a href="13-pc-link.html">PC Link</a> — send files and type from the PC over the USB-C cable.</li>
+<li><a href="14-troubleshooting.html">Troubleshooting</a> — if something on this page did not go to plan.</li>
+</ul>
+
+<footer class="pn"><a href="02-hardware.html">← Previous: Hardware setup</a><a href="04-osd.html">Next: The OSD menu →</a></footer>
+</main></div></body></html>

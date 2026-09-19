@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>11. Audio — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html" class="cur"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>11. Audio</h1>
+<p class="lead">Sound travels over the same HDMI cable as the picture, with no extra wiring, and an optional second POKEY gives true stereo to software that knows how to use it.</p>
+
+<h2>HDMI audio</h2>
+<p>POKEY's sound is embedded in the HDMI signal as <strong>48 kHz stereo PCM</strong>. Any HDMI monitor, TV or AV receiver with audio output plays it directly. There is nothing to wire and nothing to configure: connect the HDMI cable and turn up the volume on your display.</p>
+<div class="note"><strong>No analogue output</strong>Earlier versions offered an analogue (sigma-delta) audio output on two header pins. That output has been <strong>removed</strong>: those pins now carry Joystick 1 Left and Right (see <a href="02-hardware.html">Hardware setup</a>). HDMI is the only audio path.</div>
+
+<h2>Dual-POKEY stereo</h2>
+<p>The Atari's POKEY chip is mono. The classic stereo upgrade for real machines adds a <strong>second POKEY at address <code>$D210</code></strong>; software that knows about it plays some voices on the second chip. The board emulates this upgrade: when Stereo is ON, <strong>POKEY 1 plays on the left channel and POKEY 2 on the right</strong>. When it is OFF the machine behaves like a stock, single-POKEY Atari, in mono.</p>
+<p><strong>Stereo is OFF by default</strong>, so all existing software behaves exactly as it always has.</p>
+
+<h3>Turning it on</h3>
+<ol>
+<li>Open the OSD (<kbd>F12</kbd> or the S2 button) and choose <strong>Options</strong>.</li>
+<li>Set <strong>Stereo</strong> to <strong>ON</strong>. The change applies live — no reboot is needed.</li>
+<li>Choose <strong>Save changes</strong> if you want it to stay on after the next power-up. It is stored in <code>atari.ini</code> as <code>stereo=</code> (0 = OFF, 1 = ON; default 0). See <a href="05-options.html">Options &amp; atari.ini</a>.</li>
+</ol>
+<div class="warn"><strong>Enable Stereo before loading stereo software</strong>Stereo-aware programs (players, demos, games with dual-POKEY support) look for the second POKEY when they load. If Stereo is still OFF at that moment they will not find it and will stay in mono, even if you switch Stereo on afterwards. Turn Stereo ON first, then load or restart the program.</div>
+
+<footer class="pn"><a href="10-video.html">← Previous: Video</a><a href="12-ram.html">Next: RAM expansion →</a></footer>
+</main></div></body></html>

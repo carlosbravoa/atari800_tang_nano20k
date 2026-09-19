@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>10. Video — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html" class="cur"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>10. Video</h1>
+<p class="lead">The picture leaves the board over HDMI as a 720-line signal that is locked to the Atari's own frame timing — steady, tear-free and only a couple of scanlines behind the machine.</p>
+
+<h2>What comes out of the HDMI port</h2>
+<p>The Atari draws a 352&times;240 picture at the NTSC rate. The board scales it by an exact <strong>integer factor of 3</strong> into a <strong>1056&times;720</strong> active area inside a custom <strong>1216&times;786</strong> raster, and sends that over HDMI. Every Atari pixel becomes a crisp 3&times;3 block; nothing is resampled.</p>
+<p>The output is <strong>genlocked</strong>: the pixel clock is frequency-locked to the core, so exactly one output frame is produced for every Atari frame. Because the frame and line counts are whole numbers, the picture never drifts, jitters by a line or tears. There is <strong>no frame buffer</strong> — the Atari's lines are captured a few at a time into a small line buffer and read out straight away, which is why the latency is only about <strong>1–2 scanlines</strong>. Your display sees an HD, 720-line signal.</p>
+<div class="tbl"><table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Atari picture</td><td>352 &times; 240</td></tr>
+<tr><td>Active output</td><td>1056 &times; 720 (3&times; in both directions)</td></tr>
+<tr><td>Total raster</td><td>1216 &times; 786</td></tr>
+<tr><td>Frame rate</td><td>NTSC, 59.94 Hz — one output frame per Atari frame</td></tr>
+<tr><td>Latency</td><td>~1–2 scanlines, no frame buffer</td></tr>
+</table></div>
+<div class="placeholder">Photo: the Atari picture on a TV or monitor over HDMI (e.g. the BASIC READY prompt or a game title screen) (to be supplied)</div>
+
+<h2>NTSC only</h2>
+<p>This is an <strong>NTSC</strong> machine: 262 lines per frame at 59.94 Hz, and the exact NTSC machine clock. There is no PAL mode and no switch for one. Software written for PAL will run, but at NTSC timing; see <a href="#pal">PAL titles</a> below for what that means in practice.</p>
+
+<h2>Display compatibility</h2>
+<p>You need an <strong>HDMI 1.3 or later</strong> monitor or TV and an ordinary HDMI cable. Note that staying jitter-free requires a <strong>non-standard timing</strong>: the signal is 1056&times;720 active, declared as 720p, rather than exact CEA 720p, because the Atari's frame rate does not divide evenly into any standard HDMI mode. Most modern TVs and monitors accept it on a direct connection, but some strict or older displays — and pass-through equipment such as HDMI splitters, AV receivers and capture cards — may reject it ("no signal", "unsupported" or "out of range").</p>
+<div class="note"><strong>If your display refuses the signal</strong>An older release (v1.1) produces a fully CEA-standard 720p signal at the cost of higher latency; it is available from the project's releases page and can be flashed instead.</div>
+<div class="placeholder">TODO: list of tested displays, TVs and capture devices, with result (to be confirmed)</div>
+
+<h2>Scanlines</h2>
+<p>A CRT-style scanline effect can be blended into the picture. Open the OSD, choose <strong>Options</strong> and step <strong>Scanlines</strong> through <strong>OFF</strong>, <strong>25%</strong>, <strong>50%</strong> and <strong>75%</strong>. The change applies immediately, over the live picture, so you can compare settings on the game you are playing. <strong>Save changes</strong> stores it in <code>atari.ini</code> as <code>scanlines=</code> (0–3; default 0 = OFF). See <a href="05-options.html">Options &amp; atari.ini</a>.</p>
+<div class="placeholder">Photo: close-up of the picture with scanlines OFF and at 50%, same screen (to be supplied)</div>
+
+<h2>Horizontal position</h2>
+<p>If your display crops the left or right edge, or the picture sits off-centre, slide it with <strong>Options → H position</strong>. Use <kbd>←</kbd> / <kbd>→</kbd> (or the joystick left/right) to move it; the range is <strong>0 to 48</strong> and the picture moves live as you adjust. It is saved as <code>hpos=</code> (default 0).</p>
+
+<h2 id="cold-start">HDMI drop on a cold start</h2>
+<p>On some cold power-ons the HDMI output may <strong>briefly drop and then recover</strong> — the display loses the signal for a moment and comes back — while the Atari itself keeps running underneath. This is a known behaviour of the video output at power-up; it is not a crash and needs no action. If the picture does not return, see <a href="14-troubleshooting.html">Troubleshooting</a>.</p>
+
+<h2 id="pal">PAL titles on an NTSC machine</h2>
+<p>A few demanding PAL games show garbled sprites, a jumpy or jittery image, or freezes <em>during play</em>. Two known examples:</p>
+<ul>
+<li><strong>Tiger Attack</strong> (Atari UK, 1988) — sprites garbled; occasional freezes.</li>
+<li><strong>Astro Droid</strong> (Red Rat Software, 1987) — vertical jitter; sprites garbled or wrong colours.</li>
+</ul>
+<p>The most likely cause is that these are PAL games running on an NTSC-only machine. Both are British budget titles built around PAL ANTIC timing (312 lines at 50 Hz) and aggressive per-frame vertical fine scrolling — writing <code>VSCROL</code> mid-frame, often from display-list interrupts. On an NTSC machine (262 lines at 60 Hz) the scroll regions, interrupt line targets and sprite positions no longer line up, which produces exactly these symptoms. A real Atari, or MiSTer, set to NTSC behaves the same way. It is not a loading problem and not a fault in the board's memory or video path: NTSC-friendly scrollers such as <strong>River Raid</strong>, which use coarse scrolling updated once per frame, are unaffected.</p>
+<div class="note"><strong>PAL support is not planned</strong>Switching to PAL is not a simple flag. It changes the machine clock (1.7734 vs 1.7898 MHz), which cascades through the memory and pixel clocks and the genlocked video mode (1216&times;786 = 3 &times; 262 lines; PAL's 312 lines would need a different mode and PLL). It is effectively a second complete clock and video configuration, and given that these are obscure PAL titles on an NTSC reference machine, PAL support is deferred.</div>
+
+<footer class="pn"><a href="09-keyboard.html">← Previous: Keyboard</a><a href="11-audio.html">Next: Audio →</a></footer>
+</main></div></body></html>

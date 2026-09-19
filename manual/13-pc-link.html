@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>13. PC Link — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html" class="cur"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>13. PC Link</h1>
+<p class="lead">The USB-C cable that powers and flashes the board also carries a serial link to the Atari: send files, boot programs, type, read the screen and capture the printer from your PC.</p>
+
+<h2 id="what">13.1 What it is</h2>
+<p>The board's onboard BL616 chip bridges a USB serial port to the Atari firmware. No extra hardware is needed: the same USB-C cable that powers and flashes the board is the link. Two programs in the repository's <code>tools/</code> folder use it, and both share one protocol library (<code>atari_link.py</code>):</p>
+<ul>
+<li><code>tools/atari.py</code> — the command-line tool.</li>
+<li><code>tools/atari_gui.py</code> — the same things in a desktop window (Linux/Windows).</li>
+</ul>
+<p>The Atari has its own power and keeps running whatever the PC does, so a failed command is always safe to retry. Transfers run at about 11 KB/s and the machine keeps running during them (mounted disks stay live). Firmware memory access is Atari-first by design; measured impact on machine timing is zero even under continuous <code>peek</code> load. Flashing the board is unaffected by the link.</p>
+
+<h2 id="setup">13.2 One-time setup</h2>
+<h3>Linux</h3>
+<pre><code>pip install pyserial
+sudo apt install python3-tk     # desktop app only
+sudo modprobe ftdi_sio          # if no /dev/ttyUSB* appears
+# make the module load permanent:
+echo ftdi_sio | sudo tee /etc/modules-load.d/ftdi_sio.conf</code></pre>
+<h3>Windows</h3>
+<p>Install <code>pyserial</code> the same way (<code>pip install pyserial</code>). The FTDI VCP driver arrives via Windows Update automatically. Python builds from python.org already include Tk, so the desktop app needs nothing extra.</p>
+<h3>Which port?</h3>
+<p>The board enumerates as a <strong>pair</strong> of serial ports. The second port of the pair is the bridge, and the tools auto-pick it. If autodetection ever guesses wrong, pass <code>-p</code> with the port name (for example <code>-p /dev/ttyUSB1</code> or <code>-p COM5</code>); every command accepts <code>-p PORT</code>. Then check the link:</p>
+<pre><code>python3 tools/atari.py ping        # -> "A8OK — bridge is alive (both directions)"
+python3 tools/atari.py ports       # list candidate ports</code></pre>
+<div class="warn"><strong>Before flashing</strong>Close <code>log</code>, <code>kbd</code> and the desktop app before using the Gowin programmer. They hold the serial port.</div>
+
+<h2 id="cli">13.3 The command-line tool: <code>atari.py</code></h2>
+<p>Run every command as <code>python3 tools/atari.py &lt;command&gt;</code> from the repository folder. All commands take <code>-p PORT</code>.</p>
+<div class="tbl"><table>
+<thead><tr><th>Command</th><th>What it does</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td><code>ports</code></td><td>List candidate serial ports.</td><td><code>atari.py ports</code></td></tr>
+<tr><td><code>log</code></td><td>Tail the live firmware log (boot messages, SIO activity, <code>PRN:</code> printer lines). Ctrl-C stops it.</td><td><code>atari.py log</code></td></tr>
+<tr><td><code>ping</code></td><td>Is the bridge alive? Expects <code>A8OK</code> back.</td><td><code>atari.py ping</code></td></tr>
+<tr><td><code>send FILE [NAME] [--text]</code></td><td>Copy a file to the SD card. Without <code>NAME</code> it lands in <code>/PC/&lt;file&gt;</code>; <code>NAME</code> may include folders (created automatically). <code>--text</code> converts <code>\n</code> line endings to ATASCII (<code>$9B</code>) — use it for text the Atari will read with <code>ENTER</code> or <code>INPUT</code>.</td><td><code>atari.py send GAME.ATR</code><br><code>atari.py send X.XEX DEMOS/X.XEX</code><br><code>atari.py send --text n.txt HDD/N.TXT</code></td></tr>
+<tr><td><code>run FILE.XEX [NAME]</code></td><td>Send a <code>.xex</code> and boot it at once — the edit-compile-run loop for cross-development.</td><td><code>atari.py run build/demo.xex</code></td></tr>
+<tr><td><code>type FILE</code> or <code>type -</code></td><td>Paste a text file as keystrokes (~18 characters per second). <code>-</code> reads standard input. The OSD must be closed.</td><td><code>atari.py type listing.bas</code><br><code>cat mygame.bas | atari.py type -</code></td></tr>
+<tr><td><code>kbd</code></td><td>Live remote keyboard: what you type on the PC lands on the Atari. Ctrl-] exits; pressing <kbd>F12</kbd> on the Atari's own keyboard opens the OSD and ends the session.</td><td><code>atari.py kbd</code></td></tr>
+<tr><td><code>eject</code></td><td>Pop the virtual <code>.xex</code> off D1:.</td><td><code>atari.py eject</code></td></tr>
+<tr><td><code>reset [--warm] [--keep]</code></td><td>Eject the virtual <code>.xex</code> and cold boot. <code>--warm</code> = warm start instead; <code>--keep</code> = do not eject first.</td><td><code>atari.py reset</code><br><code>atari.py reset --warm</code></td></tr>
+<tr><td><code>status</code></td><td>One-line telemetry: boot stage, ROM-load result, mounted drives, SIO counters, stack canary (see §13.10).</td><td><code>atari.py status</code></td></tr>
+<tr><td><code>screen</code></td><td>Text dump of the Atari's screen (GRAPHICS 0), read from its own memory.</td><td><code>atari.py screen</code></td></tr>
+<tr><td><code>peek ADDR [LEN]</code></td><td>Hex-dump Atari memory (default 64 bytes).</td><td><code>atari.py peek 0x12 3</code> (the jiffy clock)</td></tr>
+<tr><td><code>poke ADDR B [B…]</code></td><td>Write bytes into Atari memory.</td><td><code>atari.py poke 0x2C8 0x35</code> (pink border)</td></tr>
+<tr><td><code>fwpeek ADDR [LEN]</code></td><td>Hex-dump the <em>firmware's</em> own memory (debugging aid; default 64 bytes).</td><td><code>atari.py fwpeek 0x0 64</code></td></tr>
+<tr><td><code>hdd-install</code></td><td>Install the H: shared-folder handler above MEMLO (see §13.8).</td><td><code>atari.py hdd-install</code></td></tr>
+<tr><td><code>r-install [--force]</code></td><td>Install the R: modem handler above MEMLO, for BobTerm (see §13.9). <code>--force</code> reinstalls even if R: is already present.</td><td><code>atari.py r-install</code></td></tr>
+</tbody></table></div>
+<p><code>kbd</code> drives the terminal in raw mode using Unix terminal calls; on Windows use the desktop app's Live Keys tab instead.</p>
+
+<h2 id="gui">13.4 The desktop app: <code>atari_gui.py</code></h2>
+<pre><code>python3 tools/atari_gui.py</code></pre>
+<ul>
+<li><strong>Connect</strong> (top) — port auto-detected; shows <code>A8OK</code> when the Atari answers.</li>
+<li><strong>Left column</strong> — <em>Send file…</em>, <em>Run .xex…</em> (with a <em>Destination folder</em> field, default <code>PC</code>, with a progress bar), <em>Eject</em>, <em>Warm start</em>, <em>Cold boot</em>, <em>Ping</em>. Text files (<code>.txt</code>/<code>.lst</code>/<code>.bas</code>) sent here are auto-converted to ATASCII line endings. A remotely-run <code>.xex</code> appears on the OSD's D1: line and can be detached from either side.</li>
+<li><strong>Log tab</strong> — live firmware output; <em>Clear</em> / <em>Save…</em>.</li>
+<li><strong>Type tab</strong> — write or load a BASIC listing, then <em>Type it on the Atari</em> (line by line, self-healing across USB hiccups).</li>
+<li><strong>Printer tab</strong> — everything the Atari prints collects here (§13.6): <em>Save as .txt</em>, <em>Save as PDF</em>, <em>Print…</em>, <em>Clear</em>.</li>
+<li><strong>Live Keys tab</strong> — click the box and type straight onto the Atari (Backspace/Esc/Tab/Enter included). Press <kbd>F12</kbd> on the real keyboard to take the machine back; the app detaches cleanly.</li>
+</ul>
+
+<h2 id="typing">13.5 Typing rules</h2>
+<ul>
+<li>Typing reaches the machine only while the OSD menu is <strong>closed</strong> (an open menu eats keystrokes, the same masking rule as the physical keyboard).</li>
+<li>Characters map to the <strong>Atari</strong> keyboard layout.</li>
+<li>Speed is about 18 characters per second. After every RETURN the firmware settles for 250 ms, because BASIC tokenises the line while its keyboard buffer holds only one character; multi-line listings arrive intact.</li>
+<li>Long <code>type</code> sessions can occasionally drop the USB link. The tools self-heal and retry; for big programs prefer the H: + <code>ENTER</code> route in §13.11.</li>
+</ul>
+
+<h2 id="printer">13.6 Printer capture</h2>
+<p>The firmware emulates the <code>P:</code> printer (SIO device <code>$40</code>, 820-style). Anything the Atari prints — <code>LPRINT</code> from BASIC, <code>PRINT #n</code> to <code>P:</code>, <code>LIST "P:"</code>, AtariWriter's print function — arrives on the PC as text. It works on a stock machine with no drivers, because the <code>P:</code> handler lives in the OS ROM.</p>
+<ul>
+<li>With the CLI, printed text shows up as <code>PRN:</code> lines in <code>atari.py log</code>.</li>
+<li>In the desktop app it collects in the <strong>Printer tab</strong>: <em>Save as .txt</em>, <em>Print…</em> to your system printer, or <em>Save as PDF</em> for a period-correct 5×7 dot-matrix rendering (word-processor margins stripped, width auto-fitted to the document).</li>
+</ul>
+
+<h2 id="hdd">13.7 The D4: hard drive (<code>HDD.ATR</code>)</h2>
+<p>A disk image named exactly <code>HDD.ATR</code> in the root of the SD card is auto-mounted on <strong>D4:</strong> at every power-on, with no OSD interaction. It is the natural target for files you exchange with the PC: copy an image to the card with <code>python3 tools/atari.py send mydos_big.atr HDD.ATR</code>, then power-cycle, because the automount runs once at firmware start. <code>status</code> shows the mount and the log says <code>boot: hdd mounted on D4</code>. Formats, DOS pairing (MyDOS recommended) and the fail-safe rules are covered in <a href="06-disks.html">chapter 6, Disks</a>.</p>
+
+<h2 id="h">13.8 The H: shared folder</h2>
+<p>H: is a CIO device (a peer of P:, E: and K:), not a disk, so DOS does not list it and does not need to. Files written to H: land as plain files in <code>/HDD</code> on the SD card's FAT filesystem — the same folder the PC writes into with <code>send … HDD/NAME</code>. It is the bridge for text and data files between the two worlds.</p>
+<p><strong>Install it first, from the PC:</strong></p>
+<pre><code>python3 tools/atari.py hdd-install
+# -> "H: installed at $0900-$0CB2 (above MEMLO), MEMLO raised to $0D00."</code></pre>
+<p>The installer reads MEMLO and places the handler just above it (with a resident DOS booted it simply lands higher), then raises MEMLO past its end. The handler lives in Atari RAM and is <strong>session-scoped</strong>: RESET clears it, so re-run <code>hdd-install</code> to restore it.</p>
+<div class="warn"><strong>Type NEW in BASIC right after installing</strong>BASIC only re-reads the raised MEMLO on <code>NEW</code>; until then its program area still overlaps the handler. Install first, <code>NEW</code>, then <code>ENTER</code> or type your program.</div>
+<p><strong>Use it from BASIC:</strong></p>
+<pre><code>REM --- write ---
+OPEN #1,8,0,"H:NOTES.TXT"
+PRINT #1;"WRITTEN FROM BASIC"
+CLOSE #1
+
+REM --- read back ---
+OPEN #1,4,0,"H:NOTES.TXT"
+DIM A$(40):INPUT #1,A$:PRINT A$
+CLOSE #1
+
+REM --- store/recall a program (plain ATASCII, PC-readable) ---
+LIST "H:PROG.LST"
+ENTER "H:PROG.LST"
+
+REM --- directory with sizes ---
+OPEN #1,6,0,"H:"
+DIM D$(40)
+FOR I=1 TO 999:INPUT #1,D$:PRINT D$:NEXT I
+CLOSE #1
+
+REM --- delete ---
+XIO 33,#1,0,0,"H:NOTES.TXT"</code></pre>
+<p>OPEN modes: <code>4</code> = read, <code>8</code> = write, <code>9</code> = append, <code>6</code> = directory, <code>12</code> = update.</p>
+
+<h2 id="net">13.9 Network (N:) and modem (R:)</h2>
+<h3>N: network device — prototype</h3>
+<p>An N: SIO device, relayed to a network processor running on the PC, exists as a working prototype in the source tree: a real FujiNet weather application has fetched and rendered live data on the bench. It is not yet release-grade under sustained load and is planned for a later release.</p>
+<div class="placeholder">TODO: N: usage instructions for end users (to be confirmed when the feature ships)</div>
+<h3>R: 850 modem for BobTerm — work in progress, opt-in, default OFF</h3>
+<p>BobTerm (and other 850-modem terminal programs) can dial a live telnet BBS through the USB-C cable. The firmware answers the OS cold-start handler poll and serves the real Altirra 850 handler (FujiNet-compatible); <code>tools/atari_net.py --modem</code> is the PC-side modem (Hayes AT commands, telnet).</p>
+<ol>
+<li><strong>Enable it:</strong> OSD → Options → <em>Modem (R:)</em> → ON (persisted by <em>Save changes</em> as <code>modem=1</code>). When OFF (the default) the feature has zero effect on normal use: the firmware stays silent to the OS poll, so a gaming boot is unchanged.</li>
+<li><strong>Obtain the two Altirra binaries.</strong> They are Avery Lee's Altirra work, redistributed by the FujiNet project, and are deliberately <em>not</em> included in this repository. Download them from the FujiNet firmware repository at
+<pre><code>fujinet-firmware/data/webui/device_specific/BUILD_ATARI/850handler.bin
+fujinet-firmware/data/webui/device_specific/BUILD_ATARI/850relocator.bin</code></pre>
+and drop them into <code>tools/fujinet_850/</code>. Expected sizes: handler 1281 bytes, relocator 341 bytes. Check their upstream licence before redistributing them.</li>
+<li><strong>Stage them on the SD card</strong> — the firmware streams them from <code>/PC/850HAND.BIN</code> and <code>/PC/850REL.BIN</code> during the cold-start handler bootstrap (only when the Modem option is ON):
+<pre><code>python3 tools/atari.py send tools/fujinet_850/850handler.bin   PC/850HAND.BIN
+python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</code></pre></li>
+<li>Alternatively, <code>python3 tools/atari.py r-install</code> installs the R: handler into a running session above MEMLO (type <code>NEW</code> in BASIC afterwards; RESET clears it, re-run to restore). Then start <code>atari_net.py --modem</code> on the PC and run BobTerm.</li>
+</ol>
+<div class="note"><strong>Status</strong>Work in progress: some text garbles under fast BBS bursts. Usable for BBS sessions, not yet release-grade under sustained load.</div>
+
+<h2 id="telemetry">13.10 Telemetry and remote debugging</h2>
+<p>The bridge answers everywhere, even at the ROM-failure screen, so a machine that will not boot can be examined and rescued from the PC.</p>
+<ul>
+<li><code>status</code> returns one line starting with <code>ST</code>. Fields: <code>u:</code> firmware uptime in ms; <code>bs:</code> boot stage (0 start, 1 SD ok, 2 options, 3 ROMs tried, 4 running); <code>rom:</code> ROM-load result; <code>x:</code> a virtual <code>.xex</code> is active; <code>m:</code> four digits, one per drive D1:–D4: (1 = mounted); <code>c:</code>/<code>s:</code>/<code>st:</code> last SIO command, sector and status; <code>e:</code> SIO error count; <code>cn:</code> the firmware stack canary; plus <code>hd:</code> and <code>nt:</code> counters for the H: handler and the network device.</li>
+<li><code>screen</code> dumps the 40×24 text screen — "remote eyes" on the READY prompt or your program's output.</li>
+<li><code>peek</code>/<code>poke</code> inspect and modify Atari RAM live (checksummed). Watch the jiffy clock at <code>0x12</code> tick to prove the 6502 is alive; poke <code>0x2C8</code> for a pink border.</li>
+<li><code>log</code> shows boot-stage markers: <code>boot: sd ok</code> → <code>boot: roms 0</code> → <code>boot: running</code> (and <code>boot: hdd mounted on D4</code> when <code>HDD.ATR</code> is present).</li>
+<li><strong>ROM-failure rescue:</strong> if the machine stops at the ROM-failure screen, <code>send</code> the missing ROM files over the cable and press a key on the Atari to retry.</li>
+<li>Reading the answers: a <code>status</code> reply names the stage the firmware is stuck at. Total serial silence means the machine never reached the firmware at all — power-cycle it.</li>
+</ul>
+
+<h2 id="recipes">13.11 Recipes</h2>
+<h3>Paste a short BASIC program</h3>
+<p>Close the OSD, then:</p>
+<pre><code>python3 tools/atari.py type mygame.bas
+# or from a pipe:
+cat mygame.bas | python3 tools/atari.py type -</code></pre>
+<p>On the Atari: <code>RUN</code> (and <code>SAVE "D4:MYGAME.BAS"</code> if a DOS is booted).</p>
+<h3>Load a long program without the typing</h3>
+<p>Push the listing as a file and <code>ENTER</code> it (needs H: installed, so a BASIC session):</p>
+<pre><code>python3 tools/atari.py send --text mygame.lst HDD/MYGAME.LST</code></pre>
+<pre><code>ENTER "H:MYGAME.LST"
+RUN</code></pre>
+<h3>Push-and-run a compiled program</h3>
+<pre><code>python3 tools/atari.py run build/demo.xex     # sends + cold-boots into it</code></pre>
+<p>The program shows up on the OSD's D1: line; <code>atari.py eject</code> removes it.</p>
+<h3>Get a listing from the Atari to the PC</h3>
+<p>There is no file download over the bridge yet, but the Atari can print to the PC:</p>
+<pre><code>LIST "P:"</code></pre>
+<p>It arrives as text in <code>atari.py log</code> or in the desktop app's Printer tab (then <em>Save as .txt</em>).</p>
+<h3>Share data files both ways</h3>
+<ul>
+<li>PC → Atari: <code>python3 tools/atari.py send --text data.txt HDD/DATA.TXT</code>, then <code>OPEN #1,4,0,"H:DATA.TXT"</code> on the Atari.</li>
+<li>Atari → PC: write to H: from BASIC (<code>OPEN #1,8,0,"H:OUT.TXT"</code> …). The file is now <code>/HDD/OUT.TXT</code> on the SD card; the PC reads it directly the next time it can read the card. (A bridge <code>get</code> command is planned.)</li>
+</ul>
+<h3>Remote debugging</h3>
+<pre><code>python3 tools/atari.py status                 # boot stage, mounts, SIO health
+python3 tools/atari.py screen                 # what's on the Atari screen now
+python3 tools/atari.py peek 0x12 3            # jiffy clock (is it alive?)
+python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink</code></pre>
+
+<h2 id="limits">13.12 Limitations</h2>
+<ul>
+<li><strong>H: is session-scoped:</strong> RESET clears it; re-run <code>hdd-install</code>. It installs above MEMLO and coexists with a resident DOS, but BASIC only picks up the raised MEMLO on <code>NEW</code>.</li>
+<li><strong>No file download from the SD card over the bridge yet.</strong> Atari → PC text goes via the printer path (<code>LIST "P:"</code> / <code>LPRINT</code>); a <code>get</code> command is planned.</li>
+<li><strong>The <code>HDD.ATR</code> automount runs once at firmware start.</strong> After you <code>send</code> a new one, power-cycle the board.</li>
+<li><strong><code>type</code> needs the OSD closed.</strong></li>
+<li><strong>Long <code>type</code> sessions</strong> can occasionally drop the USB link; the tools self-heal and retry, but the H: + <code>ENTER</code> route avoids it for big programs.</li>
+<li><strong>Known issue:</strong> <kbd>F12</kbd> can be unresponsive while a PC serial session is engaged; the S2 button still opens the OSD (see <a href="15-known-issues.html">chapter 15</a>).</li>
+</ul>
+
+<h2 id="recovery">13.13 If the bridge stops answering</h2>
+<div class="tip"><strong>Recovery</strong>If the bridge chip stops answering after a USB storm (for example a very long typing session), unplug the board's USB cable, wait ten seconds, and plug it back in. The Atari side is unaffected.</div>
+
+<footer class="pn"><a href="12-ram.html">← Previous: 12. RAM expansion</a><a href="14-troubleshooting.html">Next: 14. Troubleshooting →</a></footer>
+</main></div></body></html>
