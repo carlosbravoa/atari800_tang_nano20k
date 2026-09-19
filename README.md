@@ -34,7 +34,7 @@ The absolute essentials — everything below this section is detail.
    (no keyboard needed). To boot a disk: OSD → *D1:* → *Attach disk* → pick → *Hard Reset*.
    To run a cartridge: OSD → *Cart:* → *Attach cartridge* → pick (boots immediately).
 
-That's a working machine. For a keyboard, the simplest is a **CH9350 USB-host board, one wire to
+That's a working machine. For a keyboard, the simplest is a **CH9350 USB-host board, three wires (5V, GND, data) with the data line to
 Pin 53** (see [Keyboard](#keyboard-input)) — with the optional **arrow-keys-as-joystick** mode,
 the keyboard alone covers everything.
 
@@ -55,7 +55,7 @@ the keyboard alone covers everything.
 - **On-chip SDRAM** — GW2AR-18 embedded 64 Mbit, custom controller
 - **SD card ROM loader** — reads `ATARIXL.ROM` (16 KB) and `BASIC.ROM` (8 KB) at boot
 - **On-Screen Display (OSD)** — file browser (24 entries/page), disk mount/unmount, options menu; driven by **keyboard and/or DB9 joystick**, toggled with the onboard **S2** button (or **F12**). The Atari keeps **running live behind the menu** (inputs are masked while it's open). **New look in v3.0:** the menu sits on a dimmed panel over the live picture, with title/footer bars and a full-width selection bar, so it stays readable over any game
-- **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (one wire to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F11 = arrows/joystick toggle**, **F12 = OSD menu**
+- **UART / serial keyboard** — raw USB HID reports over serial frames from a CH9350 USB-host board or Raspberry Pi Pico (5V, GND and its TX to Pin 53, no resistors); decoded in hardware, both CH9350 frame variants supported. **F9 = soft reset**, **F11 = arrows/joystick toggle**, **F12 = OSD menu**
 - **2 × Atari/Commodore DB9 joysticks** — active-low; wired to GPIO **pins** on the 2.54 mm headers (no DB9 connectors on the board — see [wiring](#atari-db9-joystick))
 - **Arrow keys as joystick** — optional OSD toggle: arrow keys drive Joystick 1, **Left-Alt = fire** (for keyboard play; persists in `atari.ini`)
 - **SIO disk emulation, four drives** (v2.8) — mount `.atr` and raw `.xfd` images as **D1:–D4:** from the SD card (D1:/D2: in the OSD; D3:/D4: serve automounts and the PC link); live mount/swap while the machine runs
@@ -151,7 +151,7 @@ the keyboard alone covers everything.
 | Sipeed Tang Nano 20K | GW2AR-LV18 FPGA |
 | MicroSD / TF card | FAT32, ≤ 32 GB |
 | HDMI cable + monitor | Any HDMI 1.3+ monitor |
-| Keyboard (recommended) | CH9350 USB-host board or a Raspberry Pi Pico → 1 wire to **Pin 53** (see [Keyboard](#keyboard-input)) |
+| Keyboard (recommended) | CH9350 USB-host board or a Raspberry Pi Pico → 5V, GND + its TX to **Pin 53** (see [Keyboard](#keyboard-input)) |
 | DB9 joystick | Standard Atari/Commodore DB9, **wired to GPIO pins** (no DB9 connector on the board — see [wiring](#atari-db9-joystick)). Enough on its own to drive the OSD. |
 | Dupont jumper wires | To wire the joystick / keyboard to the GPIO header |
 
@@ -196,7 +196,7 @@ Get to a BASIC prompt in a few minutes:
 4. **Power on** — the Atari **auto-boots to BASIC** (no menu shown).
 5. **Open the OSD** with the onboard **S2** button (or **F12** on a keyboard).
    - Navigate with a **DB9 joystick on port 1** (up/down + fire) *or* a keyboard — either works on its own.
-   - For typing/games, attach a **UART/CH9350 keyboard** (one wire to Pin 53 — see [Keyboard](#keyboard-input)).
+   - For typing/games, attach a **UART/CH9350 keyboard** (5V, GND and TX to Pin 53 — see [Keyboard](#keyboard-input)).
 
 **To boot a disk:** open the OSD → **1) D1:** → **Attach disk...** → pick your `.atr` → **7) Hard Reset**.
 **To run a cartridge:** open the OSD → **3) Cart:** → **Attach cartridge...** → pick — it boots immediately.
@@ -361,7 +361,7 @@ This allows booting games and mounting disks completely without any keyboard att
 
 ## Keyboard Input
 
-For typing or keyboard-controlled games: a **CH9350 / Pi Pico UART board** — one wire, no
+For typing or keyboard-controlled games: a **CH9350 / Pi Pico UART board** — three wires (5V, GND, data), no
 resistors, decoded in hardware. (A DB9 joystick alone already drives the whole OSD, so a
 keyboard is optional for browsing/mounting disks.)
 
