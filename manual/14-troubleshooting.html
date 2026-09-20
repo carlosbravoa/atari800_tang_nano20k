@@ -57,6 +57,7 @@
 <li>If the on-screen menu appears by itself at power-on, that is the symptom of a failed ROM load — not normal behaviour.</li>
 </ol>
 <p><strong>Remote rescue via the PC Link:</strong> the serial bridge answers even at the ROM-error screen. With the board on the USB-C cable, <code>python3 tools/atari.py status</code> names the boot stage and <code>atari.py log</code> shows the stage markers (<code>boot: sd ok</code> → <code>boot: roms 0</code> → <code>boot: running</code>). You can <code>send</code> the missing ROM files over the cable and press a key to retry. Total serial silence means the machine never reached the firmware at all — power-cycle it. See <a href="13-pc-link.html">PC Link</a>.</p>
+<figure><img src="img/screen_no_sd.png" alt="The ROM load error screen as shown with no card inserted: filesystem error 3, Failed to open root: 3, and the volume fields at zero"><figcaption>The same screen with no card at all, or a card the firmware cannot read: filesystem error 3 ("not ready") and "Failed to open root" with every volume field at zero. A card that is present but formatted wrongly (not FAT32) looks like this too. Insert or reformat the card, then press any key.</figcaption></figure>
 
 <h2>The machine comes up dead after a reset (v3.2 and later: self-healing)</h2>
 <p><strong>Symptom:</strong> after a power-on, Hard Reset, Boot OS/BASIC, cartridge attach or F9, the screen stays black or stale and the keyboard is dead, while the OSD and the PC Link still answer.</p>
