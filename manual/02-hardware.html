@@ -41,7 +41,7 @@
 <tr><td>DB9 joystick(s)</td><td>Standard Atari/Commodore digital joystick, wired to header pins (the board has no DB9 connector). One stick on port 1 is enough to drive the OSD.</td></tr>
 <tr><td>Dupont jumper wires</td><td>To wire the joystick and keyboard to the GPIO header</td></tr>
 </table></div>
-<p>The pin numbers are printed on the underside of the Tang Nano 20K next to each header pin (visible in the wiring photo above); the buttons and LEDs are labelled on the top side, S1 and S2 at the USB-C end.</p>
+<figure><img src="img/pinout_marked.png" alt="Sipeed's Tang Nano 20K pinout drawing with this project's pins highlighted: Joystick 1 on 27, 28, 25, 26, 29 (left header), Joystick 2 on 42, 41, 56, 54, 48 (right header), the keyboard input on 53, and the 5V and GND pins at the top right"><figcaption>Sipeed's official pinout with this project's pins marked. <span style="color:#1e5adc">Blue</span>: Joystick 1 (27 Up, 28 Down, 25 Left, 26 Right, 29 Fire). <span style="color:#14963c">Green</span>: Joystick 2 (42 Up, 41 Down, 56 Left, 54 Right, 48 Fire). <span style="color:#f08214">Orange</span>: keyboard input, pin 53 (the CH9350's TX). <span style="color:#dc1e1e">Red</span>: 5V and GND for the keyboard host. The numbers are also printed on the board's underside next to each pin. Drawing © Sipeed.</figcaption></figure>
 
 <h2>The board</h2>
 <p>The Tang Nano 20K provides everything except the input connectors on board:</p>
