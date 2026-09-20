@@ -91,7 +91,7 @@ class LinkPeer:
     # ── firmware feedback (PC -> FW) ─────────────────────────────────────────
     def set_state(self, st):
         self.state = st
-        self.w(bytes([0x0C]))
+        self.w(b"\xa8"); time.sleep(0.05); self.w(bytes([0x0C, 0x0C ^ 0xFF]))   # framed (v3.2.1)
         time.sleep(0.05)
         self.w(bytes([st]))
         self.expect(b"+", "state")
@@ -101,7 +101,7 @@ class LinkPeer:
         self.pending += data
         while self.pending and self.fw_free > 0:
             chunk = self.pending[:min(128, self.fw_free)]
-            self.w(bytes([0x0B]))
+            self.w(b"\xa8"); time.sleep(0.05); self.w(bytes([0x0B, 0x0B ^ 0xFF]))   # framed (v3.2.1)
             time.sleep(0.05)
             self.w(len(chunk).to_bytes(2, "little") + chunk)
             r = self.expect(b"+\x15", "feed hdr")      # \x15 = NAK (ring full)

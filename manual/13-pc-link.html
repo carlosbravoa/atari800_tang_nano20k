@@ -199,6 +199,7 @@ python3 tools/atari.py peek 0x12 3            # jiffy clock (is it alive?)
 python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink</code></pre>
 
 <h2 id="limits">13.12 Limitations</h2>
+<div class="note"><strong>Use the tools that came with your firmware version</strong>Since v3.2.1 the bridge only accepts framed commands (a sync byte, the command, and a check byte), so stray bytes on the USB link can no longer trigger a reset or a memory write. The <code>tools/</code> folder of the same release always matches; an older <code>atari.py</code> against a newer firmware simply gets no answer.</div>
 <ul>
 <li><strong>H: is session-scoped:</strong> RESET clears it; re-run <code>hdd-install</code>. It installs above MEMLO and coexists with a resident DOS, but BASIC only picks up the raised MEMLO on <code>NEW</code>.</li>
 <li><strong>No file download from the SD card over the bridge yet.</strong> Atari → PC text goes via the printer path (<code>LIST "P:"</code> / <code>LPRINT</code>); a <code>get</code> command is planned.</li>

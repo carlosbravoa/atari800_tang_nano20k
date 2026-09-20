@@ -50,12 +50,27 @@ class MockFirmware:
 
     def _consume(self):
         while self.cmd:
+            # Framing (firmware >= v3.2.1): 0xA8, cmd, ~cmd. Anything else is dropped,
+            # a bad check byte drops the header — mirrors bridge_poll(). Once a header is
+            # accepted the command byte waits for its payload without re-checking.
+            if not getattr(self, 'in_cmd', False):
+                if self.cmd[0] != 0xA8:
+                    self.cmd = self.cmd[1:]
+                    continue
+                if len(self.cmd) < 3:
+                    return
+                if (self.cmd[1] ^ 0xFF) != self.cmd[2]:
+                    self.cmd = self.cmd[3:]
+                    continue
+                self.cmd = bytes([self.cmd[1]]) + self.cmd[3:]   # cmd byte at [0], check dropped
+                self.in_cmd = True
             op = self.cmd[0]
             if op == 0x0C:
                 if len(self.cmd) < 2:
                     return
                 self.state = self.cmd[1]
                 self.cmd = self.cmd[2:]
+                self.in_cmd = False
                 self.to_pc += b"+"
             elif op == 0x0B:
                 if len(self.cmd) < 3:
@@ -65,15 +80,15 @@ class MockFirmware:
                     return
                 free = 511 - len(self.ring)
                 if ln > free:
-                    self.cmd = self.cmd[3 + ln:]
+                    self.cmd = self.cmd[3 + ln:]; self.in_cmd = False
                     self.to_pc += b"\x15"          # NAK (ring full) — was '-'
                     continue
                 self.to_pc += b"+"
                 self.ring += self.cmd[3:3 + ln]
-                self.cmd = self.cmd[3 + ln:]
+                self.cmd = self.cmd[3 + ln:]; self.in_cmd = False
                 self.to_pc += b"K" + bytes([min(255, 511 - len(self.ring))])
             else:
-                self.cmd = self.cmd[1:]
+                self.cmd = self.cmd[1:]; self.in_cmd = False
 
     def emit_event(self, ev, payload=b""):
         ln = len(payload)

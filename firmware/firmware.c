@@ -3148,6 +3148,15 @@ static void bridge_poll(void) {
     if (!(v & 0x100)) return;
     busy = 1;
     reg_blrx = 0;                    // ack (clears valid + overrun)
+    // Framing (v3.2.1): every command is 0xA8, cmd, ~cmd. Stray bytes on the link (a
+    // resetting BL616, line noise) used to execute as commands — 0x03 = cold boot, 0x07 =
+    // type, 0x0A = poke. The PC sends 0xA8, the dispatch beat, then cmd+check together.
+    if ((v & 0xFF) != 0xA8) { busy = 0; return; }
+    {
+        int c = blrx_getc(100), k = blrx_getc(100);
+        if (c < 0 || k < 0 || (uint8_t)(c ^ 0xFF) != (uint8_t)k) { busy = 0; return; }
+        v = (uint32_t)c;
+    }
     switch (v & 0xFF) {
     case 0x05: uart_printf("A8OK\n"); break;
     case 0x01: bridge_cmd_put(); break;

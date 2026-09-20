@@ -176,15 +176,17 @@ class AtariLink:
         raise LinkError(f"{what}: timeout (skipped {skipped!r})")
 
     def _cmd(self, byte):
-        """Command byte, then the dispatch beat (firmware main-loop latency)."""
+        """Framed command (firmware >= v3.2.1): sync 0xA8, the dispatch beat (firmware
+        main-loop latency, 1-byte RX register), then cmd + complement check together —
+        the firmware is in its tight header read by then."""
         self.ser.reset_input_buffer()
-        self.ser.write(bytes([byte]))
+        self.ser.write(b"\xa8")
         time.sleep(0.05)
+        self.ser.write(bytes([byte, byte ^ 0xFF]))
 
     # ── commands ────────────────────────────────────────────────────────────
     def ping(self, timeout=2):
-        self.ser.reset_input_buffer()
-        self.ser.write(b"\x05")
+        self._cmd(0x05)
         deadline = time.time() + timeout
         buf = b""
         while time.time() < deadline:
@@ -228,7 +230,7 @@ class AtariLink:
         if not keep:
             self.eject()
             time.sleep(0.05)
-        self.ser.write(b"\x04" if warm else b"\x03")
+        self._cmd(0x04 if warm else 0x03)
         self._expect(b"+", "reset")
 
     def key(self, hid, mod=0, hold_ms=100):
@@ -299,7 +301,7 @@ class AtariLink:
     def status(self, timeout=3):
         """One parseable status line from the firmware (0x08)."""
         self.ser.reset_input_buffer()
-        self.ser.write(b"\x08")
+        self._cmd(0x08)
         deadline = time.time() + timeout
         buf = b""
         while time.time() < deadline:
