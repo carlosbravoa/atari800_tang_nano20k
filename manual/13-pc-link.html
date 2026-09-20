@@ -141,7 +141,7 @@ XIO 33,#1,0,0,"H:NOTES.TXT"</code></pre>
 <h2 id="net">13.9 Network (N:) and modem (R:)</h2>
 <h3>N: network device — prototype</h3>
 <p>An N: SIO device, relayed to a network processor running on the PC, exists as a working prototype in the source tree: a real FujiNet weather application has fetched and rendered live data on the bench. It is not yet release-grade under sustained load and is planned for a later release.</p>
-<div class="placeholder">TODO: N: usage instructions for end users (to be confirmed when the feature ships)</div>
+<p>N: is still a prototype and has no end-user procedure yet. What has been demonstrated on the bench, with <code>atari_net.py</code> on the PC acting as the network processor: a FujiNet weather application fetching and rendering live data, a news reader pulling live headlines, and BBS sessions with BobTerm over the R: modem path. When it ships, this section will carry the setup steps.</p>
 <h3>R: 850 modem for BobTerm — work in progress, opt-in, default OFF</h3>
 <p>BobTerm (and other 850-modem terminal programs) can dial a live telnet BBS through the USB-C cable. The firmware answers the OS cold-start handler poll and serves the real Altirra 850 handler (FujiNet-compatible); <code>tools/atari_net.py --modem</code> is the PC-side modem (Hayes AT commands, telnet).</p>
 <ol>

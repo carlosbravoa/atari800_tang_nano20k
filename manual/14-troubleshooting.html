@@ -97,7 +97,7 @@
 <p><strong>Symptom:</strong> the picture drops out for a moment (the monitor loses sync) and then returns; the sound and the game keep going.</p>
 <p><strong>Likely cause:</strong> the same cold-start HDMI drop described above — the output may briefly drop and recover while the machine keeps running. It is not a crash: the Atari itself was never interrupted.</p>
 <p><strong>What to do:</strong> nothing is lost; wait for the picture to return. If it recurs, power-cycle the board so the outputs start fresh.</p>
-<div class="placeholder">TODO: whether anything beyond a power cycle reduces the frequency of mid-session drops (to be confirmed)</div>
+<p>In practice this has only been seen on development builds with timing problems that were fixed before release; it has not been observed in normal use on a released build. If it ever happens, a power cycle is the only remedy. Whether temperature plays a role is unknown; if you see it, note the ambient conditions when you report it.</p>
 
 <h2>The PC Link does not answer</h2>
 <p><strong>Symptom:</strong> <code>atari.py ping</code> does not return <code>A8OK</code>; the desktop app cannot connect; no serial port appears.</p>

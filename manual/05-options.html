@@ -92,7 +92,7 @@
 <tr><th>ini key</th><td><code>modem=0</code> / <code>modem=1</code></td></tr>
 </table></div>
 <p>Opt-in support for the <strong>R:</strong> serial device (850-style modem) over the USB-C cable, so a terminal program such as BobTerm can dial a telnet BBS through the PC. When OFF (the default) it has no effect on normal use. This feature is a work in progress; see <a href="13-pc-link.html">PC Link</a> and <a href="15-known-issues.html">Known issues</a>.</p>
-<div class="placeholder">TODO: the Modem option needs the two Altirra 850 handler <code>.bin</code> files on the SD card (see <code>tools/fujinet_850/README.md</code> in the repository) — exact file names and location to be confirmed</div>
+<p>The Modem option needs two files on the SD card that this project does not ship: the Altirra 850 handler and its relocator (Avery Lee's work, redistributed by the FujiNet project). Download <code>850handler.bin</code> (1281 bytes) and <code>850relocator.bin</code> (341 bytes) from the FujiNet firmware repository (<code>data/webui/device_specific/BUILD_ATARI/</code>) and place them on the card as <code>/PC/850HAND.BIN</code> and <code>/PC/850REL.BIN</code>, for example with <code>atari.py send 850handler.bin PC/850HAND.BIN</code>. The firmware serves them to the Atari at cold start when Modem is ON.</p>
 
 <h2>Keyboard</h2>
 <div class="tbl"><table>
