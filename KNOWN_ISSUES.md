@@ -52,6 +52,16 @@ hardware-verified 2026-07-04: Ninja Commando's title marquee now scrolls smoothl
 Only display lists using mode 8 *with* horizontal scrolling are affected by the change;
 all other modes are bit-identical. (Current MiSTer still has this bug.)
 
+## Tiger Attack freezes during play — core-side, under investigation (2026-09-20)
+
+The PAL explanation below does **not** hold for Tiger Attack: the identical disk runs on an
+NTSC-configured Altirra. Autopsy of a freeze over the PC Link (RAM image archived): the game's
+deferred vertical-blank handler was found nested nine frames deep on the 6502 stack (one entry
+at $8A6E, exits at $8AC3/$8CFF/$9DD5), then the CPU halted. On this machine the handler takes
+longer than a frame, or receives more interrupts, than on a real NTSC Atari — a timing
+deviation in the core, not the game. Next step is the full-core simulator (the tool that found
+the ANTIC fine-scroll bug) to time that handler cycle by cycle.
+
 ## Some PAL vertical-scrolling games glitch (this is an NTSC-only machine)
 
 A few demanding titles show garbled sprites, a jumpy/jittery image, or freezes **during
