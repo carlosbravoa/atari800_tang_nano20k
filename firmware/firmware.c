@@ -1076,7 +1076,7 @@ int menu_loadrom(int *choice, int carts, int slot) {
                 int r = joy_choice(TOPLINE, file_len, &active);
                 int j1, j2;
                 joy_get(&j1, &j2);
-                if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
+                if ((j1 & 0x200) || (j1 & 0x8) || (j1 & 0x2)) {  // S2 button, F12 or Esc
                     delay(300);
                     return 1; // Return to main menu
                 }
@@ -2477,7 +2477,7 @@ int menu_drive(int slot, char *cur_name, int *sel_idx) {
             }
             int j1, j2;
             joy_get(&j1, &j2);
-            if ((j1 & 0x200) || (j1 & 0x8)) { delay(300); return 0; }
+            if ((j1 & 0x200) || (j1 & 0x8) || (j1 & 0x2)) { delay(300); return 0; }   // S2, F12 or Esc
         }
     }
 }
@@ -2523,7 +2523,7 @@ int menu_cartridge(char *cur_name, int *sel_idx) {
             }
             int j1, j2;
             joy_get(&j1, &j2);
-            if ((j1 & 0x200) || (j1 & 0x8)) { delay(300); return 0; }
+            if ((j1 & 0x200) || (j1 & 0x8) || (j1 & 0x2)) { delay(300); return 0; }   // S2, F12 or Esc
         }
     }
 }
@@ -2666,7 +2666,7 @@ void menu_options() {
             }
             int j1, j2;
             joy_get(&j1, &j2);
-            if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
+            if ((j1 & 0x200) || (j1 & 0x8) || (j1 & 0x2)) {  // S2 button, F12 or Esc
                 delay(300);
                 return; // Return to main menu
             }
@@ -3322,7 +3322,7 @@ int main() {
             cursor(2, 11);
             print("8) Options\n");
             cursor(2, 12);
-            print("9) Return to Atari (F12)\n");
+            print("9) Return to Atari (Esc/F12)\n");
 
             // SIO triage line (uart_tx is unwired on HW — this is the only way to
             // see which branch failed): last device+cmd+sector, last status, err
@@ -3336,7 +3336,7 @@ int main() {
             if (stack_canary_dead())
                 print("!");   // stack hit bottom = bss corruption likely
 
-            bar_row(26, "Up/Down move  Enter select  F12", 0);
+            bar_row(26, "Up/Down move Enter select Esc", 0);
 
             delay(300);
 
@@ -3349,7 +3349,11 @@ int main() {
                 if (r == 1) break;
                 int j1, j2;
                 joy_get(&j1, &j2);
-                if ((j1 & 0x200) || (j1 & 0x8)) {  // S2 button or F12
+                if ((j1 & 0x200) || (j1 & 0x8) || (j1 & 0x2)) {  // S2 button, F12 or Esc
+                    // Esc closes the OSD too (QoL, v3.1.1). Inputs unmask the moment the
+                    // overlay drops, so wait for the key to be released first — otherwise
+                    // the Atari would receive the Escape that dismissed the menu.
+                    while (j1 & 0x2) { sio_poll(); joy_get(&j1, &j2); }
                     booted = true;
                     overlay(0);
                     delay(300);

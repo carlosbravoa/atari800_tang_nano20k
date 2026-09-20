@@ -30,7 +30,7 @@
 <p class="lead">The on-screen display (OSD) is where you attach disks and cartridges, reboot the machine and change options — all while the Atari keeps running behind it.</p>
 
 <h2>Opening and closing the menu</h2>
-<p>The Atari boots first, with no menu shown. To open the OSD, press <kbd>F12</kbd> on the keyboard or the onboard <strong>S2</strong> button (the rightmost button on the Tang Nano). Either one opens <em>and</em> closes the menu, from any screen inside it. The last main-menu item, <strong>9) Return to Atari (F12)</strong>, also closes it.</p>
+<p>The Atari boots first, with no menu shown. To open the OSD, press <kbd>F12</kbd> on the keyboard or the onboard <strong>S2</strong> button (the rightmost button on the Tang Nano). Either one opens <em>and</em> closes the menu, from any screen inside it. <kbd>Esc</kbd> (v3.1.1) closes it too: from a submenu it steps back to the main menu, from the main menu it closes the OSD, and with the OSD closed it remains the Atari's Escape key. The last main-menu item, <strong>9) Return to Atari (Esc/F12)</strong>, also closes it.</p>
 <div class="note"><strong>The Atari keeps running behind the menu</strong>While the OSD is open the machine is not paused: you will hear a game continue, and a disk load in progress carries on. Keyboard and joystick input is masked from the Atari while the menu is open, so moving around the menu does not play the game.</div>
 <div class="warn"><strong>If the menu appears by itself at power-on</strong>That is not normal. It means the machine did not auto-boot — usually because the OS or BASIC ROM could not be loaded from the SD card. See <a href="14-troubleshooting.html">Troubleshooting</a>.</div>
 
@@ -42,7 +42,7 @@
 <tr><td>Select the highlighted item</td><td><kbd>Enter</kbd></td><td>Fire</td></tr>
 <tr><td>Previous / next page (file browser)</td><td><kbd>←</kbd> <kbd>→</kbd></td><td>Stick left / right</td></tr>
 <tr><td>Change a left/right value (Options)</td><td><kbd>←</kbd> <kbd>→</kbd></td><td>Stick left / right</td></tr>
-<tr><td>Open / close the OSD</td><td><kbd>F12</kbd></td><td>S2 button on the board</td></tr>
+<tr><td>Open / close the OSD</td><td><kbd>F12</kbd>; close also with <kbd>Esc</kbd></td><td>S2 button on the board</td></tr>
 </table></div>
 <p>Every submenu has a <strong>&lt;&lt; Back</strong> entry, and the file browser has <strong>..</strong> (or <strong>&lt;&lt; Back</strong> at the top level). This is enough to boot games and mount disks with no keyboard attached at all.</p>
 
@@ -58,8 +58,8 @@
  6) Soft Reset
  7) Hard Reset
  8) Options
- 9) Return to Atari (F12)
-<span class="bar"> Up/Down move  Enter select  F12 </span></div>
+ 9) Return to Atari (Esc/F12)
+<span class="bar"> Up/Down move Enter select Esc </span></div>
 <div class="tbl"><table>
 <tr><th>Item</th><th>What it does</th></tr>
 <tr><td><strong>1) D1:</strong> / <strong>2) D2:</strong></td><td>Show what is attached to disk drive 1 and 2 (<code>None</code> when empty; a read-only image is marked <code>(RO)</code>). Selecting one opens the <a href="#drive">drive menu</a>.</td></tr>
@@ -69,7 +69,7 @@
 <tr><td><strong>6) Soft Reset</strong></td><td>A warm start — the same thing the RESET key does on a real Atari. <kbd>F9</kbd> does this from inside a game without opening the menu.</td></tr>
 <tr><td><strong>7) Hard Reset</strong></td><td>A cold start: the machine restarts as if powered off and on, and the emulated cartridge is power-cycled too (see below). Also applies a changed RAM size.</td></tr>
 <tr><td><strong>8) Options</strong></td><td>Opens the <a href="05-options.html">Options</a> screen.</td></tr>
-<tr><td><strong>9) Return to Atari (F12)</strong></td><td>Closes the menu. <kbd>F12</kbd> and S2 do the same from anywhere.</td></tr>
+<tr><td><strong>9) Return to Atari (Esc/F12)</strong></td><td>Closes the menu. <kbd>Esc</kbd>, <kbd>F12</kbd> and S2 do the same from anywhere (Esc goes back one level first when you are in a submenu).</td></tr>
 </table></div>
 
 <h3>Boot OS vs Boot BASIC — with a cartridge attached</h3>
