@@ -68,9 +68,8 @@
 <li><code>ATARIXL.ROM</code> (16384 bytes) and <code>BASIC.ROM</code> (8192 bytes) are in the <strong>root</strong> directory.</li>
 </ul>
 <p>Fix the card, reinsert it and press <strong>S1</strong> (hardware reset) or power-cycle the board. With the <a href="13-pc-link.html">PC Link</a> you can also rescue it without touching the card: the bridge answers at the ROM-error screen, so you can <code>send</code> the missing ROMs over the cable and press a key to retry.</p>
-<div class="placeholder">TODO: exact wording of the ROM-error screen and which key retries (to be confirmed)</div>
 <figure><img src="img/screen_ready.png" alt="The BASIC READY prompt after a healthy boot"><figcaption>A healthy boot ends here: the BASIC READY prompt, LED3 solid, LED5 blinking.</figcaption></figure>
-<div class="placeholder">Photo: the ROM-error screen (to be supplied)</div>
+<figure><img src="img/screen_rom_error.png" alt="The ROM load error screen: title, OS/BASIC.ROM loading failed, an error code with its decoding, the root directory listing of the card, Please check your SD card files, Press any key to retry"><figcaption>The ROM load error screen (here: ATARIXL.ROM missing, code 0x0109 = operation 1 "open OS", filesystem error 9 "no file"). It lists the card's root directory so you can see what the firmware sees. Any key on the keyboard or the joystick retries; the PC Link can also send the missing files and retry remotely.</figcaption></figure>
 
 <h2>4. Boot a disk in 60 seconds</h2>
 <ol>
