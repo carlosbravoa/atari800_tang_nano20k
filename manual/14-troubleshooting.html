@@ -103,6 +103,7 @@
 <li>The board shows up as a <strong>pair</strong> of serial ports; the <strong>second</strong> one is the bridge. The tools auto-pick it.</li>
 <li>Only one session can hold the port: close <code>log</code>, <code>kbd</code> or the desktop app before starting another tool, and close them all before using the Gowin programmer.</li>
 <li>If the bridge chip stops answering after a burst of USB traffic, <strong>unplug the board's USB cable for ten seconds</strong> and plug it back in.</li>
+<li>If the port keeps appearing and disappearing (on Linux, <code>journalctl -k</code> shows <code>USB disconnect</code> lines every second), the USB link is marginal: <strong>try another data-capable USB-C cable</strong>, and unplug the keyboard from its adapter to see whether the current draw is what tips it over. The board, its keyboard adapter and the bridge chip all draw from the same laptop port. A bad cable produced exactly this while the Atari itself kept running normally.</li>
 <li>Complete serial silence, including no reply to <code>status</code>, means the machine never reached the firmware — power-cycle the board.</li>
 </ol>
 <p>See <a href="13-pc-link.html">PC Link</a>.</p>
