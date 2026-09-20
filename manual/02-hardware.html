@@ -60,7 +60,7 @@
 GND            ─────────────────►  GND  (any GND pin)
 5V/VCC         ─────────────────►  5V   (powers the module)
 UART TX        ─────────────────►  Pin 53 (IOR38B)</code></pre>
-<div class="placeholder">Photo: CH9350 module wired to the board — GND, 5V and TXD → pin 53 (to be supplied)</div>
+<figure><img src="img/build_case.jpg" alt="A complete build in a 3D-printed case: the Tang Nano 20K on top with the micro-SD card, the CH9350 USB-host board below it with its USB-A socket on the side, and two DB9 joystick sockets at the front, all wired to the header pins"><figcaption>CH9350 wiring in a finished build (GND, 5V and TXD to pin 53 run from the module in the middle up to the header). A complete build in a 3D-printed case: Tang Nano 20K (top, micro-SD in its slot), CH9350 USB keyboard host (middle, DIP switches visible, USB-A socket on the left side), two DB9 joystick sockets (bottom). Not pretty inside, but one box with a keyboard port and two joystick ports is a machine.</figcaption></figure>
 <h3>Option A: CH9350 module</h3>
 <p>The CH9350 is a plug-and-play USB-host-to-UART converter.</p>
 <ol>
@@ -102,7 +102,7 @@ The frame goes out on the Pico's UART TX pin at <strong>115200 baud</strong>.</l
 <tr><td>7</td><td>+5 V</td><td>not connected</td><td>not connected</td></tr>
 </table></div>
 <p>Joystick 1 sits on the left header and Joystick 2 on the right header, each as a block of consecutive pins.</p>
-<div class="placeholder">Photo: a DB9 socket wired to the header — the five signal wires and GND for Joystick 1 (to be supplied)</div>
+<p>The two DB9 sockets in the build photo above are wired exactly as the table: five signal wires plus GND each, to the header pins.</p>
 <div class="warn"><strong>Never wire to these pins</strong>
 <ul>
 <li><strong>Pins 69–76 and 79</strong> — they belong to the on-board BL616 MCU (UART/HSPI and the WS2812 LED). The BL616 is always on and drives them, which produces phantom joystick input.</li>

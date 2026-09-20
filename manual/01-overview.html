@@ -28,6 +28,7 @@
 <main>
 <h1>1. Overview</h1>
 <p class="lead">Tang Atari 800 turns a Sipeed Tang Nano 20K board into a complete Atari 800XL/130XE-class computer with HDMI output, SD-card disks and cartridges, and a PC link over the USB-C cable.</p>
+<figure><img src="img/build_case.jpg" alt="A complete build in a 3D-printed case: the Tang Nano 20K on top with the micro-SD card, the CH9350 USB-host board below it with its USB-A socket on the side, and two DB9 joystick sockets at the front, all wired to the header pins"><figcaption>A complete build in a 3D-printed case: Tang Nano 20K (top, micro-SD in its slot), CH9350 USB keyboard host (middle, DIP switches visible, USB-A socket on the left side), two DB9 joystick sockets (bottom). Not pretty inside, but one box with a keyboard port and two joystick ports is a machine.</figcaption></figure>
 
 <h2>What the machine is</h2>
 <p>The board runs an FPGA implementation of the Atari 8-bit computers — the 800, 800XL, 65XE and 130XE family. The custom chips are all emulated in hardware: the <strong>6502</strong> CPU, <strong>ANTIC</strong> (display list processor), <strong>GTIA</strong> (colour and player/missile graphics), <strong>POKEY</strong> (sound, keyboard, serial I/O) and <strong>PIA</strong> (joystick ports and memory banking). The core is the Atari800_MiSTer core by Mark Watson, adapted to the Gowin FPGA on the Tang Nano 20K.</p>
