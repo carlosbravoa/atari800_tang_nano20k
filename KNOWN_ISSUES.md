@@ -1,5 +1,17 @@
 # Known issues
 
+## FIXED (v3.2): about one reset in fifteen left the machine dead (cold-boot / reset lottery)
+
+Any reset path (power-on, Hard Reset, Boot OS/BASIC, cartridge attach, F9/Soft, PC Link
+reset) occasionally released the 6502 into a stall: black or stale screen, no keyboard, jiffy
+clock frozen, firmware still answering. Measured over 90 mixed resets in v3.1.2: 2–3 stalls per
+30. Root cause: the core's asynchronous reset was released straight from a register in the
+firmware's 27 MHz clock domain, so the release landed at an arbitrary point of a core clock
+cycle. v3.2 releases it synchronously in the core clock (two flops): 90 mixed resets, zero
+stalls. As a safety net the firmware also runs a boot watchdog: it plants a sentinel in RTCLOK
+before releasing the core and, if the OS has not overwritten it 2.5 s later, repeats the same
+reset (bounded, logged as `boot: watchdog retry N`, counted in the status line's `br:` field).
+
 ## RESET (F9 / Soft Reset) inside a multi-game cartridge lands in BASIC or Self Test
 
 This is faithful, not a bug. The XL/XE cartridge port has no reset line, so a cartridge

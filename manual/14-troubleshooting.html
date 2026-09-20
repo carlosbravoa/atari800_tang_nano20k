@@ -58,6 +58,11 @@
 </ol>
 <p><strong>Remote rescue via the PC Link:</strong> the serial bridge answers even at the ROM-error screen. With the board on the USB-C cable, <code>python3 tools/atari.py status</code> names the boot stage and <code>atari.py log</code> shows the stage markers (<code>boot: sd ok</code> → <code>boot: roms 0</code> → <code>boot: running</code>). You can <code>send</code> the missing ROM files over the cable and press a key to retry. Total serial silence means the machine never reached the firmware at all — power-cycle it. See <a href="13-pc-link.html">PC Link</a>.</p>
 
+<h2>The machine comes up dead after a reset (v3.2 and later: self-healing)</h2>
+<p><strong>Symptom:</strong> after a power-on, Hard Reset, Boot OS/BASIC, cartridge attach or F9, the screen stays black or stale and the keyboard is dead, while the OSD and the PC Link still answer.</p>
+<p><strong>Likely cause:</strong> the 6502 was released from reset at an unlucky moment and never started. Up to v3.1.2 this happened about once in fifteen resets. Since v3.2 the reset release is synchronised to the core clock, which removed it in testing, and a firmware watchdog covers any remaining case: if the OS has not started 2.5 s after the release, the same reset is repeated automatically (the serial log shows <code>boot: watchdog retry N</code>, and the status line's <code>br:</code> field counts retries).</p>
+<p><strong>What to do:</strong> nothing on v3.2; if you ever see it stay dead for more than a few seconds, report it with the <code>br:</code> value from <code>atari.py status</code>. On older versions, reset again.</p>
+
 <h2>The keyboard does nothing</h2>
 <p><strong>Symptom:</strong> the Atari boots to BASIC but typing has no effect, or only some keys work.</p>
 <p><strong>Likely cause:</strong> wiring or module configuration; or the input is being masked on purpose.</p>

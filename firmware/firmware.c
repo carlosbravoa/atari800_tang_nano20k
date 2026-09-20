@@ -1171,6 +1171,40 @@ int menu_loadrom(int *choice, int carts, int slot) {
     }
 }
 
+// ── Boot watchdog (INVESTIGATE #21: the "6502 never returns" cold-boot lottery) ──────
+// load_system_roms() writes a sentinel into RTCLOK ($12-$14) while the core is still held in
+// reset, then arms this check on release. A cold-starting OS overwrites RTCLOK within
+// milliseconds (RAM clear, then the VBI counts), so if the sentinel is still there 1.5 s AND
+// 2.5 s later the 6502 never ran its cold start. (COLDST/RTCLOK-frozen would misfire: a disk
+// game that takes over early leaves COLDST=1 and may own the VBI.) On a stall the same long
+// reset is re-issued with the same OPTION state the caller used (bounded), logged and counted.
+static uint32_t bootwd_t0 = 0, bootwd_kbd = 0;
+#define BOOTWD_SENTINEL 0xA5C3A5u
+static uint8_t  bootwd_state = 0, bootwd_warm = 0;
+uint8_t         boot_retries = 0;
+uint32_t        virt_key_release_at = 0;     // deferred release for bridge KEY (see joy_get)
+static inline uint32_t atari_rtclok(void) {
+    volatile uint8_t *z = (volatile uint8_t *)0x00200000;
+    return ((uint32_t)z[0x12] << 16) | ((uint32_t)z[0x13] << 8) | z[0x14];
+}
+static void bootwd_arm(void) { bootwd_t0 = time_millis(); bootwd_kbd = reg_virt_kbd_0; bootwd_state = 1; bootwd_warm = 0; }
+static void bootwd_sentinel(void) {           // call while the core is held in reset
+    volatile uint8_t *z = (volatile uint8_t *)0x00200000;
+    z[0x12] = 0xA5; z[0x13] = 0xC3; z[0x14] = 0xA5;
+}
+// Warm start (F9 / OSD Soft Reset / bridge WARM): COLDST=0 + the 20 ms reset pulse, with the
+// watchdog armed the same way as a cold boot (a warm-started OS advances RTCLOK within a
+// frame, so the sentinel test holds). A stalled warm reset is retried with the same pulse.
+void warm_reset(void) {
+    *(volatile uint8_t *)(0x00200000 + 0x0244) = 0;   // COLDST = 0
+    reg_romload_ctrl = 1;
+    delay(20);
+    bootwd_sentinel();
+    reg_romload_ctrl = 0;
+    bootwd_arm();
+    bootwd_warm = 1;
+}
+
 int load_system_roms(void) {
     FIL f;
     unsigned int br;
@@ -1227,7 +1261,7 @@ int load_system_roms(void) {
         reg_romload_ctrl = 0;
         return (2 << 8) | r;
     }
-    uart_printf("OS.ROM loaded successfully (%d bytes) at SDRAM 0x1F4000\n", br);
+    uart_printf("os rom ok %d\n", br);
     
     // Load BASIC.ROM
     r = f_open(&f, "/BASIC.ROM", FA_READ);
@@ -1254,10 +1288,12 @@ int load_system_roms(void) {
         reg_romload_ctrl = 0;
         return (4 << 8) | r;
     }
-    uart_printf("BASIC.ROM loaded successfully (%d bytes) at SDRAM 0x1F0000\n", br);
+    uart_printf("basic rom ok %d\n", br);
     
-    // Release reset
+    // Release reset (sentinel first, while the 6502 is still held)
+    bootwd_sentinel();
     reg_romload_ctrl = 0;
+    bootwd_arm();
     status("ROMs loaded successfully");
     // Give the SD card SPI bus a moment to settle before ATR file operations resume.
     sio_delay(50);
@@ -1324,6 +1360,27 @@ void sio_delay(int ms) {
     while (time_millis() - start < ms) {
         sio_poll();
         uart_keyboard_poll();
+    }
+}
+
+static void bootwd_poll(void) {
+    uint32_t now = time_millis();
+    if (bootwd_state == 1) {
+        if (now - bootwd_t0 < 1500) return;
+        if (atari_rtclok() != BOOTWD_SENTINEL) { bootwd_state = 0; return; }   // OS ran: done
+        bootwd_t0 = now; bootwd_state = 2;
+    } else if (bootwd_state == 2) {
+        if (now - bootwd_t0 < 1000) return;
+        bootwd_state = 0;
+        if (atari_rtclok() == BOOTWD_SENTINEL && boot_retries < 6) {
+            boot_retries++;
+            uart_printf("boot: watchdog retry %d\n", boot_retries);
+            if (bootwd_warm) { warm_reset(); return; }
+            uint32_t kbd = bootwd_kbd;
+            reg_virt_kbd_0 = kbd;             // same OPTION state as the boot that stalled
+            load_system_roms();               // long clean reset + release; re-arms the check
+            if (kbd) { sio_delay(400); reg_virt_kbd_0 = 0; }
+        }
     }
 }
 
@@ -1414,7 +1471,7 @@ int sio_rx_data_frame(uint8_t *buf, int len) {
 // ring buffer the PC fills via bridge cmd 0x0B; STATUS = {conn,0,avail16}.
 // FujiNet-style optimistic OPEN: 'C' immediately, truth via STATUS.
 // No PC tool connected -> OPEN still 'C's but STATUS shows disconnected.
-#define NET_RING 512
+#define NET_RING 256     // N: prototype buffer (was 512; image size)
 static uint8_t net_ring[NET_RING];
 static uint16_t net_head, net_tail;               // head=write(PC), tail=read(Atari)
 static uint8_t net_state_pc;                      // 0 closed, 1 open, 2 error (PC-set)
@@ -2972,9 +3029,9 @@ static void bridge_cmd_key(void) {
     int m = blrx_getc(1000), k = blrx_getc(1000), h = blrx_getc(1000);
     if (m < 0 || k < 0 || h < 0) { bridge_putc(BRIDGE_NAK); return; }
     reg_virt_kbd_0 = ((uint32_t)(k & 0xFF) << 8) | (uint32_t)(m & 0xFF);
-    sio_delay(h ? h * 10 : 100);
-    reg_virt_kbd_0 = 0;
-    sio_delay(30);
+    // Release is DEFERRED (joy_get() clears it after the hold): the main loop must see the
+    // key down, otherwise firmware hotkeys (F12/F9/F11, OSD navigation) never notice it.
+    virt_key_release_at = time_millis() + (h ? h * 10 : 100);
     bridge_putc('+');
 }
 
@@ -3004,7 +3061,7 @@ static void bridge_cmd_type(void) {
 static void bridge_cmd_status(void) {
     extern char _ebss[];
     uart_printf("ST u:%d bs:%d rom:%d x:%d m:%d%d%d%d c:%b s:%d st:%d e:%d cn:%d"
-                " hd:%d%d nt:%d,%d\n",
+                " hd:%d%d nt:%d,%d br:%d\n",
                 (int)time_millis(), bridge_boot_stage, bridge_rom_ok,
                 xex_active ? 1 : 0,
                 atr_mounted[0] ? 1 : 0, atr_mounted[1] ? 1 : 0,
@@ -3013,7 +3070,7 @@ static void bridge_cmd_status(void) {
                 (int)dbg_sio_err_count,
                 (*(volatile uint32_t *)_ebss != 0x53544B21u) ? 1 : 0,
                 hdd_open_f[0], hdd_open_f[1],
-                net_state_pc, net_avail());
+                net_state_pc, net_avail(), boot_retries);
 }
 
 // 0x09 PEEK addr16 len16 -> '+', raw bytes, sum16. Reads ATARI memory through
@@ -3432,10 +3489,7 @@ int main() {
                 overlay(0);
             } else if (choice == 5) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
-                *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // COLDST = 0 (Warm start)
-                reg_romload_ctrl = 1;
-                delay(20);
-                reg_romload_ctrl = 0;
+                warm_reset();
                 booted = true;
                 overlay(0);
             } else if (choice == 6) {
@@ -3452,6 +3506,7 @@ int main() {
                 overlay(0);
             }
         } else {
+            bootwd_poll();               // cold-boot watchdog (no-op once the OS is running)
             // Check the menu toggle key FIRST, before sio_poll — otherwise a mounted
             // disk's SIO flood keeps the loop busy in sio_poll and the OSD becomes
             // unreachable. (S2 button bit9, or F12 bit3.)
@@ -3466,10 +3521,7 @@ int main() {
             int f9 = (joy1 & 0x4);
             if (f9 && !f9_prev) {
                 reg_virt_kbd_0 = 0x00000000;
-                *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // COLDST = 0 (warm start)
-                reg_romload_ctrl = 1;
-                delay(20);
-                reg_romload_ctrl = 0;
+                warm_reset();
                 delay(300);
             }
             f9_prev = f9;
@@ -3491,7 +3543,7 @@ int main() {
             sio_poll();
             sio_poll();
             sio_poll();
-            frame_rate_sample();   // reads reg_video_diag (a register, NOT SDRAM) — safe
+            // (frame_rate_sample() retired 2026-09-20: its result was never displayed; image size)
             uart_keyboard_poll();
             bridge_poll();
             if (bridge_req) {        // deferred bridge actions (RUN/COLD/WARM)
@@ -3523,10 +3575,7 @@ int main() {
                     cold_boot_atari();
                 } else {
                     reg_virt_kbd_0 = 0x00000000;
-                    *(volatile uint8_t *)(0x00200000 + 0x0244) = 0; // warm start
-                    reg_romload_ctrl = 1;
-                    delay(20);
-                    reg_romload_ctrl = 0;
+                    warm_reset();
                 }
             }
         }

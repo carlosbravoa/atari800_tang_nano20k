@@ -199,7 +199,22 @@ always_ff @(posedge sys_clk or negedge hw_reset_n) begin
     end
 end
 
-wire core_reset_n = hw_reset_n && roms_loaded;
+// Core reset release synchroniser (INVESTIGATE #21 root-cause candidate). roms_loaded is a
+// sys_clk register; using it directly as the core's asynchronous RESET_N releases the 6502
+// at an arbitrary point of a clk_core cycle. Assert asynchronously, release synchronously:
+// two flops on clk_core, so every process in the core leaves reset on the same edge.
+wire core_reset_n_raw = hw_reset_n && roms_loaded;
+reg  core_rst_s1 = 1'b0, core_rst_s2 = 1'b0;
+always_ff @(posedge clk_core or negedge core_reset_n_raw) begin
+    if (!core_reset_n_raw) begin
+        core_rst_s1 <= 1'b0;
+        core_rst_s2 <= 1'b0;
+    end else begin
+        core_rst_s1 <= 1'b1;
+        core_rst_s2 <= core_rst_s1;
+    end
+end
+wire core_reset_n = core_rst_s2;
 wire dbg_sd_ready;
 
 // ── Keyboard ───────────────────────────────────────────────────────────────
