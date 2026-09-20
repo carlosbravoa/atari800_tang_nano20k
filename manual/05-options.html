@@ -38,6 +38,7 @@
  Stereo:       OFF
  RAM:          128 KB  &lt;- -&gt;
  Modem (R:):   OFF
+ Keyboard:     ATARI
  Save changes
 <span class="bar"> Up/Down move  Enter select  F12 </span></div>
 <p>Move with <kbd>↑</kbd>/<kbd>↓</kbd> and press <kbd>Enter</kbd> (or Fire) to toggle an item. The two items marked <code>&lt;- -&gt;</code> are changed with <kbd>←</kbd>/<kbd>→</kbd> (or the stick) instead. <kbd>F12</kbd>, S2 or <strong>&lt;&lt; Return to main menu</strong> takes you back.</p>
@@ -93,6 +94,14 @@
 <p>Opt-in support for the <strong>R:</strong> serial device (850-style modem) over the USB-C cable, so a terminal program such as BobTerm can dial a telnet BBS through the PC. When OFF (the default) it has no effect on normal use. This feature is a work in progress; see <a href="13-pc-link.html">PC Link</a> and <a href="15-known-issues.html">Known issues</a>.</p>
 <div class="placeholder">TODO: the Modem option needs the two Altirra 850 handler <code>.bin</code> files on the SD card (see <code>tools/fujinet_850/README.md</code> in the repository) — exact file names and location to be confirmed</div>
 
+<h2>Keyboard</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>ATARI</code> (default) / <code>PC</code></td></tr>
+<tr><th>Applies</th><td>Live</td></tr>
+<tr><th>ini key</th><td><code>kbdlayout=0</code> / <code>kbdlayout=1</code></td></tr>
+</table></div>
+<p><strong>ATARI</strong> treats your keyboard as an Atari keyboard by key position (the default, described in <a href="09-keyboard.html">Keyboard</a>). <strong>PC</strong> makes each key type what is printed on a US PC keyboard instead: <kbd>Shift</kbd>+<kbd>2</kbd> gives <code>@</code>, the quote key gives <code>'</code> and <code>"</code>, the bracket keys give <code>[</code> and <code>]</code>. Added in v3.1; details and the list of differences are in <a href="09-keyboard.html#pc-layout">Keyboard → PC layout</a>. Text pasted over the PC Link follows this setting automatically.</p>
+
 <h2>Save changes and the "*" marker</h2>
 <p>As soon as you change anything, the last row reads <code>Save changes *</code> — the star means there are changes that have not been written to the SD card. Select it to write all options to <code>/atari.ini</code>; the row shows <code>Options saved.</code> and the star disappears. If the card cannot be written you get the pop-up <code>Cannot save options to SD</code>.</p>
 <div class="note"><strong>Unsaved changes are temporary</strong>Changes you do not save stay in effect for the current session only. At the next power-on (or after the S1 hardware reset restarts the firmware) the values from <code>atari.ini</code> are loaded again.</div>
@@ -105,6 +114,7 @@ scanlines=0
 hpos=0
 stereo=0
 modem=0
+kbdlayout=0
 ram=128
 </code></pre>
 <div class="tbl"><table>

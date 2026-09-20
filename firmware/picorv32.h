@@ -20,8 +20,8 @@ char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
 size_t strlen(const char *s);
 int atoi(const char *str);
-#define DEBUG(...) uart_printf(__VA_ARGS__)
-// #define DEBUG(...) do {} while(0)
+// #define DEBUG(...) uart_printf(__VA_ARGS__)   // verbose dir-listing chatter: OFF (image size)
+#define DEBUG(...) do {} while(0)
 
 #define reg_textdisp       (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv    (*(volatile uint32_t*)0x02000010)

@@ -31,6 +31,7 @@ int option_arrow_joystick = 0;              // 1 = arrow keys drive Joystick 1 (
 int option_scanline_level = 0;              // 0=off,1=25%,2=50%,3=75% scanline brightness
 int option_h_offset = 0;                    // horizontal pan: capture-skip pixels (0..48)
 int option_stereo = 0;                      // 1 = dual-POKEY stereo (POKEY2 @ $D210 -> right); default mono
+int option_kbd_layout = 0;                  // 0 = Atari-positional keys (default), 1 = US-PC symbolic
 int option_modem  = 0;                      // 1 = answer the coldstart R: handler poll (BobTerm/850
                                             // modem over USB-C). DEFAULT OFF: when off the firmware
                                             // stays SILENT to the OS poll, so a normal gaming boot is
@@ -55,7 +56,8 @@ static inline void apply_input_options(void) {
 // Push video options into the hardware config registers.
 static inline void apply_video_options(void) {
     reg_video_opts = (option_scanline_level & 0x3)  // 0x B4 [1:0] scanline level
-                   | ((option_stereo & 1) << 2);    //      [2]   dual-POKEY stereo enable
+                   | ((option_stereo & 1) << 2)     //      [2]   dual-POKEY stereo enable
+                   | ((option_kbd_layout & 1) << 3); //      [3]   keyboard: PC symbolic layout
     reg_h_offset   = option_h_offset & 0xFF;        // 0x B8 [7:0] horizontal position
 }
 
@@ -330,6 +332,9 @@ int load_option()  {
         if (strcmp(key, "modem") == 0) {
             option_modem = (atoi(value) != 0);
         }
+        if (strcmp(key, "kbdlayout") == 0) {
+            option_kbd_layout = (atoi(value) != 0);
+        }
         if (strcmp(key, "ram") == 0) {
             int kb = atoi(value);
             option_ram_idx = 0;   // default 128 KB if no match
@@ -371,6 +376,9 @@ int save_option() {
 
     err |= (f_puts("modem=", &f) < 0);
     err |= (f_puts(option_modem ? "1\n" : "0\n", &f) < 0);
+
+    err |= (f_puts("kbdlayout=", &f) < 0);
+    err |= (f_puts(option_kbd_layout ? "1\n" : "0\n", &f) < 0);
 
     err |= (f_puts("ram=", &f) < 0);
     { char s[6]; int n = ram_opts[option_ram_idx].kb, k = 0, d = 1000;
@@ -443,7 +451,7 @@ int load_dir(char *dir, int start, int len, int *count, int carts) {
         }
 
         // Print debug information to UART
-        uart_printf("Found: '%s' (is_dir=%d, is_atr=%d, size=%d)\n", fno.fname, is_dir, is_atr, (int)fno.fsize);
+        DEBUG("Found: '%s' (is_dir=%d, is_atr=%d, size=%d)\n", fno.fname, is_dir, is_atr, (int)fno.fsize);
 
         if (is_dir || is_atr) {
             if (cnt >= start && file_len < len) {
@@ -2575,6 +2583,11 @@ void menu_options() {
         print(option_modem ? "ON" : "OFF");
 
         cursor(2, 19);
+        print("Keyboard:");
+        cursor(16, 19);
+        print(option_kbd_layout ? "PC" : "ATARI");
+
+        cursor(2, 20);
         print(options_dirty ? "Save changes *" : "Save changes");
 
         delay(300);
@@ -2598,7 +2611,7 @@ void menu_options() {
                     option_ram_idx--; options_dirty = 1; draw_ram_line(); delay(180);
                 }
             }
-            if (joy_choice(12, 8, &choice) == 1) {
+            if (joy_choice(12, 9, &choice) == 1) {
                 // Every item applies its change LIVE (so you can see it) but does NOT write
                 // to SD — only "Save changes" persists. Leaving without saving keeps the
                 // changes for this session; they revert to the saved values on next boot.
@@ -2635,6 +2648,11 @@ void menu_options() {
                     options_dirty = 1;                // takes effect on the next COLD boot
                     break; // redraw UI
                 } else if (choice == 7) {
+                    option_kbd_layout = !option_kbd_layout;   // ATARI-positional <-> PC-symbolic
+                    apply_video_options();                    // applies live (reg_video_opts bit 3)
+                    options_dirty = 1;
+                    break; // redraw UI
+                } else if (choice == 8) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
@@ -2874,6 +2892,28 @@ static const uint8_t ascii2hid[95] = {
     /* { */ 0, /* | */ 0x30|KSH, /* } */ 0, /* ~ */ 0
 };
 
+// Same table for the OSD "Keyboard: PC" layout: the injected HID code must then be the
+// US-ANSI key that prints the char, because usb_to_atari800 remaps symbolically.
+static const uint8_t ascii2hid_pc[95] = {
+    /* 0x20 ' ' */ 0x2C,        /* ! */ 0x1E|KSH, /* " */ 0x34|KSH,
+    /* # */ 0x20|KSH, /* $ */ 0x21|KSH, /* % */ 0x22|KSH, /* & */ 0x24|KSH,
+    /* ' */ 0x34,     /* ( */ 0x26|KSH, /* ) */ 0x27|KSH,
+    /* * */ 0x25|KSH, /* + */ 0x2E|KSH, /* , */ 0x36, /* - */ 0x2D,
+    /* . */ 0x37,     /* / */ 0x38,
+    /* 0-9 */ 0x27,0x1E,0x1F,0x20,0x21,0x22,0x23,0x24,0x25,0x26,
+    /* : */ 0x33|KSH, /* ; */ 0x33,     /* < */ 0x36|KSH, /* = */ 0x2E,
+    /* > */ 0x37|KSH, /* ? */ 0x38|KSH, /* @ */ 0x1F|KSH,
+    /* A-Z */ 0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
+              0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,
+              0x1C,0x1D,
+    /* [ */ 0x2F,     /* \ */ 0x31,     /* ] */ 0x30,
+    /* ^ */ 0x23|KSH, /* _ */ 0x2D|KSH, /* ` */ 0,
+    /* a-z */ 0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
+              0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,
+              0x1C,0x1D,
+    /* { */ 0, /* | */ 0x31|KSH, /* } */ 0, /* ~ */ 0
+};
+
 // getc that keeps the machine alive while waiting — for open-ended typing
 // sessions where the next keystroke may be seconds away. Safe with the 1-byte
 // RX register: per-char acks mean at most one byte is ever in flight.
@@ -2904,7 +2944,7 @@ static void bridge_type_char(uint8_t c) {
     else if (c == 0x09) e = 0x2B;                      // Tab
     else if (c == 0x1B) e = 0x29;                      // Esc
     else if (c < 0x20 || c > 0x7E) return;             // unmappable -> skip
-    else { e = ascii2hid[c - 0x20]; if (!e) return; }
+    else { e = (option_kbd_layout ? ascii2hid_pc : ascii2hid)[c - 0x20]; if (!e) return; }
     // OS same-key debounce (KEYDEL, ~3 jiffies): a re-press of the SAME key
     // within ~50 ms of the previous press is ignored — doubled characters
     // ("LL", "00") lost their second copy at our 55 ms cadence (HW-observed).

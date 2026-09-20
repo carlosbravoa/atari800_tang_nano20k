@@ -102,6 +102,7 @@ module iosys_picorv32 #(
     output wire [1:0]  scanline_level_out,   // 0=off,1=25%,2=50%,3=75%
     output wire [7:0]  h_offset_out,         // horizontal picture position (front porch 0..80)
     output wire        stereo_out,           // dual-POKEY stereo enable (video_opts bit 2)
+    output wire        kbd_pc_layout_out,    // keyboard: 1 = US-PC symbolic layout (video_opts bit 3)
     output wire [2:0]  ram_select_out,       // Atari RAM size code (core RAM_SELECT)
 
     // Virtual Keyboard outputs
@@ -562,6 +563,7 @@ reg [7:0] video_opts_reg = 8'h00;  // [1:0] = scanline level, [2] = stereo enabl
 reg [7:0] h_offset_reg   = 8'd0;   // horizontal position (capture-skip pixels); 0 = no pan
 assign    scanline_level_out = video_opts_reg[1:0];
 assign    stereo_out         = video_opts_reg[2];
+assign    kbd_pc_layout_out  = video_opts_reg[3];
 assign    h_offset_out       = h_offset_reg;
 reg [2:0] ram_select_reg = 3'b001;   // default 128 KB (matches firmware default)
 assign    ram_select_out     = ram_select_reg;

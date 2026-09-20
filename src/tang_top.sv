@@ -747,6 +747,7 @@ wire [7:0]  h_offset;
 // Dual-POKEY stereo enable (OSD-toggled): quasi-static config from iosys (sys_clk).
 // 2-FF synchronise into clk_core where the Atari core's STEREO input lives.
 wire        stereo_opt;
+wire        kbd_pc_layout;   // OSD "Keyboard: PC" (sys_clk, same domain as the keyboard module)
 reg         stereo_s1 = 1'b0, stereo_core = 1'b0;
 always @(posedge clk_core) begin stereo_s1 <= stereo_opt; stereo_core <= stereo_s1; end
 
@@ -892,6 +893,7 @@ iosys_picorv32 #(
     .scanline_level_out(scanline_level),
     .h_offset_out(h_offset),
     .stereo_out(stereo_opt),
+    .kbd_pc_layout_out(kbd_pc_layout),
     .ram_select_out(ram_select_opt)
 );
 
@@ -1211,6 +1213,7 @@ usb_to_atari800 keyboard (
     .key2             (mtx_key2),
     .key3             (mtx_key3),
     .key4             (mtx_key4),
+    .pc_layout        (kbd_pc_layout),
     .keyboard_scan    (keyboard_scan),
     .keyboard_response(keyboard_response),
     .consol_start     (consol_start),

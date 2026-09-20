@@ -51,7 +51,7 @@ For a keyboard, the simplest is a **CH9350 USB-host board**: 5V, GND and its TX 
 - **OSD** (v3.0 look: dimmed panel, title/footer bars, selection bar) — driven by keyboard and/or
   a DB9 joystick; the Atari keeps running behind it
 - **Keyboard** via a CH9350 or Raspberry Pi Pico USB-host adapter (3 wires), decoded in hardware,
-  Atari-positional mapping; **F9** soft reset, **F11** arrows↔joystick, **F12** OSD
+  Atari-positional mapping or an optional **US-PC symbolic layout** (OSD option, v3.1); **F9** soft reset, **F11** arrows↔joystick, **F12** OSD
 - **Two DB9 joysticks** on header pins (passive, no +5V); **arrow keys as joystick** option
 - **Disks:** `.atr` / `.xfd`, SD/ED/DD (both DD layouts), **D1:–D4:**, live mount/swap, reliable
   writes, DOS FORMAT, new blank disk from the OSD, read-only handling, `/HDD.ATR` auto-mounted on

@@ -21,6 +21,7 @@ module usb_to_atari800 (
     input  wire [7:0]  key2,
     input  wire [7:0]  key3,
     input  wire [7:0]  key4,
+    input  wire        pc_layout,      // 0 = Atari-positional (default), 1 = US-PC symbolic
 
     // Atari keyboard matrix
     input  wire [5:0]  keyboard_scan,
@@ -113,11 +114,91 @@ function automatic [6:0] hid2atari;
     endcase
 endfunction
 
-// ── Build atari_keyboard and special flags from current key slots ─────────────
-wire [6:0] p1 = hid2atari(key1);
-wire [6:0] p2 = hid2atari(key2);
-wire [6:0] p3 = hid2atari(key3);
-wire [6:0] p4 = hid2atari(key4);
+// ── PC-symbolic layout (OSD "Keyboard: PC", docs/kbd_pc_layout_spec.md) ─────
+// Same Atari matrix codes, but chosen by the SYMBOL a US-ANSI keyboard prints for
+// (key, physical Shift), and carrying the shift state the Atari needs for it:
+//   smode PASS = Atari shift follows the physical Shift (all of ATARI mode)
+//   smode F0   = shift suppressed (PC Shift+8 = '*' -> bare Atari '*' key)
+//   smode F1   = shift forced     (PC '\'' unshifted -> Atari Shift+7)
+localparam [1:0] PASS = 2'd0, F0 = 2'd1, F1 = 2'd2;
+
+function automatic [8:0] hid2atari_pc;     // {smode[1:0], code[6:0]}
+    input [7:0] hid;
+    input       sh;                        // physical Shift at press time
+    case (hid)
+        8'h1F: hid2atari_pc = sh ? {F1, 7'd53}   : {PASS, 7'd30}; // 2 / @  (Atari Sh+8)
+        8'h23: hid2atari_pc = sh ? {F1, 7'd7}    : {PASS, 7'd27}; // 6 / ^  (Atari Sh+*)
+        8'h24: hid2atari_pc = sh ? {F1, 7'd27}   : {PASS, 7'd51}; // 7 / &  (Atari Sh+6)
+        8'h25: hid2atari_pc = sh ? {F0, 7'd7}    : {PASS, 7'd53}; // 8 / *  (Atari * key)
+        8'h2D: hid2atari_pc = sh ? {F1, 7'd14}   : {F0, 7'd14};   // - / _  (Atari - key)
+        8'h2E: hid2atari_pc = sh ? {F0, 7'd6}    : {F0, 7'd15};   // = / +  (Atari = / + keys)
+        8'h2F: hid2atari_pc = sh ? {PASS, 7'h7F} : {F1, 7'd32};   // [ / {  (Atari Sh+, ; { unmapped)
+        8'h30: hid2atari_pc = sh ? {PASS, 7'h7F} : {F1, 7'd34};   // ] / }  (Atari Sh+. ; } unmapped)
+        8'h31,
+        8'h32: hid2atari_pc = sh ? {F1, 7'd15}   : {F1, 7'd6};    // \ / |  (Atari Sh++ / Sh+=)
+        8'h34: hid2atari_pc = sh ? {F1, 7'd30}   : {F1, 7'd51};   // ' / "  (Atari Sh+7 / Sh+2)
+        8'h36: hid2atari_pc = sh ? {F0, 7'd54}   : {PASS, 7'd32}; // , / <  (Atari < key)
+        8'h37: hid2atari_pc = sh ? {F0, 7'd55}   : {PASS, 7'd34}; // . / >  (Atari > key)
+        default: hid2atari_pc = {PASS, hid2atari(hid)};           // letters, digits, specials
+    endcase
+endfunction
+
+// Per-slot press-time latch: a held key's mapping is fixed at key-down (0 -> code),
+// so releasing Shift before the key cannot morph its matrix code into a second
+// keypress. In ATARI mode this is the positional table one sys_clk later — POKEY's
+// scan/debounce makes that invisible.
+wire shift_pressed   = key_modifiers[1] | key_modifiers[5]; // LShift | RShift
+
+// The key slots and modifiers can come from the 12 MHz USB-HID host (async to this
+// clock). Register them here (2 FFs) so the latch's comparator and its data see ONE
+// sample: comparing the raw input while latching a mapping computed from a different
+// instant of the same changing byte left a slot with hid=0 but a live mapping, i.e. a
+// phantom stuck key (HW-observed 2026-09-19: endless '^', healed by the next keystroke).
+reg [7:0] k1_m = 8'h00, k1_s = 8'h00, k2_m = 8'h00, k2_s = 8'h00;
+reg [7:0] k3_m = 8'h00, k3_s = 8'h00, k4_m = 8'h00, k4_s = 8'h00;
+reg       sh_m = 1'b0,  sh_s = 1'b0;
+always_ff @(posedge clk) begin
+    k1_m <= key1; k1_s <= k1_m;   k2_m <= key2; k2_s <= k2_m;
+    k3_m <= key3; k3_s <= k3_m;   k4_m <= key4; k4_s <= k4_m;
+    sh_m <= shift_pressed; sh_s <= sh_m;
+end
+
+// One explicit register pair per slot (no arrays: Gowin infers RAM from small arrays,
+// which cannot be written 4-wide per cycle nor read 4-wide combinationally).
+`define KEY_LATCH(N, KEY) \
+    reg [7:0] hid_l``N = 8'h00; \
+    reg [8:0] map_l``N = {PASS, 7'h7F}; \
+    always_ff @(posedge clk) begin \
+        if (!reset_n) begin \
+            hid_l``N <= 8'h00; \
+            map_l``N <= {PASS, 7'h7F}; \
+        end else if (KEY != hid_l``N) begin \
+            hid_l``N <= KEY; \
+            map_l``N <= (KEY == 8'h00) ? {PASS, 7'h7F} \
+                      : pc_layout      ? hid2atari_pc(KEY, sh_s) \
+                                       : {PASS, hid2atari(KEY)}; \
+        end \
+    end
+`KEY_LATCH(0, k1_s)
+`KEY_LATCH(1, k2_s)
+`KEY_LATCH(2, k3_s)
+`KEY_LATCH(3, k4_s)
+`undef KEY_LATCH
+
+// ── Build atari_keyboard and special flags from the latched key slots ─────────
+wire [6:0] p1 = map_l0[6:0];
+wire [6:0] p2 = map_l1[6:0];
+wire [6:0] p3 = map_l2[6:0];
+wire [6:0] p4 = map_l3[6:0];
+
+// Effective shift answered to POKEY: a held key needing forced/suppressed shift wins
+// over the physical modifier (F1 beats F0 if two held keys disagree); with no such
+// key held it is the physical Shift, so shift-only presses reach games unchanged.
+wire force1 = (~p1[6] && map_l0[8:7] == F1) | (~p2[6] && map_l1[8:7] == F1) |
+              (~p3[6] && map_l2[8:7] == F1) | (~p4[6] && map_l3[8:7] == F1);
+wire force0 = (~p1[6] && map_l0[8:7] == F0) | (~p2[6] && map_l1[8:7] == F0) |
+              (~p3[6] && map_l2[8:7] == F0) | (~p4[6] && map_l3[8:7] == F0);
+wire eff_shift = force1 ? 1'b1 : (force0 ? 1'b0 : shift_pressed);
 
 // OR in each valid key as a one-hot bit in the 64-bit keyboard state
 wire [63:0] atari_keyboard =
@@ -128,8 +209,7 @@ wire [63:0] atari_keyboard =
     // Right Alt (modifier[6]) → Atari Inverse Video (bit 39)
     (key_modifiers[6] ? 64'h0000_0080_0000_0000 : 64'd0);
 
-// Modifiers
-wire shift_pressed   = key_modifiers[1] | key_modifiers[5]; // LShift | RShift
+// Modifiers (shift_pressed is defined above, next to the latch)
 
 // Arrow keys imply CTRL: on the Atari the cursor keys ARE -/=/+/*-with-CTRL, so a
 // PC arrow key should move the cursor directly instead of typing the bare key.
@@ -159,7 +239,7 @@ wire       key_hit = atari_keyboard[~keyboard_scan];
 assign keyboard_response[0] = ~key_hit;
 assign keyboard_response[1] =
     ~( (keyboard_scan[5:4] == 2'b00 && break_pressed)   |
-       (keyboard_scan[5:4] == 2'b10 && shift_pressed)   |
+       (keyboard_scan[5:4] == 2'b10 && eff_shift)       |
        (keyboard_scan[5:4] == 2'b11 && control_pressed) );
 
 endmodule

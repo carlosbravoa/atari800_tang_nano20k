@@ -46,6 +46,27 @@
 </ul>
 <div class="tip"><strong>Think Atari, not PC</strong>If a symbol is not where you expect it, look at where it lives on an Atari XL keyboard and press that position. The key table below lists what every PC key becomes; the shifted symbols are then whatever the Atari prints on that key.</div>
 
+<h2 id="pc-layout">PC layout option (v3.1)</h2>
+<p>If you would rather have the keys type what is printed on them, set <strong>Options → Keyboard</strong> to <code>PC</code> (see <a href="05-options.html">Options</a>). The mapping then follows a <strong>US-ANSI PC keyboard</strong>: letters, digits and most punctuation are unchanged, and the symbols that live under a different shift state on the Atari are translated for you, shift state included.</p>
+<div class="tbl"><table>
+<tr><th>You press</th><th>ATARI mode types</th><th>PC mode types</th></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>2</kbd></td><td><code>"</code></td><td><code>@</code></td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>6</kbd> / <kbd>Shift</kbd>+<kbd>7</kbd> / <kbd>Shift</kbd>+<kbd>8</kbd></td><td><code>&amp;</code> / <code>'</code> / <code>@</code></td><td><code>^</code> / <code>&amp;</code> / <code>*</code></td></tr>
+<tr><td><kbd>-</kbd> and <kbd>Shift</kbd>+<kbd>-</kbd></td><td><code>&lt;</code> and Clear</td><td><code>-</code> and <code>_</code></td></tr>
+<tr><td><kbd>=</kbd> and <kbd>Shift</kbd>+<kbd>=</kbd></td><td><code>&gt;</code> and Insert</td><td><code>=</code> and <code>+</code></td></tr>
+<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Atari <code>-</code> / <code>=</code> keys</td><td><code>[</code> / <code>]</code></td></tr>
+<tr><td><kbd>\</kbd> and <kbd>Shift</kbd>+<kbd>\</kbd></td><td>Atari <code>*</code> key</td><td><code>\</code> and <code>|</code></td></tr>
+<tr><td><kbd>'</kbd> and <kbd>Shift</kbd>+<kbd>'</kbd></td><td>Atari <code>+</code> key</td><td><code>'</code> and <code>"</code></td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>,</kbd> / <kbd>Shift</kbd>+<kbd>.</kbd></td><td><code>[</code> / <code>]</code></td><td><code>&lt;</code> / <code>&gt;</code></td></tr>
+</table></div>
+<ul>
+<li>The real arrow keys still move the cursor in both modes. In PC mode the <kbd>[</kbd> <kbd>]</kbd> <kbd>\</kbd> <kbd>'</kbd> keys type their symbols instead of acting as the Atari's cursor keys.</li>
+<li><code>{</code>, <code>}</code>, <code>~</code> and <code>`</code> have no Atari character; the grave key stays <strong>Break</strong> in both modes.</li>
+<li>Control-key combinations (graphics characters) stay positional in both modes; F1–F12, console keys and the OSD keys are identical in both modes.</li>
+<li>A key's symbol is decided when it goes down, so pressing Shift <em>after</em> a held key does not change what that key types. If two held keys need opposite shift states, the one needing Shift wins.</li>
+<li>The setting is a US layout; a non-US physical keyboard gets the US-symbolic result. It is saved with <code>kbdlayout=</code> in <code>atari.ini</code>, and PC Link paste follows it automatically.</li>
+</ul>
+
 <h2>Key mapping table</h2>
 <div class="tbl"><table>
 <tr><th>PC key</th><th>Atari key / function</th></tr>
