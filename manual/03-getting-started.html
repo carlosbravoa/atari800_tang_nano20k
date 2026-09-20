@@ -44,9 +44,54 @@
 <div class="note"><strong>ROMs are not included</strong>You must supply your own <code>ATARIXL.ROM</code> and <code>BASIC.ROM</code>. Names are matched case-insensitively (<code>atarixl.rom</code> works too), but the sizes must be exact. The firmware loads both ROMs from the card at every power-on.</div>
 
 <h2>2. Flash the bitstream</h2>
-<p>Download the zip from the <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest">latest release</a> on GitHub and unpack <code>atari800_tn20k.fs</code>. Connect the board to the PC with the USB-C cable and flash it with openFPGALoader:</p>
-<pre><code>openFPGALoader -b tangnano20k -f atari800_tn20k.fs</code></pre>
-<p>The Gowin Programmer can flash the same <code>.fs</code> file if you prefer it (close any PC Link session first). The firmware is baked into the bitstream — there is <strong>no separate firmware to flash</strong>.</p>
+<p>Download the zip from the <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest">latest release</a> on GitHub and unpack <code>atari800_tn20k.fs</code>. That one file is the whole machine: the firmware is baked into the bitstream, so there is <strong>no separate firmware to flash</strong> and nothing else to write to the board. The ROMs, disks and cartridges live on the SD card, not in the flash.</p>
+<p>The board is flashed over its own <strong>USB-C cable</strong>; no programmer or adapter is needed. The onboard chip presents itself to the PC as a two-channel FTDI device: channel A is the JTAG programmer, channel B is the serial port the <a href="13-pc-link.html">PC Link</a> uses. Both tools below write the bitstream into the board's <strong>external flash</strong>, so it survives power-off. You flash once per release, not every time you power on.</p>
+<div class="warn"><strong>Before flashing</strong>Close anything that holds the board's serial port: the PC Link desktop app, an <code>atari.py log</code> or <code>kbd</code> session, a terminal program. The SD card and HDMI can stay connected.</div>
+
+<h3>Linux (and macOS): openFPGALoader</h3>
+<p>The free, open-source <a href="https://trabucayre.github.io/openFPGALoader/">openFPGALoader</a> is the simplest way and needs no account or licence. Install it from your distribution, then flash:</p>
+<pre><code># Debian / Ubuntu / Mint
+sudo apt install openfpgaloader
+# Fedora
+sudo dnf copr enable mobicarte/openFPGALoader &amp;&amp; sudo dnf install openFPGALoader
+# Arch
+sudo pacman -S openfpgaloader
+# macOS
+brew install openfpgaloader
+
+# then, with the board plugged in:
+openFPGALoader -b tangnano20k -f atari800_tn20k.fs</code></pre>
+<p><code>-b tangnano20k</code> selects the board and <code>-f</code> writes the external flash. The tool prints the erase and write progress and ends with <code>Done</code>; the board reconfigures itself and, with a card inserted, boots to READY a few seconds later.</p>
+<p>If you get <code>unable to open ftdi device</code> or a permissions error, your user cannot open the USB device yet. Either run the same command with <code>sudo</code>, or install the udev rule once so you never need to: copy <code>99-openfpgaloader.rules</code> from the openFPGALoader sources into <code>/etc/udev/rules.d/</code>, run <code>sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</code>, add yourself to the <code>plugdev</code> group with <code>sudo usermod -a -G plugdev $USER</code>, and log in again.</p>
+
+<h3>Windows: Gowin Programmer</h3>
+<p>openFPGALoader has no ready-made Windows build, so on Windows use Gowin's own <strong>Programmer</strong>. It is free: no licence is needed for programming, only a Gowin account to download. Sipeed also mirrors a standalone Programmer package with the USB drivers included, which is the easiest route:</p>
+<ol>
+<li><strong>Install the Programmer.</strong> Get it either from Sipeed's mirror at <a href="https://dl.sipeed.com/shareURL/TANG/programmer">dl.sipeed.com/shareURL/TANG/programmer</a> (Programmer plus drivers, no account) or from <a href="https://www.gowinsemi.com/en/support/download_eda/">Gowin's download page</a> (create a free account; the <em>Education</em> edition needs no licence, and the Programmer is inside it). Install the USB driver when the installer offers it.</li>
+<li><strong>Plug the board in</strong> with the USB-C cable and wait about ten seconds for Windows to finish installing the device. Device Manager should list two <em>USB Serial Converter</em> entries (A and B); no COM port is needed for flashing.</li>
+<li><strong>Open the Programmer</strong> and click <em>Scan Device</em> (the magnifier icon). It should find one device, <strong>GW2AR-18C</strong>. If it finds nothing, see the troubleshooting list below.</li>
+<li><strong>Configure the operation.</strong> Double-click the device row (or use <em>Edit → Configure Device</em>) and set:
+<ul>
+<li><em>Access Mode</em>: <strong>External Flash Mode</strong></li>
+<li><em>Operation</em>: <strong>exFlash Erase, Program thru GAO-Bridge</strong> (on some Programmer versions the entry is called <em>exFlash Erase, Program</em>; either works)</li>
+<li><em>Programming Options → File name</em>: your <code>atari800_tn20k.fs</code></li>
+<li><em>External Flash Options → Device</em>: <strong>Generic Flash</strong>, <em>Start Address</em>: <strong>0x000000</strong></li>
+</ul>
+Leave User Code and IDCODE alone. Click <em>Save</em>.</li>
+<li><strong>Program.</strong> Click the <em>Program/Configure</em> button (the green play icon). The progress bar runs through erase, program and verify; the status column shows <em>Success</em> when done. The board reconfigures itself and boots to READY.</li>
+</ol>
+<div class="note"><strong>SRAM Mode is not what you want</strong>The Programmer also offers <em>SRAM Mode</em> / <em>SRAM Program</em>. That loads the bitstream into the FPGA directly, which works for a quick test, but it is gone at the next power-off. Use External Flash Mode so the machine boots on its own.</div>
+<p>If the Programmer does not find the board:</p>
+<ul>
+<li>Install the driver from the Sipeed programmer package and reconnect the cable. Windows sometimes needs a second attempt after the first plug-in.</li>
+<li>Close any program that has the board's COM port open (the PC Link app, a terminal). The JTAG channel and the serial channel share the chip.</li>
+<li>Try another USB-C cable or port. Charge-only cables carry no data, and a marginal cable makes the board disconnect and reconnect (see <a href="14-troubleshooting.html">Troubleshooting</a>).</li>
+<li>In the cable settings, keep the frequency at <strong>2.5 MHz or lower</strong>; higher JTAG clocks are unreliable through the onboard chip.</li>
+</ul>
+<p>openFPGALoader can also run on Windows through MSYS2 (package <code>mingw-w64-ucrt-x86_64-openFPGALoader</code>) after replacing the driver of USB interface 0 with WinUSB using Zadig. It works, but it is more steps than the Programmer and a wrong Zadig choice can take the serial port down with it, so it is only worth it if you already use MSYS2.</p>
+
+<h3>Check that it took</h3>
+<p>After either method: LED5 starts blinking slowly (the firmware heartbeat), then LED3 lights when the ROMs have loaded from the card, and the screen shows READY. If LED5 does not blink, the flash did not complete: run it again. If LED5 blinks but nothing else happens, the SD card is the problem, not the flash; see step 3 below.</p>
 
 <h2>3. First power-on</h2>
 <ol>

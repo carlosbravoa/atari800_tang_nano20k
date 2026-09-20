@@ -44,9 +44,54 @@
 <div class="note"><strong>Las ROM no vienen incluidas</strong>Debes conseguir tus propios <code>ATARIXL.ROM</code> y <code>BASIC.ROM</code>. Los nombres se reconocen sin distinguir mayúsculas de minúsculas (<code>atarixl.rom</code> también sirve), pero los tamaños deben ser exactos. El firmware carga ambas ROM desde la tarjeta en cada encendido.</div>
 
 <h2>2. Graba el bitstream</h2>
-<p>Descarga el zip de la <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest">última versión publicada (release)</a> en GitHub y extrae <code>atari800_tn20k.fs</code>. Conecta la placa al PC con el cable USB-C y grábalo (flashéalo) con openFPGALoader:</p>
-<pre><code>openFPGALoader -b tangnano20k -f atari800_tn20k.fs</code></pre>
-<p>Si lo prefieres, el Gowin Programmer puede grabar el mismo archivo <code>.fs</code> (cierra antes cualquier sesión de PC Link). El firmware va incorporado en el bitstream: <strong>no hay un firmware aparte que grabar</strong>.</p>
+<p>Descarga el zip de la <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases/latest">última versión publicada (release)</a> en GitHub y extrae <code>atari800_tn20k.fs</code>. Ese único archivo es la máquina completa: el firmware va incorporado en el bitstream, así que <strong>no hay un firmware aparte que grabar</strong> ni nada más que escribir en la placa. Las ROM, los discos y los cartuchos viven en la tarjeta SD, no en la flash.</p>
+<p>La placa se graba por su propio <strong>cable USB-C</strong>; no hace falta ningún programador ni adaptador. El chip de la placa se presenta ante el PC como un dispositivo FTDI de dos canales: el canal A es el programador JTAG y el canal B es el puerto serial que usa el <a href="13-pc-link.html">PC Link</a>. Las dos herramientas de abajo escriben el bitstream en la <strong>flash externa</strong> de la placa, así que sobrevive al apagado. Se graba una vez por versión, no cada vez que enciendes.</p>
+<div class="warn"><strong>Antes de grabar</strong>Cierra todo lo que tenga abierto el puerto serial de la placa: la aplicación de escritorio del PC Link, una sesión de <code>atari.py log</code> o <code>kbd</code>, un programa de terminal. La tarjeta SD y el HDMI pueden quedar conectados.</div>
+
+<h3>Linux (y macOS): openFPGALoader</h3>
+<p>El programa libre y de código abierto <a href="https://trabucayre.github.io/openFPGALoader/">openFPGALoader</a> es la forma más simple y no necesita cuenta ni licencia. Instálalo desde tu distribución y luego graba:</p>
+<pre><code># Debian / Ubuntu / Mint
+sudo apt install openfpgaloader
+# Fedora
+sudo dnf copr enable mobicarte/openFPGALoader &amp;&amp; sudo dnf install openFPGALoader
+# Arch
+sudo pacman -S openfpgaloader
+# macOS
+brew install openfpgaloader
+
+# luego, con la placa conectada:
+openFPGALoader -b tangnano20k -f atari800_tn20k.fs</code></pre>
+<p><code>-b tangnano20k</code> selecciona la placa y <code>-f</code> escribe la flash externa. La herramienta muestra el avance del borrado y la escritura y termina con <code>Done</code>; la placa se reconfigura sola y, con una tarjeta insertada, arranca a READY unos segundos después.</p>
+<p>Si aparece <code>unable to open ftdi device</code> o un error de permisos, tu usuario todavía no puede abrir el dispositivo USB. Ejecuta el mismo comando con <code>sudo</code>, o instala una sola vez la regla udev para no necesitarlo nunca más: copia <code>99-openfpgaloader.rules</code> desde las fuentes de openFPGALoader a <code>/etc/udev/rules.d/</code>, ejecuta <code>sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</code>, agrégate al grupo <code>plugdev</code> con <code>sudo usermod -a -G plugdev $USER</code> y vuelve a iniciar sesión.</p>
+
+<h3>Windows: Gowin Programmer</h3>
+<p>openFPGALoader no tiene una versión lista para Windows, así que en Windows usa el <strong>Programmer</strong> de Gowin. Es gratis: para grabar no se necesita licencia, solo una cuenta de Gowin para descargarlo. Sipeed además publica un paquete del Programmer solo, con los drivers USB incluidos, que es el camino más fácil:</p>
+<ol>
+<li><strong>Instala el Programmer.</strong> Descárgalo desde el espejo de Sipeed en <a href="https://dl.sipeed.com/shareURL/TANG/programmer">dl.sipeed.com/shareURL/TANG/programmer</a> (Programmer más drivers, sin cuenta) o desde la <a href="https://www.gowinsemi.com/en/support/download_eda/">página de descargas de Gowin</a> (crea una cuenta gratuita; la edición <em>Education</em> no necesita licencia y el Programmer viene dentro). Instala el driver USB cuando el instalador lo ofrezca.</li>
+<li><strong>Conecta la placa</strong> con el cable USB-C y espera unos diez segundos a que Windows termine de instalar el dispositivo. En el Administrador de dispositivos deberían aparecer dos entradas <em>USB Serial Converter</em> (A y B); para grabar no hace falta ningún puerto COM.</li>
+<li><strong>Abre el Programmer</strong> y haz clic en <em>Scan Device</em> (el ícono de la lupa). Debería encontrar un dispositivo, <strong>GW2AR-18C</strong>. Si no encuentra nada, revisa la lista de problemas más abajo.</li>
+<li><strong>Configura la operación.</strong> Haz doble clic en la fila del dispositivo (o usa <em>Edit → Configure Device</em>) y define:
+<ul>
+<li><em>Access Mode</em>: <strong>External Flash Mode</strong></li>
+<li><em>Operation</em>: <strong>exFlash Erase, Program thru GAO-Bridge</strong> (en algunas versiones del Programmer la entrada se llama <em>exFlash Erase, Program</em>; cualquiera de las dos sirve)</li>
+<li><em>Programming Options → File name</em>: tu <code>atari800_tn20k.fs</code></li>
+<li><em>External Flash Options → Device</em>: <strong>Generic Flash</strong>, <em>Start Address</em>: <strong>0x000000</strong></li>
+</ul>
+No toques User Code ni IDCODE. Haz clic en <em>Save</em>.</li>
+<li><strong>Graba.</strong> Haz clic en el botón <em>Program/Configure</em> (el ícono verde de reproducir). La barra de progreso pasa por borrado, grabación y verificación; la columna de estado muestra <em>Success</em> al terminar. La placa se reconfigura sola y arranca a READY.</li>
+</ol>
+<div class="note"><strong>SRAM Mode no es lo que buscas</strong>El Programmer también ofrece <em>SRAM Mode</em> / <em>SRAM Program</em>. Eso carga el bitstream directamente en la FPGA, lo que sirve para una prueba rápida, pero se pierde al siguiente apagado. Usa External Flash Mode para que la máquina arranque sola.</div>
+<p>Si el Programmer no encuentra la placa:</p>
+<ul>
+<li>Instala el driver del paquete de programador de Sipeed y vuelve a conectar el cable. A veces Windows necesita un segundo intento después de la primera conexión.</li>
+<li>Cierra cualquier programa que tenga abierto el puerto COM de la placa (la aplicación del PC Link, un terminal). El canal JTAG y el canal serial comparten el chip.</li>
+<li>Prueba con otro cable o puerto USB-C. Los cables solo de carga no llevan datos, y un cable en mal estado hace que la placa se desconecte y reconecte (ver <a href="14-troubleshooting.html">Solución de problemas</a>).</li>
+<li>En la configuración del cable, deja la frecuencia en <strong>2.5 MHz o menos</strong>; relojes JTAG más altos no son confiables a través del chip de la placa.</li>
+</ul>
+<p>openFPGALoader también puede correr en Windows mediante MSYS2 (paquete <code>mingw-w64-ucrt-x86_64-openFPGALoader</code>) después de reemplazar con Zadig el driver de la interfaz USB 0 por WinUSB. Funciona, pero son más pasos que el Programmer y una elección equivocada en Zadig puede dejar sin funcionar el puerto serial, así que solo vale la pena si ya usas MSYS2.</p>
+
+<h3>Comprueba que quedó grabado</h3>
+<p>Con cualquiera de los dos métodos: LED5 empieza a parpadear lento (el latido del firmware), luego LED3 se enciende cuando las ROM se cargaron desde la tarjeta, y la pantalla muestra READY. Si LED5 no parpadea, la grabación no terminó: repítela. Si LED5 parpadea pero no pasa nada más, el problema es la tarjeta SD, no la grabación; ve al paso 3 más abajo.</p>
 
 <h2>3. Primer encendido</h2>
 <ol>

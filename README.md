@@ -30,6 +30,8 @@ core by Mark Watson, adapted for the Gowin FPGA toolchain.
    ```bash
    openFPGALoader -b tangnano20k -f atari800_tn20k.fs
    ```
+   On **Windows** use the free Gowin Programmer (External Flash Mode, address 0x000000);
+   step-by-step for both in [manual §3](https://carlosbravoa.github.io/atari800_tang_nano20k/03-getting-started.html).
 4. Plug in **HDMI** and the **SD card**, then **power on** → it auto-boots to **BASIC**.
 5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick on port 1** alone can drive it.
    To boot a disk: OSD → *D1:* → *Attach* → pick → *Boot to OS (No BASIC)*. To run a cartridge:
