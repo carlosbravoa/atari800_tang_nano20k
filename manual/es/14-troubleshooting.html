@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>14. Solución de problemas — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../14-troubleshooting.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html" class="cur"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>14. Solución de problemas</h1>
+<p class="lead">Busca tu síntoma más abajo; cada entrada indica la causa probable y qué hacer.</p>
+
+<div class="tip"><strong>Mira primero los LEDs</strong>En funcionamiento normal, LED5 (pin 20) parpadea más o menos una vez por segundo, LED3 (pin 18) queda encendido fijo y LED2/LED4 titilan durante el acceso a disco. Si LED5 no parpadea, la FPGA no está corriendo en absoluto; si LED3 está apagado, el Atari no ha arrancado. Consulta la tabla de LEDs en <a href="02-hardware.html">Instalación del hardware</a>.</div>
+
+<h2>Sin imagen al encender (pantalla negra / "sin señal")</h2>
+<p><strong>Síntoma:</strong> el monitor no muestra nada, o indica "no signal" (sin señal), "unsupported" (no soportado) o "out of range" (fuera de rango) justo después del encendido.</p>
+<p><strong>Causa probable:</strong> una de dos cosas.</p>
+<ul>
+<li>En algunos arranques en frío la salida HDMI puede perder la señal brevemente y recuperarse sola mientras la máquina sigue funcionando.</li>
+<li>La pantalla, o algo entre la placa y la pantalla, rechaza la temporización no estándar (1056×720 declarado como 720p). Las pantallas estrictas o antiguas y los equipos intermedios — splitters HDMI, receptores AV, capturadoras — son los sospechosos habituales.</li>
+</ul>
+<p><strong>Qué hacer:</strong></p>
+<ol>
+<li>Espera un momento: una pérdida de señal al arranque en frío se recupera sola.</li>
+<li>Desconecta el cable USB-C y vuelve a conectarlo (apagar y volver a encender). Comprueba que LED5 parpadea y que LED3 se enciende fijo.</li>
+<li>Conecta la placa <em>directamente</em> al monitor o televisor, sin splitters ni receptores.</li>
+<li>Si la pantalla sigue rechazando la señal, graba (flashea) en su lugar la versión publicada v1.1 de 720p estándar (más latencia, pero totalmente conforme al estándar CEA). Consulta <a href="10-video.html">Video</a>.</li>
+</ol>
+
+<h2>El Atari no arranca (no aparece el prompt de BASIC)</h2>
+<p><strong>Síntoma:</strong> la pantalla queda en blanco o muestra la pantalla de error de ROM en vez del prompt READY de BASIC; LED3 (pin 18) está apagado.</p>
+<p><strong>Causa probable:</strong> el firmware no pudo leer la tarjeta SD o no encontró los archivos de ROM.</p>
+<p><strong>Qué hacer:</strong></p>
+<ol>
+<li>Comprueba que la tarjeta SD está formateada en <strong>FAT32</strong> (de 32 GB o menos) y bien insertada hasta el fondo.</li>
+<li>Comprueba que <code>ATARIXL.ROM</code> (exactamente 16384 bytes) y <code>BASIC.ROM</code> (exactamente 8192 bytes) están en el directorio <strong>raíz</strong> de la tarjeta. Los nombres no distinguen mayúsculas de minúsculas; los tamaños no son negociables.</li>
+<li>Vuelve a insertar la tarjeta y pulsa <strong>S1</strong>, o apaga y vuelve a encender la placa.</li>
+<li>Si el menú en pantalla aparece por sí solo al encender, eso es el síntoma de una carga de ROM fallida, no un comportamiento normal.</li>
+</ol>
+<p><strong>Rescate remoto mediante el PC Link:</strong> el puente serial responde incluso en la pantalla de error de ROM. Con la placa conectada por el cable USB-C, <code>python3 tools/atari.py status</code> indica la etapa de arranque y <code>atari.py log</code> muestra los marcadores de etapa (<code>boot: sd ok</code> → <code>boot: roms 0</code> → <code>boot: running</code>). Puedes enviar con <code>send</code> los archivos de ROM que faltan por el cable y pulsar una tecla para reintentar. Un silencio serial total significa que la máquina nunca llegó al firmware: apágala y vuelve a encenderla. Consulta <a href="13-pc-link.html">PC Link</a>.</p>
+<figure><img src="../img/screen_no_sd.png" alt="La pantalla de error de carga de ROM tal como se muestra sin tarjeta insertada: filesystem error 3, Failed to open root: 3, y los campos del volumen en cero"><figcaption>La misma pantalla sin tarjeta alguna, o con una tarjeta que el firmware no puede leer: "filesystem error 3" (error 3 del sistema de archivos, "not ready" = no lista) y "Failed to open root" (no se pudo abrir la raíz) con todos los campos del volumen en cero. Una tarjeta presente pero mal formateada (no FAT32) también se ve así. Inserta o reformatea la tarjeta y luego pulsa S1 o apaga y vuelve a encender; la última línea de la pantalla lo indica.</figcaption></figure>
+
+<h2>La máquina queda muerta tras un reinicio (v3.2 y posteriores: se recupera sola)</h2>
+<p><strong>Síntoma:</strong> tras un encendido, un Hard Reset (reinicio en frío), un Boot OS/BASIC, adjuntar un cartucho o pulsar F9, la pantalla queda negra o congelada con la imagen anterior y el teclado no responde, mientras que el OSD y el PC Link siguen respondiendo.</p>
+<p><strong>Causa probable:</strong> el 6502 fue liberado del reset en un instante desafortunado y nunca arrancó. Hasta la v3.1.2 esto ocurría más o menos una vez cada quince reinicios. Desde la v3.2 la liberación del reset está sincronizada con el reloj del núcleo (core), lo que lo eliminó en las pruebas, y un watchdog en el firmware cubre cualquier caso restante: si el sistema operativo no ha arrancado 2.5 s después de la liberación, el mismo reinicio se repite automáticamente (el registro serial muestra <code>boot: watchdog retry N</code>, y el campo <code>br:</code> de la línea de estado cuenta los reintentos).</p>
+<p><strong>Qué hacer:</strong> nada en la v3.2; si alguna vez la ves quedar muerta más de unos pocos segundos, repórtalo con el valor de <code>br:</code> de <code>atari.py status</code>. En versiones anteriores, reinicia de nuevo.</p>
+
+<h2>El teclado no hace nada</h2>
+<p><strong>Síntoma:</strong> el Atari arranca en BASIC pero teclear no tiene efecto, o solo funcionan algunas teclas.</p>
+<p><strong>Causa probable:</strong> el cableado o la configuración del módulo; o la entrada está siendo bloqueada a propósito.</p>
+<p><strong>Qué hacer:</strong></p>
+<ol>
+<li>Revisa el cableado: el <strong>UART TX</strong> del módulo debe ir al <strong>pin 53</strong>, más GND a un pin GND y 5V a un pin de 5V. No hace falta nada más: sin resistencias.</li>
+<li>Módulo CH9350: los interruptores DIP deben seleccionar <strong>State 0 (Host Mode / Direct Data Transmit)</strong> a <strong>115200 baudios</strong>. Pi Pico: el sketch debe enviar tramas CH9350 a 115200 baudios, 8N1 (formato de trama en <a href="02-hardware.html">Instalación del hardware</a>).</li>
+<li>Cierra el OSD. Mientras el menú está abierto, la entrada de teclado y joystick se bloquea hacia el Atari para que navegar por el menú no controle el juego. Pulsa <kbd>F12</kbd> o <strong>S2</strong> para volver al Atari.</li>
+<li>Si solo las <strong>teclas de flecha</strong> están muertas: está activado el modo <em>Arrow keys: JOYSTICK</em> (teclas de flecha como joystick). En ese modo ↑ ↓ ← → controlan el Joystick 1 y se suprimen del teclado (Alt izquierdo es el disparo). Pulsa <kbd>F11</kbd> para cambiarlo en vivo, o selecciona <em>Arrow keys: NORMAL</em> en OSD → Options. Consulta <a href="05-options.html">Opciones</a>.</li>
+<li>Recuerda que la asignación es por <em>posición</em>: el teclado de PC actúa como un teclado Atari, así que algunas teclas no están donde dice su rótulo de PC. Consulta la tabla en <a href="09-keyboard.html">Teclado</a>.</li>
+</ol>
+
+<h2>El joystick se mueve solo / los juegos se saltan las intros</h2>
+<p><strong>Síntoma:</strong> el cursor o el jugador se mueve sin tocar la palanca, el disparo parece estar apretado, los juegos se saltan solos las intros o las escenas intermedias.</p>
+<p><strong>Causa probable:</strong> una señal del joystick está cableada a un pin que controla el microcontrolador BL616 de la placa — <strong>pines 69–76 o 79</strong> (su UART/HSPI y el LED WS2812). El BL616 está siempre encendido, así que esos pines llevan una entrada fantasma.</p>
+<p><strong>Qué hacer:</strong> vuelve a cablear el joystick solo a los pines documentados — Joystick 1: 27, 28, 25, 26, 29; Joystick 2: 42, 41, 56, 54, 48; GND a cualquier pin GND. Evita también el pin 51 (entrada de reloj del PLL) y el pin 32 (conector flex del LCD). Consulta <a href="02-hardware.html">Instalación del hardware</a>.</p>
+
+<h2>Errores de disco</h2>
+<p><strong>Síntoma:</strong> una escritura falla con <strong>error 144</strong>; la línea de la unidad en el menú muestra <strong>(RO)</strong>; SAVE o FORMAT se niega a funcionar en una unidad; una imagen de doble densidad no arranca.</p>
+<p><strong>Causa probable y qué hacer:</strong></p>
+<ul>
+<li><strong>"(RO)" y error 144</strong> — la imagen está protegida contra escritura. El firmware quita el atributo de solo lectura heredado del PC cuando puede; cuando no puede, la unidad muestra "(RO)", informa protección contra escritura en su estado y las escrituras devuelven error 144, exactamente como un disco protegido. Quita el atributo de solo lectura del archivo desde el PC, o usa otra imagen.</li>
+<li><strong>La misma imagen en dos unidades</strong> — montar el mismo archivo en dos unidades hace que el segundo montaje sea de solo lectura a propósito (dos manejadores de escritura sobre un mismo archivo podrían corromper el sistema de archivos de la tarjeta SD). Desconecta el duplicado, o copia la imagen con otro nombre.</li>
+<li><strong>Una imagen de doble densidad no arranca</strong> — los ATR de sectores de 256 bytes funcionan en ambas convenciones de archivo DD (compacta y con área de arranque completa) desde la v2.8, y las imágenes de MyDOS 4.5 arrancan. Si usas una versión anterior, actualiza.</li>
+<li><strong>Necesitas un disco escribible</strong> — usa <em>New blank disk (90K)</em> (disco nuevo en blanco) del menú de la unidad para crear <code>BLANKnn.ATR</code> en la tarjeta y montarlo; luego formatéalo desde DOS.</li>
+<li><strong>Carga trabada a medio camino</strong> — si LED2 se apaga mientras LED4 sigue parpadeando, la carga quedó trabada. Prueba con Hard Reset desde el OSD.</li>
+</ul>
+<p>Más detalles en <a href="06-disks.html">Discos</a>.</p>
+
+<h2>El HDMI se pone en negro a mitad de sesión y vuelve</h2>
+<p><strong>Síntoma:</strong> la imagen se pierde por un momento (el monitor pierde la sincronía) y luego vuelve; el sonido y el juego siguen andando.</p>
+<p><strong>Causa probable:</strong> la misma pérdida de señal HDMI de arranque en frío descrita más arriba: la salida puede caer brevemente y recuperarse mientras la máquina sigue funcionando. No es un cuelgue: el Atari en sí nunca se interrumpió.</p>
+<p><strong>Qué hacer:</strong> no se pierde nada; espera a que vuelva la imagen. Si se repite, apaga y vuelve a encender la placa para que las salidas arranquen desde cero.</p>
+<p>En la práctica esto solo se ha visto en compilaciones de desarrollo con problemas de temporización que se corrigieron antes de publicar; no se ha observado en uso normal con una versión publicada. Si alguna vez ocurre, apagar y volver a encender es el único remedio. Se desconoce si la temperatura influye; si lo ves, anota las condiciones ambientales cuando lo reportes.</p>
+
+<h2>El PC Link no responde</h2>
+<p><strong>Síntoma:</strong> <code>atari.py ping</code> no devuelve <code>A8OK</code>; la aplicación de escritorio no puede conectarse; no aparece ningún puerto serial.</p>
+<p><strong>Causa probable:</strong> el driver, un puerto equivocado, otro programa ocupando el puerto, o un chip puente trabado.</p>
+<p><strong>Qué hacer:</strong></p>
+<ol>
+<li>Instala la dependencia de Python: <code>pip install pyserial</code>.</li>
+<li>Linux: si no aparece ningún <code>/dev/ttyUSB*</code>, carga el driver con <code>sudo modprobe ftdi_sio</code> (hazlo permanente con <code>echo ftdi_sio | sudo tee /etc/modules-load.d/ftdi_sio.conf</code>). Windows obtiene el driver FTDI VCP a través de Windows Update.</li>
+<li>La placa aparece como un <strong>par</strong> de puertos seriales; el <strong>segundo</strong> es el puente. Las herramientas lo eligen automáticamente.</li>
+<li>Solo una sesión puede ocupar el puerto: cierra <code>log</code>, <code>kbd</code> o la aplicación de escritorio antes de iniciar otra herramienta, y ciérralas todas antes de usar el programador de Gowin.</li>
+<li>Si el chip puente deja de responder tras una ráfaga de tráfico USB, <strong>desconecta el cable USB de la placa durante diez segundos</strong> y vuelve a conectarlo.</li>
+<li>Si el puerto aparece y desaparece una y otra vez (en Linux, <code>journalctl -k</code> muestra líneas <code>USB disconnect</code> cada segundo), el enlace USB está al límite: <strong>prueba con otro cable USB-C que soporte datos</strong>, y desconecta el teclado de su adaptador para ver si el consumo de corriente es lo que lo desestabiliza. La placa, su adaptador de teclado y el chip puente se alimentan todos del mismo puerto del computador. Un cable en mal estado produjo exactamente esto mientras el Atari en sí seguía funcionando con normalidad.</li>
+<li>Un silencio serial completo, incluso sin respuesta a <code>status</code>, significa que la máquina nunca llegó al firmware: apaga y vuelve a encender la placa.</li>
+</ol>
+<p>Consulta <a href="13-pc-link.html">PC Link</a>.</p>
+
+<h2>F12 no abre el OSD durante una sesión de PC</h2>
+<p><strong>Síntoma:</strong> con una sesión en vivo del PC Link activa (por ejemplo <code>atari.py kbd</code> o la pestaña Live Keys de la aplicación de escritorio), <kbd>F12</kbd> en el teclado físico a veces no abre el menú.</p>
+<p><strong>Causa probable:</strong> un problema conocido en investigación (consulta <a href="15-known-issues.html">Problemas conocidos</a>).</p>
+<p><strong>Qué hacer:</strong> pulsa el botón <strong>S2</strong> de la placa: siempre funciona. Cerrar la sesión de PC restaura <kbd>F12</kbd> de inmediato.</p>
+
+<footer class="pn"><a href="13-pc-link.html">← Anterior: PC Link</a><a href="15-known-issues.html">Siguiente: Problemas conocidos →</a></footer>
+</main></div></body></html>

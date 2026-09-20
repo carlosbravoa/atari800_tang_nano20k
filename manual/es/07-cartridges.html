@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>7. Cartuchos — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../07-cartridges.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html" class="cur"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>7. Cartuchos</h1>
+<p class="lead">Las imágenes de cartucho de hasta 4 MB se cargan desde la tarjeta SD y arrancan exactamente como un cartucho conectado a un XL real — incluidos los cartuchos multijuego con bancos.</p>
+
+<h2>Formatos: .car y .rom en bruto</h2>
+<div class="tbl"><table>
+<tr><th>Formato</th><th>Tamaño máximo</th><th>Limitado por</th></tr>
+<tr><td><code>.car</code></td><td><strong>4 MB</strong></td><td>La ventana de cartucho de 4 MB en la SDRAM de la placa (el chip es de 8 MB; el resto contiene la RAM del Atari y las ROM)</td></tr>
+<tr><td><code>.rom</code> (en bruto)</td><td><strong>16 KB</strong></td><td>Un volcado en bruto no lleva información del mapeador (mapper), así que solo se pueden cargar los tamaños simples sin bancos — 2, 4, 8 y 16 KB</td></tr>
+</table></div>
+<p>Un archivo <code>.car</code> es un volcado en bruto con una pequeña cabecera que indica el <em>tipo</em> de cartucho (su esquema de conmutación de bancos). Se soportan 52 tipos CAR, desde los cartuchos simples de 8K/16K hasta XEGS, XEGS conmutable, AtariMax, OSS, SDX, Williams, SIC!, Turbosoft y MegaCart de hasta 4 MB. La lista completa está en el <a href="16-appendix.html#a1">Apéndice</a>.</p>
+<p>Un <code>.rom</code> en bruto de más de 16 KB se rechaza con <code>Raw .ROM must be 2/4/8/16K — use a .CAR instead</code>: sin cabecera, el firmware no puede saber qué mapeador usa el cartucho. Convierte los volcados más grandes a <code>.car</code> con cualquier herramienta de cartuchos Atari, para que el tipo quede guardado en la cabecera.</p>
+
+<h2>Por qué el límite de 4 MB</h2>
+<p>El cartucho completo debe estar residente en la SDRAM. La conmutación de bancos es una decisión en tiempo real que toma el 6502 — una escritura en el registro del mapeador seguida de inmediato por una lectura del nuevo banco — así que no hay oportunidad de ir trayendo bancos desde la tarjeta SD bajo demanda (la latencia de la SD es unas mil veces demasiado lenta para esa ventana). Todo lo que llega hasta MegaCart 4 MB (<code>.car</code> tipo 63) cabe. Las imágenes <strong>The!Cart</strong> (32, 64 y 128 MB) no caben en la SDRAM de 8 MB y se rechazan con <code>Cartridge too large (&gt;4MB)</code>.</p>
+
+<h2>Adjuntar un cartucho</h2>
+<ol>
+<li>Abre el OSD (<kbd>F12</kbd> o S2) y selecciona <strong>3) Cart:</strong>.</li>
+<li>Elige <strong>1) Attach cartridge...</strong> (adjuntar cartucho) — el explorador de archivos muestra solo archivos <code>.car</code> y <code>.rom</code>, y carpetas.</li>
+<li>Escoge el archivo. El cartucho se carga en la SDRAM y el Atari <strong>arranca en frío directamente en él</strong>; el menú se cierra solo.</li>
+</ol>
+<p>A partir de entonces, la línea <code>Cart:</code> del menú principal muestra el cartucho adjuntado. Adjuntar otro cartucho lo reemplaza y vuelve a arrancar en frío.</p>
+<figure><img src="../img/osd_cart.png" alt="El menú CARTRIDGE"><figcaption>El menú de cartucho.</figcaption></figure>
+<p>Si el archivo no se puede usar, un aviso explica el motivo y vuelves al explorador:</p>
+<div class="tbl"><table>
+<tr><th>Aviso</th><th>Significado</th></tr>
+<tr><td><code>Unsupported CAR type <em>n</em></code></td><td>La cabecera indica un tipo de cartucho que el núcleo (core) no implementa. El número es el identificador del tipo CAR — por favor repórtalo si crees que debería estar soportado.</td></tr>
+<tr><td><code>Cartridge too large (&gt;4MB) / does not fit 8MB SDRAM</code></td><td>La imagen es más grande que la ventana de 4 MB (por ejemplo, The!Cart).</td></tr>
+<tr><td><code>Raw .ROM must be 2/4/8/16K / use a .CAR instead</code></td><td>Un volcado en bruto de un cartucho con bancos — conviértelo a <code>.car</code>.</td></tr>
+<tr><td><code>Not a valid .CAR file</code></td><td>El archivo tiene la extensión <code>.car</code> pero no la cabecera <code>CART</code>.</td></tr>
+</table></div>
+
+<h2>Desconectar un cartucho</h2>
+<p><strong>3) Cart:</strong> → <strong>2) Detach</strong> (desconectar) quita el cartucho y <strong>arranca en frío de vuelta en BASIC</strong> (la línea <code>Cart:</code> vuelve a <code>None</code>). Si no hay nada adjuntado, el menú simplemente dice <code>No cartridge inserted</code>.</p>
+
+<h2>Cartuchos multijuego, RESET y Hard Reset</h2>
+<p>Los cartuchos multijuego con bancos (las compilaciones Atarimax, por ejemplo) muestran un menú y luego desactivan el cartucho para ejecutar el juego elegido desde la RAM. Volver al menú funciona de forma distinta según el tipo de reinicio — y ambos se comportan como el hardware real:</p>
+<div class="tbl"><table>
+<tr><th>Reinicio</th><th>Qué ve el cartucho</th><th>Dónde terminas</th></tr>
+<tr><td><strong>7) Hard Reset</strong> (reinicio en frío, v3.0)</td><td>Un apagado y encendido: el cartucho se vuelve a activar y se lo devuelve al banco 0.</td><td>Vuelve el menú del cartucho multijuego, como tras apagar y volver a encender una máquina real (Shift+F5 en Altirra).</td></tr>
+<tr><td><strong>6) Soft Reset</strong> (reinicio en caliente) / <kbd>F9</kbd></td><td>Nada. El puerto de cartucho del XL/XE no tiene línea de reset, así que un cartucho no puede ver la tecla RESET. Un cartucho multijuego que se desactivó a sí mismo sigue desactivado.</td><td>El OS del XL arranca BASIC — o el Self Test si BASIC está desactivado — exactamente igual que un Atari real y que F5 en Altirra. Esto es fidelidad al original, no un error.</td></tr>
+</table></div>
+<div class="tip"><strong>Regla práctica</strong>Para volver al menú de un cartucho multijuego, usa <strong>Hard Reset</strong>, no <kbd>F9</kbd>.</div>
+
+<h2>Cartuchos y BASIC</h2>
+<p>Un cartucho en <code>$A000</code> ocupa el mismo rango de direcciones que el BASIC incorporado, así que mientras está adjuntado BASIC queda reemplazado — la máquina arranca el cartucho, como lo hace un XL real. Esto también significa que tanto <strong>4) Boot to OS</strong> como <strong>5) Boot to BASIC</strong> arrancan el cartucho mientras haya uno adjuntado; para recuperar BASIC, desconecta el cartucho primero.</p>
+
+<h2>Tipos CAR soportados</h2>
+<p>Los 52 identificadores de tipo CAR soportados, con sus nombres, están listados en el <a href="16-appendix.html#a1">Apéndice</a>. Los tipos no soportados se rechazan en pantalla indicando su identificador, así que siempre sabrás con cuál te topaste.</p>
+
+<footer class="pn"><a href="06-disks.html">← Anterior: Discos</a><a href="08-executables.html">Siguiente: Ejecutables (.xex) →</a></footer>
+</main></div></body></html>

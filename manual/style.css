@@ -8,6 +8,8 @@ a{color:var(--accent)}
 header.top{display:flex;align-items:baseline;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
 header.top .brand{font-weight:600;text-decoration:none;color:var(--ink);font-size:1.05rem}
 header.top .sub{color:var(--muted);font-size:.9rem}
+header.top .lang{margin-left:auto;font-size:.9rem;color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:4px;padding:2px 8px}
+header.top .lang:hover{color:var(--ink)}
 .wrap{display:grid;grid-template-columns:250px minmax(0,1fr);gap:0;max-width:1180px;margin:0 auto}
 nav.side{padding:20px 12px 40px 20px;border-right:1px solid var(--line);position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto}
 nav.side ol{list-style:none;margin:0;padding:0;counter-reset:ch}

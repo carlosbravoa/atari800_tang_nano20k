@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tang Atari 800 — Manual de usuario</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../index.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html" class="cur"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>Tang Atari 800 — Manual de usuario</h1>
+<p class="lead">Un Atari 800/800XL/65XE/130XE recreado en la placa FPGA Sipeed Tang Nano 20K, con video y audio por HDMI, discos y cartuchos desde tarjeta SD, y un enlace con el PC a través del propio cable USB-C de la placa. Este manual es para quienes tienen la placa: cubre la instalación, el uso cotidiano y la solución de problemas, no la construcción del diseño.</p>
+
+<h2>Capítulos</h2>
+<ol class="toc">
+<li><a href="01-overview.html">1. Introducción</a> — qué es la máquina, qué emula y qué necesita.</li>
+<li><a href="02-hardware.html">2. Instalación del hardware</a> — la placa, HDMI, tarjeta SD, joysticks, cableado del teclado y los LED de estado.</li>
+<li><a href="03-getting-started.html">3. Primeros pasos</a> — los archivos ROM en la tarjeta SD, la grabación (flasheo), el primer encendido y el primer disco.</li>
+<li><a href="04-osd.html">4. El menú OSD</a> — cómo abrir el menú, sus opciones, el explorador de archivos y la navegación con joystick.</li>
+<li><a href="05-options.html">5. Opciones y atari.ini</a> — teclas de flecha, scanlines, posición horizontal, estéreo, RAM, módem y cómo guardar la configuración.</li>
+<li><a href="06-disks.html">6. Discos</a> — imágenes .atr/.xfd en D1: a D4:, discos en blanco, escritura, manejo de solo lectura y el disco duro en D4:.</li>
+<li><a href="07-cartridges.html">7. Cartuchos</a> — imágenes .car y .rom, cartuchos multijuego, Hard Reset frente a Soft Reset.</li>
+<li><a href="08-executables.html">8. Ejecutables (.xex)</a> — arrancar programas de carga binaria directamente y expulsarlos.</li>
+<li><a href="09-keyboard.html">9. Teclado</a> — el enlace de teclado CH9350 / Pi Pico, la asignación de teclas por posición Atari y las teclas rápidas.</li>
+<li><a href="10-video.html">10. Video</a> — la salida HDMI sincronizada (genlock), scanlines y posición horizontal.</li>
+<li><a href="11-audio.html">11. Audio</a> — audio por HDMI y estéreo con doble POKEY.</li>
+<li><a href="12-ram.html">12. Ampliación de RAM</a> — de 128 KB a 1088 KB y cuándo se aplica el cambio.</li>
+<li><a href="13-pc-link.html">13. PC Link</a> — atari.py y la aplicación de escritorio: enviar, ejecutar, teclear, captura de impresora, H:, telemetría.</li>
+<li><a href="14-troubleshooting.html">14. Solución de problemas</a> — sin imagen, no arranca, sin sonido, problemas de teclado o de disco, y qué te dicen los LED.</li>
+<li><a href="15-known-issues.html">15. Problemas conocidos</a> — comportamientos que se entienden pero aún no están corregidos.</li>
+<li><a href="16-appendix.html">A. Apéndice</a> — tipos de cartucho, dispositivos, formatos de archivo, referencia de pines, glosario, historial de versiones, créditos.</li>
+</ol>
+
+<div class="tip"><strong>Atajos</strong>
+Quiero…
+<ul>
+<li>arrancar un disco → <a href="03-getting-started.html">§3 Primeros pasos</a> y <a href="06-disks.html">§6 Discos</a></li>
+<li>ejecutar un cartucho → <a href="07-cartridges.html">§7 Cartuchos</a></li>
+<li>teclear un programa desde mi PC → <a href="13-pc-link.html">§13 PC Link</a></li>
+<li>resolver un problema → <a href="14-troubleshooting.html">§14 Solución de problemas</a></li>
+</ul>
+</div>
+
+<p>Este manual describe la versión publicada (release) <strong>v3.2.2</strong>. Bitstreams y notas de cada versión: <a href="https://github.com/carlosbravoa/atari800_tang_nano20k/releases">github.com/carlosbravoa/atari800_tang_nano20k/releases</a>.</p>
+
+<footer class="pn"><a href="01-overview.html">Siguiente: 1. Introducción →</a></footer>
+</main></div></body></html>

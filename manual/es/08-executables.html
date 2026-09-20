@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>8. Ejecutables (.xex) — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../08-executables.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html" class="cur"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>8. Ejecutables (.xex)</h1>
+<p class="lead">Los programas Atari de carga binaria se ejecutan directamente desde la tarjeta SD, o directamente desde tu PC por el cable USB-C, sin que intervenga ningún disco con DOS.</p>
+
+<h2>Qué es un archivo .xex</h2>
+<p>Un <code>.xex</code> es un ejecutable Atari de "carga binaria": el formato que DOS carga con su comando <em>L</em>. Comienza con los dos bytes <code>$FF $FF</code> y contiene uno o más segmentos, cada uno con una dirección de inicio y de fin, más entradas opcionales <code>INITAD</code> (ejecutar esto antes de cargar el siguiente segmento) y <code>RUNAD</code> (saltar aquí al terminar). Muchos juegos y demos se distribuyen de esta forma.</p>
+
+<h2>Ejecutar un .xex desde el OSD</h2>
+<ol>
+<li>Copia el <code>.xex</code> a la tarjeta SD.</li>
+<li>Abre el OSD (<kbd>F12</kbd> o S2), selecciona <strong>1) D1:</strong> → <strong>1) Attach (.atr/.xfd/.xex)...</strong> (adjuntar).</li>
+<li>Elige el <code>.xex</code> en el explorador de archivos (aparece junto a los archivos <code>.atr</code> y <code>.xfd</code>).</li>
+</ol>
+<p>El Atari arranca en frío directamente en el programa y el menú se cierra solo. La línea <code>D1:</code> del menú principal muestra el nombre del <code>.xex</code> mientras esté adjunto.</p>
+<p>Un <code>.xex</code> arranca solo desde <strong>D1:</strong>. El explorador de D2: también lista los archivos <code>.xex</code>, pero no son imágenes de disco, así que adjuntar uno ahí falla con el mensaje <code>Mount failed</code>.</p>
+
+<h2>Qué ocurre por detrás</h2>
+<ul>
+<li>El firmware sirve un pequeño cargador 6502 integrado como <strong>disco de arranque virtual en D1:</strong>, con los bytes del <code>.xex</code> a continuación, sector por sector. Cualquier disco que estuviera en D1: se retira.</li>
+<li>El Atari arranca en frío con la tecla <strong>OPTION</strong> mantenida por el firmware, de modo que BASIC queda desactivado y toda la RAM queda libre para el programa.</li>
+<li>El cargador maneja el formato multisegmento completo: la cabecera <code>$FFFF</code>, varios segmentos y los vectores <code>INITAD</code> / <code>RUNAD</code>.</li>
+</ul>
+<p>El archivo se comprueba antes de arrancar: uno sin la cabecera <code>$FF $FF</code> se rechaza con <code>Not a valid .XEX (missing $FFFF header)</code>.</p>
+
+<h2>Ejecutar un .xex desde el PC</h2>
+<p>Con el PC Link configurado (ver <a href="13-pc-link.html">PC Link</a>), <code>atari.py run</code> envía el archivo por el cable USB-C y lo arranca de una sola vez: unos cinco segundos desde tu ensamblador hasta el programa en ejecución:</p>
+<pre><code>python3 tools/atari.py run mygame.xex</code></pre>
+<p>El archivo queda en la tarjeta SD (en la carpeta <code>/PC</code> por defecto) y arranca exactamente igual que si lo adjuntaras desde el OSD; la línea <code>D1:</code> también lo muestra. Comandos relacionados: <code>atari.py eject</code> expulsa el disco virtual de D1:, y <code>atari.py reset</code> expulsa y arranca en frío (con <code>--warm</code> para un reinicio en caliente y <code>--keep</code> para mantener el <code>.xex</code> adjunto).</p>
+
+<h2>Expulsar</h2>
+<p>El <code>.xex</code> sigue adjunto a D1: después de cargarse, así que un reinicio lo arrancaría de nuevo. Puedes quitarlo desde cualquiera de los dos lados:</p>
+<ul>
+<li><strong>OSD:</strong> <strong>1) D1:</strong> → <strong>3) Detach</strong> (desconectar), o simplemente adjunta un <code>.atr</code> a D1:, que vuelve a ocupar la unidad.</li>
+<li><strong>PC:</strong> <code>python3 tools/atari.py eject</code>.</li>
+</ul>
+<p>Desconectarlo desde el OSD no reinicia la máquina; el programa en ejecución continúa hasta que hagas un reinicio.</p>
+
+<h2>Limitaciones</h2>
+<ul>
+<li><strong>Página <code>$0600</code>–<code>$07FF</code>.</strong> El cargador reside en esta zona mientras se carga el programa. Un programa que a su vez se cargue en <code>$0600</code>–<code>$07FF</code> puede chocar con el cargador en ejecución y no llegar a arrancar. Reubicar el cargador en la RAM alta es una posible solución futura.</li>
+<li><strong>Algunos títulos exigentes</strong> muestran fallos gráficos intermitentes; ver <a href="15-known-issues.html">Problemas conocidos</a>. En particular, unos pocos juegos con temporización PAL se comportan mal en esta máquina exclusivamente NTSC, ya sea cargados como <code>.xex</code> o de otra forma.</li>
+<li>Solo D1: puede arrancar un <code>.xex</code>; no es una carga "L" de DOS sobre un sistema en marcha, sino un arranque en frío.</li>
+</ul>
+
+<footer class="pn"><a href="07-cartridges.html">← Anterior: Cartuchos</a><a href="09-keyboard.html">Siguiente: Teclado →</a></footer>
+</main></div></body></html>

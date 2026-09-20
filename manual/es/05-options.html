@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5. Opciones y atari.ini — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../05-options.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html" class="cur"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>5. Opciones y atari.ini</h1>
+<p class="lead">La pantalla Options define las preferencias de entrada, video, audio, memoria y módem; "Save changes" las guarda en <code>atari.ini</code> en la tarjeta SD.</p>
+
+<h2>La pantalla Options</h2>
+<p>Abre el OSD (<kbd>F12</kbd> o S2) y selecciona <strong>8) Options</strong> (opciones).</p>
+<figure><img src="../img/osd_options.png" alt="La pantalla OPTIONS"><figcaption>La pantalla Options con los valores por defecto.</figcaption></figure>
+<div class="menu"><span class="bar"> OPTIONS </span> &lt;&lt; Return to main menu
+ Arrow keys:   NORMAL
+<span class="sel"> Scanlines:    OFF </span> H position:   0  &lt;- -&gt;
+ Stereo:       OFF
+ RAM:          128 KB  &lt;- -&gt;
+ Modem (R:):   OFF
+ Keyboard:     ATARI
+ Save changes
+<span class="bar"> Up/Down move  Enter select  F12 </span></div>
+<p>Muévete con <kbd>↑</kbd>/<kbd>↓</kbd> y pulsa <kbd>Enter</kbd> (o Fire) para cambiar un ítem. Los dos ítems marcados con <code>&lt;- -&gt;</code> se cambian, en cambio, con <kbd>←</kbd>/<kbd>→</kbd> (o con la palanca del joystick). <kbd>F12</kbd>, S2 o <strong>&lt;&lt; Return to main menu</strong> (volver al menú principal) te llevan de vuelta.</p>
+<p>Cada cambio se aplica de inmediato para que puedas verlo u oírlo — salvo RAM, que necesita un arranque en frío — pero <strong>no se escribe nada en la tarjeta SD hasta que selecciones Save changes</strong> (guardar cambios).</p>
+
+<h2>Arrow keys</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>NORMAL</code> (por defecto) / <code>JOYSTICK</code></td></tr>
+<tr><th>Se aplica</th><td>En vivo</td></tr>
+<tr><th>Clave ini</th><td><code>joystick=0</code> / <code>joystick=1</code></td></tr>
+</table></div>
+<p>Con <code>JOYSTICK</code>, las teclas de flecha del teclado (Arrow keys) controlan el Joystick 1 (junto con cualquier joystick real conectado al puerto 1) y <kbd>Left Alt</kbd> es el botón de disparo. Esas teclas dejan entonces de llegar al teclado del Atari, para que no escriban caracteres sueltos. Vuelve a <code>NORMAL</code> para poder escribir de nuevo.</p>
+<div class="tip"><strong>Cambio rápido: F11</strong><kbd>F11</kbd> alterna flechas ↔ joystick en vivo, en medio del juego, sin abrir el OSD. Es un cambio solo en vivo: nunca se guarda, así que en el siguiente arranque la opción vuelve a lo que diga <code>atari.ini</code>.</div>
+
+<h2>Scanlines</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>OFF</code> (por defecto) / <code>25%</code> / <code>50%</code> / <code>75%</code> — cada pulsación de Enter pasa al siguiente</td></tr>
+<tr><th>Se aplica</th><td>En vivo</td></tr>
+<tr><th>Clave ini</th><td><code>scanlines=0</code> … <code>scanlines=3</code></td></tr>
+</table></div>
+<p>Agrega a la imagen scanlines (líneas de barrido) oscuras al estilo de un monitor CRT, con la intensidad elegida. Ver <a href="10-video.html">Video</a>.</p>
+
+<h2>H position</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>0</code> (por defecto) a <code>48</code>, con <kbd>←</kbd>/<kbd>→</kbd></td></tr>
+<tr><th>Se aplica</th><td>En vivo — la imagen se desplaza mientras mantienes pulsada la tecla</td></tr>
+<tr><th>Clave ini</th><td><code>hpos=0</code> … <code>hpos=48</code></td></tr>
+</table></div>
+<p>Desplaza la imagen horizontalmente (H position = posición horizontal) para centrarla en tu pantalla. <kbd>←</kbd> mueve la imagen hacia la izquierda (un número mayor), <kbd>→</kbd> la devuelve hacia la derecha. Pulsar Enter en este ítem no hace nada.</p>
+
+<h2>Stereo</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>OFF</code> (por defecto, mono) / <code>ON</code></td></tr>
+<tr><th>Se aplica</th><td>En vivo</td></tr>
+<tr><th>Clave ini</th><td><code>stereo=0</code> / <code>stereo=1</code></td></tr>
+</table></div>
+<p>Activa la clásica ampliación estéreo de doble POKEY: un segundo POKEY en <code>$D210</code>, con el POKEY 1 en el canal izquierdo y el POKEY 2 en el derecho. Viene desactivada por defecto para que el software común no se vea afectado. Actívala <em>antes</em> de cargar software preparado para estéreo, o el segundo POKEY quedará en silencio. Ver <a href="11-audio.html">Audio</a>.</p>
+
+<h2>RAM</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>128 KB</code> (por defecto, 130XE) / <code>320</code> / <code>576</code> / <code>1088 KB</code> (RAMBO) — se elige con <kbd>←</kbd>/<kbd>→</kbd></td></tr>
+<tr><th>Se aplica</th><td>En el arranque en frío que <kbd>Enter</kbd> ejecuta sobre este ítem (una máquina en marcha no puede cambiar su tamaño de RAM)</td></tr>
+<tr><th>Clave ini</th><td><code>ram=128</code> / <code>ram=320</code> / <code>ram=576</code> / <code>ram=1088</code></td></tr>
+</table></div>
+<p>Elige el tamaño con <kbd>←</kbd>/<kbd>→</kbd> y luego pulsa <kbd>Enter</kbd> en la fila RAM: aparece el mensaje <code>Rebooting with new RAM size...</code> y el Atari arranca en frío con el nuevo tamaño. Recuerda seleccionar Save changes después si quieres que se conserve. Ver <a href="12-ram.html">Ampliación de RAM</a>.</p>
+
+<h2>Modem (R:)</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>OFF</code> (por defecto) / <code>ON</code></td></tr>
+<tr><th>Se aplica</th><td>En el siguiente arranque en frío</td></tr>
+<tr><th>Clave ini</th><td><code>modem=0</code> / <code>modem=1</code></td></tr>
+</table></div>
+<p>Soporte opcional del dispositivo serial <strong>R:</strong> (módem al estilo del 850) a través del cable USB-C, para que un programa de terminal como BobTerm pueda llamar a una BBS por telnet a través del PC. En OFF (por defecto) no tiene ningún efecto en el uso normal. Esta función está en desarrollo; ver <a href="13-pc-link.html">PC Link</a> y <a href="15-known-issues.html">Problemas conocidos</a>.</p>
+<p>La opción Modem necesita dos archivos en la tarjeta SD que este proyecto no incluye: el handler 850 de Altirra y su relocalizador (obra de Avery Lee, redistribuida por el proyecto FujiNet). Descarga <code>850handler.bin</code> (1281 bytes) y <code>850relocator.bin</code> (341 bytes) del repositorio de firmware de FujiNet (<code>data/webui/device_specific/BUILD_ATARI/</code>) y colócalos en la tarjeta como <code>/PC/850HAND.BIN</code> y <code>/PC/850REL.BIN</code>, por ejemplo con <code>atari.py send 850handler.bin PC/850HAND.BIN</code>. El firmware se los entrega al Atari en el arranque en frío cuando Modem está en ON.</p>
+
+<h2>Keyboard</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>ATARI</code> (por defecto) / <code>PC</code></td></tr>
+<tr><th>Se aplica</th><td>En vivo</td></tr>
+<tr><th>Clave ini</th><td><code>kbdlayout=0</code> / <code>kbdlayout=1</code></td></tr>
+</table></div>
+<p><strong>ATARI</strong> trata tu teclado como un teclado Atari según la posición de las teclas (el modo por defecto, descrito en <a href="09-keyboard.html">Teclado</a>). <strong>PC</strong>, en cambio, hace que cada tecla escriba lo que está impreso en un teclado de PC de EE. UU.: <kbd>Shift</kbd>+<kbd>2</kbd> da <code>@</code>, la tecla de comillas da <code>'</code> y <code>"</code>, las teclas de corchetes dan <code>[</code> y <code>]</code>. Se agregó en la v3.1; los detalles y la lista de diferencias están en <a href="09-keyboard.html#pc-layout">Teclado → Opción de distribución PC</a>. El texto pegado a través del PC Link sigue esta opción automáticamente.</p>
+
+<h2>Save changes y la marca "*"</h2>
+<p>En cuanto cambias algo, la última fila pasa a decir <code>Save changes *</code> — el asterisco significa que hay cambios que no se han escrito en la tarjeta SD. Selecciónala para escribir todas las opciones en <code>/atari.ini</code>; la fila muestra <code>Options saved.</code> y el asterisco desaparece. Si no se puede escribir en la tarjeta, aparece el aviso <code>Cannot save options to SD</code>.</p>
+<div class="note"><strong>Los cambios sin guardar son temporales</strong>Los cambios que no guardes se mantienen solo durante la sesión actual. En el siguiente encendido (o cuando el reinicio por hardware con S1 vuelva a iniciar el firmware) se cargan de nuevo los valores de <code>atari.ini</code>.</div>
+
+<h2>El archivo atari.ini</h2>
+<p>El archivo está en <code>/atari.ini</code>, en la raíz de la tarjeta SD. El firmware lo crea la primera vez que seleccionas Save changes y lo marca como archivo <em>oculto</em>, así que puede que tengas que mostrar los archivos ocultos en tu PC para verlo. Es un archivo de texto plano con un <code>key=value</code> (clave=valor) por línea. Las líneas en blanco y las que empiezan con <code>;</code>, <code>#</code> o <code>[</code> se ignoran; las claves desconocidas también se ignoran. Cualquier otra línea sin un <code>=</code> hace que el firmware considere el archivo como corrupto.</p>
+<p>Un archivo completo con los valores por defecto:</p>
+<pre><code>joystick=0
+scanlines=0
+hpos=0
+stereo=0
+modem=0
+kbdlayout=0
+ram=128
+</code></pre>
+<div class="tbl"><table>
+<tr><th>Clave</th><th>Valores</th><th>Opción</th></tr>
+<tr><td><code>joystick</code></td><td>0 / 1</td><td>Arrow keys NORMAL / JOYSTICK</td></tr>
+<tr><td><code>scanlines</code></td><td>0 – 3</td><td>Scanlines OFF / 25% / 50% / 75%</td></tr>
+<tr><td><code>hpos</code></td><td>0 – 48</td><td>H position (los valores fuera del rango se limitan al extremo más cercano)</td></tr>
+<tr><td><code>stereo</code></td><td>0 / 1</td><td>Stereo OFF / ON</td></tr>
+<tr><td><code>ram</code></td><td>128 / 320 / 576 / 1088</td><td>Tamaño de RAM (cualquier otro valor vuelve a 128)</td></tr>
+<tr><td><code>modem</code></td><td>0 / 1</td><td>Modem (R:) OFF / ON</td></tr>
+</table></div>
+<p>Si lo prefieres, puedes editar el archivo en un PC; se lee una sola vez cuando se enciende la placa. Si el archivo no existe, todas las opciones toman sus valores por defecto.</p>
+
+<footer class="pn"><a href="04-osd.html">← Anterior: El menú OSD</a><a href="06-disks.html">Siguiente: Discos →</a></footer>
+</main></div></body></html>

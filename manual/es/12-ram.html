@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>12. Ampliación de RAM — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../12-ram.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html" class="cur"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>12. Ampliación de RAM</h1>
+<p class="lead">La máquina arranca como un 130XE de 128 KB y se puede ampliar desde el menú a 320, 576 o 1088 KB de memoria por bancos al estilo RAMBO.</p>
+
+<h2>Tamaños disponibles</h2>
+<div class="tbl"><table>
+<tr><th>Ajuste</th><th>Qué es</th></tr>
+<tr><td><strong>128 KB</strong></td><td>Un 130XE de fábrica: 64 KB de memoria principal más 64 KB de memoria extendida. <strong>Por defecto.</strong></td></tr>
+<tr><td><strong>320 KB</strong></td><td>Ampliación al estilo RAMBO</td></tr>
+<tr><td><strong>576 KB</strong></td><td>Ampliación al estilo RAMBO</td></tr>
+<tr><td><strong>1088 KB</strong></td><td>Ampliación al estilo RAMBO — la mayor disponible</td></tr>
+</table></div>
+<p>La memoria adicional se organiza por bancos al estilo RAMBO, como las conocidas ampliaciones de 320 KB / 576 KB / 1 MB para máquinas XL/XE reales, así que el software escrito para esas ampliaciones puede usarla. El software que no usa memoria extendida no se ve afectado por este ajuste.</p>
+
+<h2>Cambiar el tamaño</h2>
+<ol>
+<li>Abre el OSD (<kbd>F12</kbd> o el botón S2) y elige <strong>Options</strong> (opciones).</li>
+<li>Muévete a la línea <strong>RAM</strong> y usa <kbd>←</kbd> / <kbd>→</kbd> (o izquierda/derecha del joystick) para elegir 128, 320, 576 o 1088 KB.</li>
+<li>Pulsa <kbd>Enter</kbd> (o Fire). A diferencia de las demás opciones, un cambio de RAM no se puede aplicar en vivo: <strong>Enter hace un arranque en frío del Atari</strong> con el nuevo tamaño. Todo lo que esté en ejecución se pierde, así que guarda tu trabajo antes.</li>
+<li>Para conservar el tamaño después del próximo encendido, elige <strong>Save changes</strong> (guardar cambios). Se almacena en <code>atari.ini</code> como <code>ram=</code> (128, 320, 576 o 1088; por defecto 128). Consulta <a href="05-options.html">Opciones y atari.ini</a>.</li>
+</ol>
+<div class="note"><strong>RAM es la única opción que necesita un arranque en frío</strong>Arrow keys (teclas de flecha), scanlines, H position (posición horizontal), estéreo y el módem se aplican en vivo. RAM solo tiene efecto en el arranque en frío que la opción realiza cuando pulsas Enter.</div>
+
+<h2>Cartuchos y RAM en conjunto</h2>
+<p>Todos los tamaños de RAM coexisten con cartuchos de cualquier tamaño soportado, incluido el MegaCart de 4 MB. Puedes usar una máquina de 1088 KB con un cartucho de 4 MB adjunto; no hay que sacrificar uno por el otro.</p>
+
+<h2>Compatibilidad</h2>
+<p><strong>Probado hasta ahora:</strong> demos que necesitan memoria ampliada se han ejecutado a 320 KB y a 1088 KB, ambas correctamente. 576 KB todavía no se ha ejercitado con software de memoria ampliada, pero es el mismo mecanismo con una cantidad de bancos distinta.</p>
+
+<footer class="pn"><a href="11-audio.html">← Anterior: Audio</a><a href="13-pc-link.html">Siguiente: PC Link →</a></footer>
+</main></div></body></html>

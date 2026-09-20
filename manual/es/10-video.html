@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>10. Video — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../10-video.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html" class="cur"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>10. Video</h1>
+<p class="lead">La imagen sale de la placa por HDMI como una señal de 720 líneas sincronizada con la temporización de cuadro del propio Atari: estable, sin desgarros y con apenas un par de líneas de retardo respecto de la máquina.</p>
+
+<h2>Qué sale por el puerto HDMI</h2>
+<p>El Atari dibuja una imagen de 352&times;240 a la frecuencia NTSC. La placa la escala por un <strong>factor entero exacto de 3</strong> hasta un área activa de <strong>1056&times;720</strong> dentro de un raster personalizado de <strong>1216&times;786</strong>, y envía eso por HDMI. Cada pixel del Atari se convierte en un bloque nítido de 3&times;3; nada se remuestrea.</p>
+<p>La salida está <strong>sincronizada (genlock)</strong>: el reloj de pixel está enganchado en frecuencia al núcleo (core), de modo que se produce exactamente un cuadro de salida por cada cuadro del Atari. Como los conteos de cuadros y de líneas son números enteros, la imagen nunca se desplaza, nunca salta una línea ni se desgarra. <strong>No hay frame buffer</strong>: las líneas del Atari se capturan de a pocas en un pequeño búfer de líneas y se leen de inmediato, por eso la latencia es de apenas <strong>1–2 líneas de barrido</strong>. Tu pantalla recibe una señal HD de 720 líneas.</p>
+<div class="tbl"><table>
+<tr><th>Propiedad</th><th>Valor</th></tr>
+<tr><td>Imagen del Atari</td><td>352 &times; 240</td></tr>
+<tr><td>Salida activa</td><td>1056 &times; 720 (3&times; en ambas direcciones)</td></tr>
+<tr><td>Raster total</td><td>1216 &times; 786</td></tr>
+<tr><td>Frecuencia de cuadro</td><td>NTSC, 59.94 Hz — un cuadro de salida por cada cuadro del Atari</td></tr>
+<tr><td>Latencia</td><td>~1–2 líneas de barrido, sin frame buffer</td></tr>
+</table></div>
+<figure><img src="../img/screen_ready.png" alt="El prompt READY de BASIC: texto celeste sobre un área de juego azul con borde negro, 1056×720"><figcaption>Lo que lleva la salida HDMI al encender: el prompt READY de BASIC, reproducido aquí pixel a pixel desde la propia memoria de pantalla de la máquina, con la paleta del núcleo (core) y la fuente del OS (la pantalla muestra exactamente esto, a 1056×720; una foto de la pantalla solo agrega la pantalla).</figcaption></figure>
+<figure><img src="../img/game_star_raiders_2.jpg" alt="Pantalla de título de Star Raiders II en un monitor HDMI: título en bloques amarillos sobre un campo de estrellas, un horizonte planetario verde y azul, y abajo el panel de instrumentos de la cabina" style="image-rendering:auto"><figcaption>Star Raiders II (Atari Corp., 1985) en un monitor 1080p, scanlines OFF. El monitor escala la imagen de 1056×720 para llenar su ancho.</figcaption></figure>
+<figure><img src="../img/game_demo_2.jpg" alt="Un juego en modo de demostración en un monitor HDMI: la palabra DEMONSTRATION sobre plataformas amarillas flotantes, pequeños cazas y una franja de suelo naranja y amarilla" style="image-rendering:auto"><figcaption>La demostración en modo de espera de un juego en el mismo monitor. Los sprites player/missile, el scroll fino y el campo de juego multicolor salen directamente del núcleo (core).</figcaption></figure>
+
+<h2>Solo NTSC</h2>
+<p>Esta es una máquina <strong>NTSC</strong>: 262 líneas por cuadro a 59.94 Hz, y el reloj de máquina NTSC exacto. No hay modo PAL ni un selector para activarlo. El software escrito para PAL funcionará, pero con temporización NTSC; consulta <a href="#pal">Títulos PAL</a> más abajo para saber qué significa eso en la práctica.</p>
+
+<h2>Compatibilidad de pantallas</h2>
+<p>Necesitas un monitor o televisor <strong>HDMI 1.3 o posterior</strong> y un cable HDMI común. Ten en cuenta que, para mantenerse libre de jitter, se requiere una <strong>temporización no estándar</strong>: la señal tiene 1056&times;720 activos, declarada como 720p, en lugar de un 720p CEA exacto, porque la frecuencia de cuadro del Atari no divide de forma entera en ningún modo HDMI estándar. La mayoría de los televisores y monitores modernos la aceptan en una conexión directa, pero algunas pantallas estrictas o antiguas — y los equipos intermedios como splitters HDMI, receptores AV y capturadoras — pueden rechazarla ("no signal", "unsupported" o "out of range").</p>
+<div class="note"><strong>Si tu pantalla rechaza la señal</strong>Una versión publicada (release) anterior, la v1.1, produce una señal 720p totalmente estándar CEA a costa de una latencia mayor; está disponible en la página de releases del proyecto y se puede grabar (flashear) en su lugar.</div>
+<p><strong>Pantallas probadas hasta ahora:</strong> varios televisores, monitores LCD de computador estándar, una pantalla OLED externa y una pantalla 4:3 de 9 pulgadas construida en torno a un panel de iPad, todos los cuales aceptaron la imagen sin ningún problema. Los dispositivos de captura (capturadoras HDMI a USB) todavía no se han probado; si usas una, vale la pena reportar cómo se comporta, sea cual sea el resultado.</p>
+
+<h2>Scanlines</h2>
+<p>Se puede mezclar en la imagen un efecto de scanlines (líneas de barrido) al estilo CRT. Abre el OSD, elige <strong>Options</strong> (opciones) y recorre <strong>Scanlines</strong> por <strong>OFF</strong>, <strong>25%</strong>, <strong>50%</strong> y <strong>75%</strong>. El cambio se aplica de inmediato, sobre la imagen en vivo, así que puedes comparar los ajustes con el juego que estás jugando. <strong>Save changes</strong> (guardar cambios) lo almacena en <code>atari.ini</code> como <code>scanlines=</code> (0–3; por defecto 0 = OFF). Consulta <a href="05-options.html">Opciones y atari.ini</a>.</p>
+<figure><img src="../img/scanlines_off_50.jpg" alt="Primer plano del prompt READY y el cursor fotografiados en un monitor, a la izquierda con scanlines OFF, a la derecha con scanlines al 50%: la mitad derecha muestra una línea oscura entre cada par de líneas de la imagen" style="image-rendering:auto"><figcaption>El mismo prompt READY en el mismo monitor, scanlines OFF (izquierda) y 50% (derecha): una de cada dos líneas de salida se oscurece, lo que da el aspecto de CRT. Cuadros tomados de una grabación de la pantalla con un teléfono, así que la textura fina de la mitad izquierda es moiré de la cámara, no la imagen.</figcaption></figure>
+
+<h2>Posición horizontal</h2>
+<p>Si tu pantalla recorta el borde izquierdo o derecho, o la imagen queda descentrada, desplázala con <strong>Options → H position</strong> (posición horizontal). Usa <kbd>←</kbd> / <kbd>→</kbd> (o izquierda/derecha del joystick) para moverla; el rango es de <strong>0 a 48</strong> y la imagen se mueve en vivo mientras ajustas. Se guarda como <code>hpos=</code> (por defecto 0).</p>
+
+<h2 id="cold-start">Pérdida de señal HDMI en un arranque en frío</h2>
+<p>En algunos encendidos en frío la salida HDMI puede <strong>perderse brevemente y luego recuperarse</strong> — la pantalla pierde la señal por un momento y vuelve — mientras el Atari sigue funcionando por debajo. Es un comportamiento conocido de la salida de video al encender; no es un bloqueo y no requiere ninguna acción. Si la imagen no vuelve, consulta <a href="14-troubleshooting.html">Solución de problemas</a>.</p>
+
+<h2 id="pal">Títulos PAL en una máquina NTSC</h2>
+<p>Unos pocos juegos PAL exigentes muestran sprites corruptos, una imagen que salta o tiembla, o se congelan <em>durante el juego</em>. Dos ejemplos conocidos:</p>
+<ul>
+<li><strong>Tiger Attack</strong> (Atari UK, 1988) — sprites corruptos; congelamientos ocasionales.</li>
+<li><strong>Astro Droid</strong> (Red Rat Software, 1987) — temblor vertical; sprites corruptos o con colores incorrectos.</li>
+</ul>
+<p>La causa más probable es que se trata de juegos PAL corriendo en una máquina solo NTSC. Ambos son títulos británicos de bajo costo construidos en torno a la temporización PAL de ANTIC (312 líneas a 50 Hz) y a un scroll fino vertical agresivo en cada cuadro — escribiendo <code>VSCROL</code> a mitad de cuadro, a menudo desde interrupciones de display list. En una máquina NTSC (262 líneas a 60 Hz) las regiones de scroll, las líneas objetivo de las interrupciones y las posiciones de los sprites ya no coinciden, lo que produce exactamente estos síntomas. Un Atari real, o un MiSTer, configurado en NTSC se comporta de la misma manera. No es un problema de carga ni una falla de la memoria o de la ruta de video de la placa: los juegos con scroll compatibles con NTSC, como <strong>River Raid</strong>, que usan scroll grueso actualizado una vez por cuadro, no se ven afectados.</p>
+<div class="note"><strong>No está previsto el soporte PAL</strong>Cambiar a PAL no es un simple ajuste. Cambia el reloj de máquina (1,7734 frente a 1.7898 MHz), lo que se propaga en cascada a los relojes de memoria y de pixel y al modo de video sincronizado (1216&times;786 = 3 &times; 262 líneas; las 312 líneas de PAL necesitarían otro modo y otro PLL). Es, en la práctica, una segunda configuración completa de relojes y video, y dado que se trata de títulos PAL poco conocidos en una máquina de referencia NTSC, el soporte PAL queda postergado.</div>
+
+<footer class="pn"><a href="09-keyboard.html">← Anterior: Teclado</a><a href="11-audio.html">Siguiente: Audio →</a></footer>
+</main></div></body></html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>9. Teclado — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../09-keyboard.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html" class="cur"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>9. Teclado</h1>
+<p class="lead">Un teclado USB estándar se convierte en el teclado del Atari: cada tecla está donde está la tecla correspondiente del Atari, y un puñado de teclas del PC hacen las veces de las teclas de función, de consola y Break del Atari.</p>
+
+<h2>Cómo llega el teclado a la máquina</h2>
+<p>La placa no tiene un host USB propio. Tu teclado USB se conecta a un pequeño adaptador —un módulo host USB <strong>CH9350</strong> o una <strong>Raspberry Pi Pico</strong>— que envía los reportes crudos del teclado como tramas seriales CH9350 (115200 baudios, 8N1) por una sola línea de datos al <strong>pin 53</strong>; el módulo toma los 5 V y GND del mismo conector, así que son tres cables en total. Las tramas se decodifican por hardware dentro de la FPGA. El cableado y la configuración del adaptador están en <a href="02-hardware.html">Instalación del hardware</a>. El teclado es opcional para explorar y montar discos: un joystick en el puerto 1 puede manejar todo el menú OSD por sí solo.</p>
+
+<h2>Filosofía del mapeo: tu teclado es un teclado Atari</h2>
+<p>El teclado del PC se mapea al teclado del Atari <strong>por posición</strong>, no por las leyendas impresas en las teclas. Cada tecla física hace lo que hace la tecla que ocupa el mismo lugar en un teclado Atari XL real. Las letras, los dígitos, las cuatro filas de teclas y los modificadores coinciden, así que escribir al tacto se siente como en la máquina real. La diferencia se nota en los símbolos: el Atari ubica sus símbolos con Shift y sus teclas de puntuación en lugares distintos a los de un PC, y aquí están donde los tiene el <em>Atari</em>.</p>
+<p>Algunas consecuencias que conviene conocer:</p>
+<ul>
+<li><kbd>Shift</kbd>+<kbd>2</kbd> escribe comillas dobles <code>"</code> (el Shift-2 del Atari), no <code>@</code>.</li>
+<li><kbd>Shift</kbd>+<kbd>8</kbd> escribe <code>@</code> (el Shift-8 del Atari), no <code>*</code>.</li>
+<li><kbd>Shift</kbd>+<kbd>7</kbd> escribe un apóstrofo <code>'</code> y <kbd>Shift</kbd>+<kbd>6</kbd> escribe <code>&amp;</code>.</li>
+<li>Las dos teclas a la derecha del <kbd>0</kbd> (<kbd>-</kbd> y <kbd>=</kbd> del PC) son las teclas <strong>&lt;</strong> (Clear) y <strong>&gt;</strong> (Insert) del Atari.</li>
+<li>Las dos teclas a la derecha de la <kbd>P</kbd> (<kbd>[</kbd> y <kbd>]</kbd> del PC) son las teclas <strong>&minus;</strong> y <strong>=</strong> del Atari: las teclas de cursor arriba y cursor abajo cuando se mantienen junto con <kbd>Ctrl</kbd>.</li>
+<li>Las dos teclas a la derecha de <kbd>L</kbd> y <kbd>;</kbd> (<kbd>'</kbd> y <kbd>\</kbd> del PC) son las teclas <strong>+</strong> y <strong>*</strong> del Atari: cursor izquierda y cursor derecha con <kbd>Ctrl</kbd>. En un teclado ISO, la tecla <kbd>#</kbd>/<kbd>~</kbd> junto a Enter es la tecla <strong>*</strong>.</li>
+<li>Los corchetes se escriben a la manera Atari: <kbd>Shift</kbd>+<kbd>,</kbd> da <code>[</code> y <kbd>Shift</kbd>+<kbd>.</kbd> da <code>]</code>. Los dos puntos son <kbd>Shift</kbd>+<kbd>;</kbd>.</li>
+</ul>
+<div class="tip"><strong>Piensa en Atari, no en PC</strong>Si un símbolo no está donde esperas, fíjate dónde está en un teclado Atari XL y pulsa esa posición. La tabla de teclas de más abajo indica en qué se convierte cada tecla del PC; los símbolos con Shift son entonces los que el Atari imprime en esa tecla.</div>
+
+<h2 id="pc-layout">Opción de distribución PC (v3.1)</h2>
+<p>Si prefieres que las teclas escriban lo que tienen impreso, pon <strong>Options → Keyboard</strong> (Opciones → Teclado) en <code>PC</code> (ver <a href="05-options.html">Opciones</a>). El mapeo sigue entonces un <strong>teclado PC US-ANSI</strong>: letras, dígitos y la mayor parte de la puntuación no cambian, y los símbolos que en el Atari viven bajo un estado de Shift distinto se traducen por ti, estado de Shift incluido.</p>
+<div class="tbl"><table>
+<tr><th>Pulsas</th><th>En modo ATARI escribe</th><th>En modo PC escribe</th></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>2</kbd></td><td><code>"</code></td><td><code>@</code></td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>6</kbd> / <kbd>Shift</kbd>+<kbd>7</kbd> / <kbd>Shift</kbd>+<kbd>8</kbd></td><td><code>&amp;</code> / <code>'</code> / <code>@</code></td><td><code>^</code> / <code>&amp;</code> / <code>*</code></td></tr>
+<tr><td><kbd>-</kbd> y <kbd>Shift</kbd>+<kbd>-</kbd></td><td><code>&lt;</code> y Clear</td><td><code>-</code> y <code>_</code></td></tr>
+<tr><td><kbd>=</kbd> y <kbd>Shift</kbd>+<kbd>=</kbd></td><td><code>&gt;</code> e Insert</td><td><code>=</code> y <code>+</code></td></tr>
+<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Teclas <code>-</code> / <code>=</code> del Atari</td><td><code>[</code> / <code>]</code></td></tr>
+<tr><td><kbd>\</kbd> y <kbd>Shift</kbd>+<kbd>\</kbd></td><td>Tecla <code>*</code> del Atari</td><td><code>\</code> y <code>|</code></td></tr>
+<tr><td><kbd>'</kbd> y <kbd>Shift</kbd>+<kbd>'</kbd></td><td>Tecla <code>+</code> del Atari</td><td><code>'</code> y <code>"</code></td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>,</kbd> / <kbd>Shift</kbd>+<kbd>.</kbd></td><td><code>[</code> / <code>]</code></td><td><code>&lt;</code> / <code>&gt;</code></td></tr>
+</table></div>
+<ul>
+<li>Las teclas de flecha reales siguen moviendo el cursor en ambos modos. En modo PC, las teclas <kbd>[</kbd> <kbd>]</kbd> <kbd>\</kbd> <kbd>'</kbd> escriben sus símbolos en lugar de actuar como las teclas de cursor del Atari.</li>
+<li><code>{</code>, <code>}</code>, <code>~</code> y <code>`</code> no tienen carácter Atari; la tecla de acento grave sigue siendo <strong>Break</strong> en ambos modos.</li>
+<li>Las combinaciones con Control (caracteres gráficos) siguen siendo posicionales en ambos modos; F1–F12, las teclas de consola y las teclas del OSD son idénticas en ambos modos.</li>
+<li>El símbolo de una tecla se decide en el momento en que se presiona, así que pulsar Shift <em>después</em> de una tecla que ya está sostenida no cambia lo que esa tecla escribe. Si dos teclas sostenidas necesitan estados de Shift opuestos, gana la que necesita Shift.</li>
+<li>La opción corresponde a una distribución US; un teclado físico que no sea US obtiene el resultado simbólico US. Se guarda con <code>kbdlayout=</code> en <code>atari.ini</code>, y el pegado por PC Link la sigue automáticamente.</li>
+</ul>
+
+<h2>Tabla de mapeo de teclas</h2>
+<div class="tbl"><table>
+<tr><th>Tecla del PC</th><th>Tecla / función del Atari</th></tr>
+<tr><td><kbd>A</kbd>–<kbd>Z</kbd></td><td>A–Z</td></tr>
+<tr><td><kbd>0</kbd>–<kbd>9</kbd></td><td>0–9</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Return</td></tr>
+<tr><td><kbd>Escape</kbd></td><td>Escape</td></tr>
+<tr><td><kbd>Backspace</kbd></td><td>Delete / Back Space</td></tr>
+<tr><td><kbd>Tab</kbd></td><td>Tab</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Space (barra espaciadora)</td></tr>
+<tr><td><kbd>-</kbd> (a la derecha del 0)</td><td>&lt; (Clear)</td></tr>
+<tr><td><kbd>=</kbd></td><td>&gt; (Insert)</td></tr>
+<tr><td><kbd>[</kbd></td><td>Tecla &minus; (cursor arriba con <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>]</kbd></td><td>Tecla = (cursor abajo con <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>'</kbd></td><td>Tecla + (cursor izquierda con <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>\</kbd> (ANSI) o <kbd>#</kbd>/<kbd>~</kbd> ISO (junto al Enter ISO)</td><td>Tecla * (cursor derecha con <kbd>Ctrl</kbd>)</td></tr>
+<tr><td><kbd>;</kbd> <kbd>,</kbd> <kbd>.</kbd> <kbd>/</kbd></td><td>; , . / (mismas posiciones en el Atari)</td></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Teclas de cursor del Atari: mueven el cursor directamente, <kbd>Ctrl</kbd> va implícito</td></tr>
+<tr><td><kbd>F1</kbd>–<kbd>F4</kbd></td><td>F1–F4 del Atari</td></tr>
+<tr><td><kbd>F5</kbd> o <kbd>Insert</kbd></td><td>Help</td></tr>
+<tr><td><kbd>F6</kbd></td><td>Start (tecla de consola)</td></tr>
+<tr><td><kbd>F7</kbd></td><td>Select (tecla de consola)</td></tr>
+<tr><td><kbd>F8</kbd></td><td>Option (tecla de consola)</td></tr>
+<tr><td><kbd>`</kbd> (acento grave/tilde) o <kbd>Num Lock</kbd></td><td>Break</td></tr>
+<tr><td><kbd>Shift</kbd> izquierdo / derecho</td><td>Shift</td></tr>
+<tr><td><kbd>Ctrl</kbd> izquierdo / derecho</td><td>Control</td></tr>
+<tr><td><kbd>Alt</kbd> derecho</td><td>Inverse Video (la tecla con el logo de Atari)</td></tr>
+<tr><td><kbd>Caps Lock</kbd></td><td>Caps Lock</td></tr>
+<tr><td><kbd>F9</kbd></td><td>Soft Reset (reinicio en caliente; tecla rápida durante el juego)</td></tr>
+<tr><td><kbd>F11</kbd></td><td>Alternar en vivo flechas ↔ joystick (ver más abajo)</td></tr>
+<tr><td><kbd>F12</kbd></td><td>Abrir / cerrar el menú OSD</td></tr>
+</table></div>
+<p>Las teclas que no aparecen aquí (por ejemplo <kbd>F10</kbd>, <kbd>Home</kbd>, <kbd>Page Up</kbd> y el teclado numérico) se ignoran. Se pueden mantener presionadas hasta cuatro teclas a la vez.</p>
+
+<h2>Teclas especiales</h2>
+<ul>
+<li><strong>Las teclas de función F1–F4 del Atari</strong> están en <kbd>F1</kbd>–<kbd>F4</kbd>.</li>
+<li><strong>Help</strong> está en <kbd>F5</kbd> y también en <kbd>Insert</kbd>.</li>
+<li><strong>Teclas de consola</strong>: <kbd>F6</kbd> = Start, <kbd>F7</kbd> = Select, <kbd>F8</kbd> = Option. Mantén presionada <kbd>F8</kbd> durante un arranque cuando en una máquina real mantendrías Option.</li>
+<li><strong>Break</strong> está en la tecla de acento grave/tilde <kbd>`</kbd> (arriba a la izquierda, debajo de Escape) y en <kbd>Num Lock</kbd>.</li>
+<li><strong>Inverse Video</strong> está en <kbd>Alt</kbd> derecho.</li>
+<li><strong>Caps Lock</strong> es la tecla Caps del Atari.</li>
+<li><strong>Movimiento del cursor</strong>: las teclas de flecha mueven el cursor directamente; en un Atari real las teclas de cursor son las teclas &minus; = + * mantenidas junto con Control, y las flechas aportan ese Control por ti. Mantener además un <kbd>Ctrl</kbd> real no cambia nada. Las teclas <kbd>[</kbd> <kbd>]</kbd> <kbd>'</kbd> <kbd>\</kbd> llegan a las mismas teclas del Atari pero escriben el símbolo a secas; agrega <kbd>Ctrl</kbd> para mover el cursor con ellas.</li>
+<li><strong>Teclas rápidas</strong> que nunca llegan al Atari: <kbd>F9</kbd> reinicio en caliente (Soft Reset), <kbd>F11</kbd> alternar flechas/joystick, <kbd>F12</kbd> menú OSD. Ver <a href="04-osd.html">El menú OSD</a> para saber qué hace Soft Reset con un cartucho adjunto.</li>
+</ul>
+<div class="note"><strong>Dentro del OSD</strong>Mientras el menú está abierto, la entrada del teclado queda enmascarada para el Atari: las teclas navegan por el menú y no se escribe nada en el programa en ejecución.</div>
+
+<h2>Teclas de flecha como joystick</h2>
+<div class="note"><strong>Las teclas opuestas se anulan (v3.1.2)</strong>Pulsar Izquierda y Derecha, o Arriba y Abajo, al mismo tiempo se lee como la palanca en el centro, tal como se comporta un joystick mecánico. Antes de la v3.1.2, la superposición de dos teclas al invertir la dirección podía presentar un valor de palanca imposible, lo que bloqueaba los juegos que confían en la lectura cruda de la palanca (Tiger Attack se congelaba a los pocos segundos).</div>
+<p>Para juegos que necesitan un joystick cuando solo tienes teclado, las teclas de flecha pueden manejar el <strong>Joystick 1</strong>. En el OSD elige <strong>Options</strong> y cambia <strong>Arrow keys</strong> (teclas de flecha) de <strong>NORMAL</strong> a <strong>JOYSTICK</strong> (ver <a href="05-options.html">Opciones y atari.ini</a>). Mientras JOYSTICK esté seleccionado:</p>
+<ul>
+<li><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> mueven la palanca del puerto 1, junto con cualquier joystick físico cableado al puerto 1;</li>
+<li><kbd>Alt</kbd> izquierdo es el botón de disparo;</li>
+<li>las teclas de flecha se suprimen del teclado Atari, así que solo mueven la palanca y nunca escriben movimientos de cursor indeseados;</li>
+<li>todo lo demás en el teclado sigue funcionando con normalidad.</li>
+</ul>
+<p>Vuelve a ponerlo en <strong>NORMAL</strong> para usar de nuevo las flechas como teclas de cursor. La opción se escribe en <code>atari.ini</code> con <strong>Save changes</strong> (guardar cambios) (clave <code>joystick=</code>, 0 = NORMAL, 1 = JOYSTICK; por defecto 0) y sobrevive a los reinicios.</p>
+<div class="tip"><strong>F11: cámbialo en pleno juego</strong>Pulsa <kbd>F11</kbd> para alternar flechas ↔ joystick en vivo, sin abrir el OSD. <kbd>F11</kbd> es un interruptor solo en vivo: no se guarda, así que en el siguiente arranque la máquina vuelve a la opción almacenada en <code>atari.ini</code>.</div>
+
+<h2>Teclado con la leyenda Atari</h2>
+<figure><img src="../img/keyboard_atari_legends.jpg" alt="Un teclado de PC con keycaps personalizados que llevan las leyendas Atari: F1–F4, Help, Start, Select, Option, Reset y Menu en la fila de función; Break en la tecla de acento grave; los símbolos con Shift del Atari en la fila de números; Clear e Insert en las teclas a la derecha del 0; las flechas de cursor con − y = a la derecha de la P; + y * a la derecha del punto y coma; Fire en la tecla Alt izquierda; caracteres gráficos en las teclas de letras"><figcaption>El mapeo, impreso: un teclado de PC con keycaps de leyenda Atari (un juego personalizado; cualquier teclado funciona igual, este solo muestra qué hace cada tecla). Fila de función: F1–F4, <kbd>Help</kbd> (F5), <kbd>Start</kbd> <kbd>Select</kbd> <kbd>Option</kbd> (F6–F8), <kbd>Reset</kbd> (F9), <kbd>Menu</kbd> (F12). <kbd>Break</kbd> en la tecla de acento grave. La fila de números lleva los símbolos con Shift del Atari (<kbd>"</kbd> en el 2, <kbd>@</kbd> en el 8), <kbd>Clear</kbd>/<kbd>&lt;</kbd> e <kbd>Insert</kbd>/<kbd>&gt;</kbd> a la derecha del 0, las flechas de cursor en <kbd>−</kbd> y <kbd>=</kbd> a la derecha de la P, <kbd>+</kbd> y <kbd>*</kbd> a la derecha del punto y coma, <kbd>Fire!</kbd> en el Alt izquierdo para el modo de flechas como joystick, y los caracteres gráficos de Control en las teclas de letras.</figcaption></figure>
+
+<footer class="pn"><a href="08-executables.html">← Anterior: Ejecutables (.xex)</a><a href="10-video.html">Siguiente: Video →</a></footer>
+</main></div></body></html>

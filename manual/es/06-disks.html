@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>6. Discos — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../06-disks.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html" class="cur"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>6. Discos</h1>
+<p class="lead">Las imágenes de disco de la tarjeta SD se le presentan al Atari como unidades de disquete SIO D1: a D4: — puedes leerlas, escribirlas, formatearlas y cambiarlas mientras la máquina está en marcha.</p>
+
+<h2>Formatos soportados</h2>
+<div class="tbl"><table>
+<tr><th>Extensión</th><th>Qué es</th></tr>
+<tr><td><code>.atr</code></td><td>La imagen de disco Atari estándar: una cabecera de 16 bytes seguida de los sectores. La cabecera indica el tamaño de sector.</td></tr>
+<tr><td><code>.xfd</code></td><td>Un volcado de sectores en bruto, sin cabecera. La geometría se deduce del tamaño del archivo: 92.160 bytes = densidad simple, 133.120 bytes = densidad mejorada, 183.936 bytes = doble densidad. Cualquier otro tamaño que sea múltiplo de 128 se trata como una imagen de sectores de 128 bytes; los demás tamaños se rechazan (<code>Unsupported .xfd size</code>).</td></tr>
+</table></div>
+<p>Copia tus imágenes en cualquier lugar de la tarjeta SD — en la raíz o en cualquier carpeta, los nombres largos no son problema — y adjúntalas desde el OSD.</p>
+
+<h2>Densidades</h2>
+<p>Funcionan las tres densidades clásicas:</p>
+<ul>
+<li><strong>SD</strong> — densidad simple, 720 sectores de 128 bytes (90K).</li>
+<li><strong>ED</strong> — densidad mejorada, 1040 sectores de 128 bytes (130K).</li>
+<li><strong>DD</strong> — doble densidad, sectores de 256 bytes. Las dos convenciones de archivo para imágenes DD se manejan automáticamente — la disposición <em>compacta</em> (packed) y la de <em>área de arranque completa</em> (full-boot-area); el firmware las distingue por el tamaño del archivo. Las imágenes de MyDOS 4.5 arrancan.</li>
+</ul>
+
+<h2>Unidades D1: a D4:</h2>
+<p>El Atari ve cuatro unidades. Solo las dos primeras aparecen en el OSD:</p>
+<div class="tbl"><table>
+<tr><th>Unidad</th><th>Desde dónde se administra</th></tr>
+<tr><td><strong>D1:</strong>, <strong>D2:</strong></td><td>El menú principal del OSD (ítems <strong>1) D1:</strong> y <strong>2) D2:</strong>) y el PC Link.</td></tr>
+<tr><td><strong>D3:</strong>, <strong>D4:</strong></td><td>No aparecen en el OSD. D4: es el "disco duro" automático <a href="#hdd">HDD.ATR</a>; D3: y D4: también sirven para los montajes automáticos y el PC Link.</td></tr>
+</table></div>
+<p>Usa D2: para discos de datos o para el disco 2 de un juego de dos discos. Cuando un juego pida el siguiente disco, adjúntalo en su lugar en D1: en vivo.</p>
+
+<h2>Montar y cambiar discos</h2>
+<p>Abre el OSD, selecciona la unidad, elige <strong>Attach (.atr/.xfd/.xex)...</strong> (adjuntar) y escoge la imagen (el explorador de archivos se describe en <a href="04-osd.html#browser">El menú OSD</a>). La imagen queda en la unidad de inmediato; no se reinicia nada. Para reemplazarla, adjunta otra; para vaciar la unidad, elige <strong>Detach</strong> (desconectar). Las líneas <code>D1:</code>/<code>D2:</code> del menú principal muestran siempre lo que está montado.</p>
+<p>Como el Atari sigue funcionando detrás del menú, una carga que estaba en curso continúa mientras navegas por el explorador.</p>
+
+<h2>Arrancar desde un disco</h2>
+<ol>
+<li>Copia el <code>.atr</code> a la tarjeta SD.</li>
+<li>Enciende la placa — el Atari arranca en BASIC — y luego pulsa <kbd>F12</kbd> o S2 para abrir el OSD.</li>
+<li><strong>1) D1:</strong> → <strong>Attach (.atr/.xfd/.xex)...</strong> → escoge la imagen → <kbd>Enter</kbd>/Fire.</li>
+<li>De vuelta en el menú principal, elige <strong>4) Boot to OS (No BASIC)</strong> (arrancar el OS sin BASIC). El Atari arranca en frío desde D1: con BASIC desactivado (en DOS, o directamente en el juego).</li>
+</ol>
+<p>La mayoría de los discos de DOS y de los juegos arrancables funcionan, y casi todos necesitan que BASIC no estorbe; por eso <strong>Boot to OS (No BASIC)</strong> es la forma normal de arrancar un disco: el firmware mantiene pulsada OPTION por ti durante el arranque. Usa <strong>7) Hard Reset</strong> (reinicio en frío) — o <strong>5) Boot to BASIC</strong> (arrancar en BASIC) — solo para los pocos discos que necesitan BASIC residente, como un disco de programas en BASIC. Mantener pulsada OPTION tú mismo durante un Hard Reset también funciona, pero es difícil acertar el momento.</p>
+
+<h2>Escritura e imágenes de solo lectura</h2>
+<p>Las escrituras son confiables desde la v2.4: SAVE desde BASIC, guardar desde DOS, copiar archivos y formatear funcionan en las imágenes montadas, en todas las unidades. Unas pocas reglas mantienen tus datos a salvo:</p>
+<ul>
+<li><strong>Atributo de solo lectura del PC.</strong> Las imágenes copiadas desde un PC a veces traen el atributo FAT de "solo lectura". El firmware lo quita cuando puede y monta el disco con permiso de escritura. Si no consigue acceso de escritura, el disco se monta como solo lectura: aparece el aviso <code>Disk is read-only / Writes will fail (144)</code>, la línea de la unidad muestra <code>(RO)</code>, la unidad informa protección contra escritura en su estado, y cualquier escritura devuelve el <strong>error 144</strong> — exactamente igual que un disquete protegido contra escritura.</li>
+<li><strong>La misma imagen en dos unidades.</strong> Si montas una imagen que ya está montada en otra unidad, el segundo montaje se hace automáticamente de solo lectura (y se marca <code>(RO)</code>). Dos descriptores con permiso de escritura sobre un mismo archivo pueden corromper el sistema de archivos de la propia tarjeta SD, así que esto se rechaza a propósito. Si de verdad necesitas dos instancias escribibles, monta una copia con otro nombre.</li>
+<li><strong>Los sectores fuera de rango</strong> se rechazan como lo haría una unidad real; ya no pueden hacer crecer el archivo de imagen.</li>
+</ul>
+<div class="warn"><strong>Firmware antiguo</strong>Antes de la v2.4, escribir podía corromper las imágenes de disco e incluso el sistema de archivos FAT de la tarjeta SD. Si una versión anterior dañó tu tarjeta, vuelve a formatearla (FAT32, formato completo) y copia tus archivos de nuevo. Ver <a href="15-known-issues.html">Problemas conocidos</a>.</div>
+
+<h2>New blank disk</h2>
+<p>Cada menú de unidad tiene <strong>2) New blank disk (90K)</strong> (nuevo disco en blanco). Crea un ATR de densidad simple vacío y sin formato (90K, 720 sectores × 128 bytes) en la raíz de la tarjeta SD, con el nombre <code>BLANK01.ATR</code>, <code>BLANK02.ATR</code>, … hasta <code>BLANK99.ATR</code> (el primer nombre libre), y lo monta en esa unidad. Si había un disco en la unidad, se desconecta primero.</p>
+<p>La imagen nueva está sin formato. Arranca un DOS y usa su comando de formateo sobre esa unidad — los comandos SIO FORMAT están implementados, así que "Format disk" de DOS 2.5 y similares funcionan — y tendrás un disco escribible sin tocar nunca un PC.</p>
+
+<h2>Formateo desde DOS</h2>
+<p>Los comandos FORMAT de disco que usa el DOS (densidad simple y mejorada) están soportados en cualquier imagen montada, no solo en las que están en blanco. Formatear reescribe la imagen completa, así que asegúrate de tener seleccionada la unidad correcta en tu DOS.</p>
+
+<h2 id="hdd">HDD.ATR — un disco duro siempre presente en D4:</h2>
+<p>Coloca una imagen de disco llamada exactamente <code>HDD.ATR</code> (no importan mayúsculas o minúsculas) en la <strong>raíz de la tarjeta SD</strong>. En cada encendido el firmware la monta en <strong>D4:</strong> automáticamente — sin pasar nunca por el menú. Tu DOS simplemente ve una unidad extra permanente: lista su contenido, guarda y carga archivos, y todo sobrevive a los reinicios.</p>
+<ul>
+<li><strong>¿Qué imagen?</strong> Cualquier <code>.atr</code> sirve, pero una imagen formateada con <strong>MyDOS</strong> es la opción ideal: MyDOS puede direccionar imágenes de hasta <strong>16 MB</strong>, un disco duro de verdad grande.</li>
+<li><strong>Crear una desde el PC:</strong> copia cualquier ATR grande de MyDOS a la tarjeta SD como <code>HDD.ATR</code> (o envíalo por el cable con <code>python3 tools/atari.py send mydos_big.atr HDD.ATR</code>) y luego apaga y vuelve a encender — el montaje automático se ejecuta una sola vez, al iniciar el firmware.</li>
+<li><strong>Crear una en el Atari:</strong> usa <em>New blank disk</em> en una unidad para obtener un ATR de 90K y renómbralo después a <code>HDD.ATR</code> en un PC.</li>
+<li><strong>El respaldo es un solo archivo:</strong> guarda una copia de <code>HDD.ATR</code> en tu PC. Si el disco alguna vez queda corrupto, cópialo de vuelta y apaga y vuelve a encender.</li>
+</ul>
+<h3>Sin HDD.ATR, o con uno del tipo equivocado</h3>
+<p>El montaje automático es a prueba de fallos y opcional; nunca puede impedir que la máquina arranque.</p>
+<ul>
+<li><strong>No hay <code>HDD.ATR</code> en la tarjeta:</strong> no pasa nada. D4: simplemente no existe, y un DOS que pregunte por D4: recibe "drive not present" (unidad no presente). Un archivo corrupto, o un archivo con ese nombre que no sea un ATR, se comprueba y no se monta, sin avisos.</li>
+<li><strong>Una imagen válida formateada para un DOS distinto del que arrancas:</strong> D4: sí se monta y sus sectores se sirven fielmente, pero puede que el DOS en marcha no la pueda leer — un directorio con basura, "not a DOS disk" o <code>0000 FREE SECTORS</code>. Desajustes típicos: una imagen grande de MyDOS cuando arrancaste DOS 2.5 (DOS 2.5 se limita a 90K/130K y, por defecto, solo consulta D1:/D2: — necesita <code>POKE 1802,15</code> para siquiera mirar D4:), o una imagen de SpartaDOS leída por MyDOS y viceversa.</li>
+</ul>
+<div class="tip"><strong>Combinación recomendada</strong>Formatea <code>HDD.ATR</code> con el <em>mismo</em> DOS que arrancas. <strong>MyDOS 4.5x</strong> es la opción recomendada: formatea la imagen con MyDOS y arranca MyDOS, y podrás usar toda su capacidad.</div>
+
+<h2>El dispositivo H: — una carpeta compartida con el PC</h2>
+<p>Aparte de las unidades de disco, el dispositivo <strong>H:</strong> es un dispositivo CIO (del mismo tipo que P:, E: y K:) cuyos archivos son archivos comunes dentro de la carpeta <code>/HDD</code> de la tarjeta SD — la misma carpeta en la que escribe el PC Link, de modo que el Atari y el PC comparten un mismo espacio de archivos para texto y datos. Se instala desde el PC con <code>atari.py hdd-install</code> y se usa desde BASIC con los habituales <code>OPEN #1,8,0,"H:NOTES.TXT"</code>, <code>LIST "H:PROG.LST"</code> / <code>ENTER "H:PROG.LST"</code>, etc. La configuración y los ejemplos están en <a href="13-pc-link.html">PC Link</a>.</p>
+
+<footer class="pn"><a href="05-options.html">← Anterior: Opciones y atari.ini</a><a href="07-cartridges.html">Siguiente: Cartuchos →</a></footer>
+</main></div></body></html>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>15. Problemas conocidos y limitaciones — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../15-known-issues.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
+<li><a href="15-known-issues.html" class="cur"><span class="num">15</span>Problemas conocidos</a></li>
+<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>15. Problemas conocidos y limitaciones</h1>
+<p class="lead">Comportamientos documentados y esperados: algunos son fieles a la máquina real, otros son limitaciones reales de esta adaptación.</p>
+
+<h2>Problemas conocidos</h2>
+
+<h3>RESET dentro de un cartucho multijuego termina en BASIC o en el Self Test</h3>
+<p>Esto es fiel al original, no un error. El puerto de cartucho de los XL/XE no tiene línea de reset, así que un cartucho no puede ver la tecla RESET. Un cartucho multijuego que se desactivó a sí mismo para ejecutar un juego (las compilaciones de Atarimax hacen esto) sigue desactivado tras el RESET, y entonces el sistema operativo XL arranca BASIC — o el Self Test (autodiagnóstico) si BASIC está deshabilitado. Altirra hace exactamente lo mismo con F5. Esto aplica al <strong>Soft Reset</strong> (reinicio en caliente) del OSD y a la tecla rápida <kbd>F9</kbd>.</p>
+<p><strong>Usa Hard Reset (reinicio en frío) en su lugar:</strong> desde la v3.0 apaga y vuelve a encender el cartucho emulado (banco 0, habilitado) y trae de vuelta el menú del cartucho multijuego, como un apagado y encendido real (Shift+F5 en Altirra). Consulta <a href="07-cartridges.html">Cartuchos</a>.</p>
+
+<h3>F12 puede no responder mientras hay una sesión serial de PC activa</h3>
+<p>Con el PC Link activamente en uso (una sesión de teclado en vivo o una conexión de la aplicación), la tecla <kbd>F12</kbd> del teclado físico a veces no abre el OSD. <strong>Solución alternativa:</strong> el botón <strong>S2</strong> de la placa siempre funciona, y cerrar la sesión de PC restaura <kbd>F12</kbd> de inmediato. En investigación.</p>
+
+<h3>Algunos juegos PAL con scroll vertical fallan (esta es una máquina solo NTSC)</h3>
+<p>Unos pocos títulos exigentes muestran sprites corruptos, una imagen que salta o tiembla, o se congelan <em>durante el juego</em>:</p>
+<ul>
+<li><strong>Tiger Attack</strong> (Atari UK, 1988) — sprites corruptos; congelamientos ocasionales.</li>
+<li><strong>Astro Droid</strong> (Red Rat Software, 1987) — temblor vertical; sprites corruptos o con colores incorrectos.</li>
+</ul>
+<p>Causa más probable: son juegos PAL, y esta compilación es solo NTSC. Ambos son títulos británicos de bajo presupuesto construidos en torno a la temporización PAL del ANTIC (312 líneas / 50 Hz) con un scroll fino vertical agresivo en cada cuadro. Al ejecutarlos en una máquina NTSC (262 líneas / 60 Hz), las regiones de scroll, las líneas objetivo de las DLI y las posiciones de los sprites dejan de coincidir. Un Atari real, o un MiSTer, configurado en NTSC se comporta de la misma manera. No es un problema de carga (Astro Droid corre desde cartucho) ni un error de memoria o de la ruta de video de esta adaptación. Los juegos de scroll compatibles con NTSC, como River Raid, no se ven afectados.</p>
+<p><strong>No hay planes de soporte PAL.</strong> Cambiar el núcleo (core) a PAL modifica el reloj de la máquina y se propaga por toda la cadena de reloj y de video sincronizado (genlock): en la práctica, una segunda configuración completa de reloj y video.</p>
+
+<h3>Pérdida de señal HDMI al arranque en frío</h3>
+<p>En algunos arranques en frío la salida HDMI puede perder la señal brevemente y recuperarse mientras la máquina sigue funcionando. Consulta <a href="14-troubleshooting.html">Solución de problemas</a>.</p>
+
+<h3>Corregido en versiones anteriores</h3>
+<ul>
+<li><strong>v2.4:</strong> las escrituras en disco eran poco fiables (ERROR 139, imágenes corruptas y, en casos extremos, daños al propio sistema de archivos de la tarjeta SD) — corregido y verificado en hardware. Si una versión anterior dañó tu tarjeta, reformatéala (FAT32 completo) y vuelve a copiar tus archivos.</li>
+<li><strong>v2.3.1:</strong> el scroll fino del modo 8 del ANTIC se entrecortaba (las marquesinas de Ninja Commando / Draconus) — un error del núcleo original (upstream), corregido aquí.</li>
+</ul>
+
+<h2>Limitaciones</h2>
+<ul>
+<li><strong>Cargador de .xex y la página $0600–$07FF</strong> — un programa que se carga en las páginas 6/7 puede chocar con el cargador en ejecución, que vive ahí. Reubicar el cargador en la RAM alta es una posible corrección futura. Consulta <a href="08-executables.html">Ejecutables</a>.</li>
+<li><strong>Dispositivo de red N: / internet</strong> — existe un prototipo funcional (un dispositivo SIO N: retransmitido a un procesador de red en el lado del PC; una aplicación real de clima de FujiNet ha obtenido datos en vivo en el banco de pruebas), pero todavía no tiene calidad de versión publicada bajo carga sostenida.</li>
+<li><strong>Dispositivo serial R: (850 / módem)</strong> — trabajo en curso, opcional y <strong>desactivado por defecto</strong>. BobTerm puede marcar a un BBS telnet en vivo por el cable USB-C: el firmware sirve el manejador 850 de Altirra y <code>tools/atari_net.py --modem</code> es el módem del lado del PC. Actívalo en OSD → Options → <em>Modem (R:)</em> (necesita los dos archivos <code>.bin</code> de Altirra en la tarjeta SD; consulta <code>tools/fujinet_850/README.md</code>). Parte del texto se corrompe con ráfagas rápidas del BBS. Cuando está desactivado no tiene ningún efecto sobre el uso normal.</li>
+<li><strong>Paddles</strong> — las entradas analógicas de potenciómetro no están implementadas. Los controles con alimentación (paddles, mouse, pads con autodisparo activo) no están soportados.</li>
+<li><strong>The!Cart de 32/64/128 MB</strong> — no caben en la SDRAM de 8 MB y se rechazan. Los cartuchos están soportados hasta 4 MB (MegaCart); los tipos CAR no soportados muestran en pantalla su identificador de tipo. Consulta <a href="07-cartridges.html">Cartuchos</a>.</li>
+<li><strong>La máquina es solo NTSC</strong> — un conmutador PAL/NTSC en tiempo de ejecución está en la hoja de ruta, pero hoy PAL no está soportado.</li>
+</ul>
+
+<footer class="pn"><a href="14-troubleshooting.html">← Anterior: Solución de problemas</a><a href="16-appendix.html">Siguiente: Apéndice →</a></footer>
+</main></div></body></html>

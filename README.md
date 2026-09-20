@@ -12,6 +12,7 @@ FPGA emulation of the Atari 800/800XL/65XE/130XE on the
 core by Mark Watson, adapted for the Gowin FPGA toolchain.
 
 > 📖 **User manual: [carlosbravoa.github.io/atari800_tang_nano20k](https://carlosbravoa.github.io/atari800_tang_nano20k/)**
+> 📖 **Manual en español: [carlosbravoa.github.io/atari800_tang_nano20k/es/](https://carlosbravoa.github.io/atari800_tang_nano20k/es/)**
 > — hardware setup and wiring, the OSD, disks, cartridges, `.xex`, keyboard, video, audio, RAM,
 > PC Link, troubleshooting. This README covers what only the repository can: getting a
 > release onto the board, building from source, pins, and licences.
