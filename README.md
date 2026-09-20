@@ -31,7 +31,7 @@ core by Mark Watson, adapted for the Gowin FPGA toolchain.
    ```
 4. Plug in **HDMI** and the **SD card**, then **power on** → it auto-boots to **BASIC**.
 5. Press **S2** (onboard button) to open the OSD. A **DB9 joystick on port 1** alone can drive it.
-   To boot a disk: OSD → *D1:* → *Attach* → pick → *Hard Reset*. To run a cartridge:
+   To boot a disk: OSD → *D1:* → *Attach* → pick → *Boot to OS (No BASIC)*. To run a cartridge:
    OSD → *Cart:* → *Attach cartridge* → pick (boots immediately).
 
 For a keyboard, the simplest is a **CH9350 USB-host board**: 5V, GND and its TX to **pin 53**
