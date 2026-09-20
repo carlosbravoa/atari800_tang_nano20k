@@ -71,6 +71,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <tr><td><code>peek ADDR [LEN]</code></td><td>Hex-dump Atari memory (default 64 bytes).</td><td><code>atari.py peek 0x12 3</code> (the jiffy clock)</td></tr>
 <tr><td><code>poke ADDR B [B…]</code></td><td>Write bytes into Atari memory.</td><td><code>atari.py poke 0x2C8 0x35</code> (pink border)</td></tr>
 <tr><td><code>fwpeek ADDR [LEN]</code></td><td>Hex-dump the <em>firmware's</em> own memory (debugging aid; default 64 bytes).</td><td><code>atari.py fwpeek 0x0 64</code></td></tr>
+<tr><td><code>key NAME|0xNN [--shift] [--ctrl] [--hold MS]</code></td><td>Press one raw key on the Atari (v3.1.2): console keys <code>start</code>/<code>select</code>/<code>option</code>, <code>f1</code>–<code>f12</code>, <code>esc</code>, <code>enter</code>, arrows, letters and digits, or any USB HID code. Reaches keys that <code>type</code> cannot (console keys, function keys).</td><td><code>atari.py key start</code></td></tr>
 <tr><td><code>hdd-install</code></td><td>Install the H: shared-folder handler above MEMLO (see §13.8).</td><td><code>atari.py hdd-install</code></td></tr>
 <tr><td><code>r-install [--force]</code></td><td>Install the R: modem handler above MEMLO, for BobTerm (see §13.9). <code>--force</code> reinstalls even if R: is already present.</td><td><code>atari.py r-install</code></td></tr>
 </tbody></table></div>

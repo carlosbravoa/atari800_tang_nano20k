@@ -231,6 +231,12 @@ class AtariLink:
         self.ser.write(b"\x04" if warm else b"\x03")
         self._expect(b"+", "reset")
 
+    def key(self, hid, mod=0, hold_ms=100):
+        """Press one raw HID key (mod bit0=Ctrl, bit1=Shift) for hold_ms, release."""
+        self._cmd(0x0E)
+        self.ser.write(bytes([mod & 0xFF, hid & 0xFF, max(1, min(255, hold_ms // 10))]))
+        self._expect(b"+", "key", timeout=5)
+
     def type_text(self, text, progress=None):
         """Paste text as keystrokes (~18 chars/s). progress(done, total)."""
         data = text.replace("\r\n", "\n").encode("ascii", "replace")

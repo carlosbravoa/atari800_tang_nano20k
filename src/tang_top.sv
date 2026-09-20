@@ -673,7 +673,16 @@ wire key_f11   = (combined_key1 == 8'h44) || (combined_key2 == 8'h44) || (combin
 // with the physical DB9 stick) and are suppressed from the Atari keyboard matrix
 // so they don't also type. JOY1_n is active-low: bit0=up,1=down,2=left,3=right,4=fire.
 wire key_lalt = combined_key_mod[2];   // HID Left-Alt modifier
-wire [4:0] joy1_kbd_n = joystick_mode ? ~{key_lalt, key_right, key_left, key_down, key_up}
+// Opposite directions are made exclusive on the KEYBOARD path only: two overlapping key
+// presses (left+right, up+down) would present a stick value a mechanical joystick can never
+// produce, and games that index tables by the raw STICK nibble crash on it (Tiger Attack
+// froze within seconds of keyboard play; a DB9 stick never did — INVESTIGATE #22). Both
+// pressed = neither, i.e. the stick passing through centre. The DB9 path is untouched.
+wire kj_up    = key_up    & ~key_down;
+wire kj_down  = key_down  & ~key_up;
+wire kj_left  = key_left  & ~key_right;
+wire kj_right = key_right & ~key_left;
+wire [4:0] joy1_kbd_n = joystick_mode ? ~{key_lalt, kj_right, kj_left, kj_down, kj_up}
                                       : 5'b11111;
 // While the OSD overlay is up, mask ALL inputs from the Atari core (the machine keeps
 // running live behind the menu — HALT is gone — so menu navigation must not play the

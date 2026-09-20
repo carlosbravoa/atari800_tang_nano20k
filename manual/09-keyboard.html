@@ -115,6 +115,7 @@
 <div class="note"><strong>Inside the OSD</strong>While the menu is open, keyboard input is masked from the Atari: the keys navigate the menu and nothing is typed into the running program.</div>
 
 <h2>Arrow keys as joystick</h2>
+<div class="note"><strong>Opposite keys cancel (v3.1.2)</strong>Pressing Left and Right, or Up and Down, at the same time reads as the stick at centre, the way a mechanical joystick behaves. Before v3.1.2 the overlap of two keys while reversing direction could present an impossible stick value, which crashed games that trust the raw stick reading (Tiger Attack froze within seconds).</div>
 <p>For games that need a joystick when you only have a keyboard, the arrow keys can drive <strong>Joystick 1</strong>. In the OSD choose <strong>Options</strong> and set <strong>Arrow keys</strong> from <strong>NORMAL</strong> to <strong>JOYSTICK</strong> (see <a href="05-options.html">Options &amp; atari.ini</a>). While JOYSTICK is selected:</p>
 <ul>
 <li><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> move the stick on port 1, alongside any physical joystick wired to port 1;</li>

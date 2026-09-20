@@ -52,19 +52,16 @@ hardware-verified 2026-07-04: Ninja Commando's title marquee now scrolls smoothl
 Only display lists using mode 8 *with* horizontal scrolling are affected by the change;
 all other modes are bit-identical. (Current MiSTer still has this bug.)
 
-## Tiger Attack freezes during play — core-side, under investigation (2026-09-20)
+## FIXED (v3.1.2): games froze when played with the keyboard as joystick — impossible stick values
 
-The PAL explanation below does **not** hold for Tiger Attack: the identical disk runs on an
-NTSC-configured Altirra. Two freezes were autopsied over the PC Link (RAM images archived):
-in both the 6502 had stopped executing (RAM and stack static, firmware and SIO healthy) while
-running the game's vertical-blank/DLI code. The core halts permanently on the 6502's JAM
-opcodes, which are only reached by wrong-path execution, so something upstream of that goes
-wrong first. The wrapper's SDRAM sharing was reviewed and cannot explain a freeze with the PC
-Link idle; the remaining candidates are ANTIC vertical-scroll/DLI timing in the upstream core
-(the game fine-scrolls vertically on every display-list line) or SDRAM data marginality. A
-MiSTer NTSC comparison is pending. Avoid heavy `atari.py peek/screen` polling during play
-meanwhile: PicoRV32 SDRAM traffic can delay an ANTIC fetch past its window (separate issue,
-fix drafted).
+Found 2026-09-20 with Tiger Attack (freezes within seconds of keyboard play, never with a DB9
+stick, never on MiSTer/Altirra). Root cause: the arrow-keys-as-joystick mode passed two
+overlapping key presses straight through, so left+right or up+down for a few milliseconds
+presented a STICK value a mechanical joystick can never produce. Games that index tables by
+the raw stick nibble run off the end of their table and crash (Tiger Attack ends up executing
+zero page and hitting a JAM opcode; the stack wraps). Fix: on the keyboard path opposite
+directions cancel (both pressed = centre); the DB9 path is untouched. The earlier "PAL
+title" and "core timing" theories for this game were wrong.
 
 ## Some PAL vertical-scrolling games glitch (this is an NTSC-only machine)
 

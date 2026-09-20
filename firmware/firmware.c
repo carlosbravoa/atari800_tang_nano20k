@@ -2965,6 +2965,19 @@ static void bridge_type_char(uint8_t c) {
         sio_delay(250);
 }
 
+// 0x0E KEY: mod, hid, hold(x10 ms) -> '+' after press+release. Raw HID inject for
+// everything TYPE's ASCII table can't reach: console keys (F6/F7/F8 = Start/Select/
+// Option), F-keys, Esc, arrows. mod bit0 = Ctrl, bit1 = Shift (HID modifier byte).
+static void bridge_cmd_key(void) {
+    int m = blrx_getc(1000), k = blrx_getc(1000), h = blrx_getc(1000);
+    if (m < 0 || k < 0 || h < 0) { bridge_putc(BRIDGE_NAK); return; }
+    reg_virt_kbd_0 = ((uint32_t)(k & 0xFF) << 8) | (uint32_t)(m & 0xFF);
+    sio_delay(h ? h * 10 : 100);
+    reg_virt_kbd_0 = 0;
+    sio_delay(30);
+    bridge_putc('+');
+}
+
 // 0x07 TYPE: len16LE -> '+', then per char: byte in, '+' out; ends with 'K'.
 // Per-character flow control: typing (~55 ms/char) dwarfs the ack round-trip,
 // and the 1-byte RX register cannot absorb streaming ahead.
@@ -3098,6 +3111,7 @@ static void bridge_poll(void) {
     case 0x07: bridge_cmd_type(); break;
     case 0x08: bridge_cmd_status(); break;
     case 0x0D: bridge_cmd_fwpeek(); break;
+    case 0x0E: bridge_cmd_key(); break;
     case 0x0B: {                     // NET_FEED: len16 + payload -> rx ring
         bridge_quiet = 1;
         int l0 = blrx_getc(1000), l1 = blrx_getc(1000);

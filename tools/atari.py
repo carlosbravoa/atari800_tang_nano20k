@@ -13,6 +13,9 @@ Usage:
   atari.py kbd [-p P]                # LIVE keyboard: type on the PC, it lands
                                      #   on the Atari; Ctrl-] exits
   atari.py eject [-p P]              # just eject the virtual .xex from D1:
+  atari.py key NAME|0xNN [--shift] [--ctrl] [--hold MS]  # press one raw key:
+                                     #   start/select/option (=F6/F7/F8), f1..f12,
+                                     #   esc, enter, arrows, a..z, 0..9
   atari.py reset [--warm] [-p P]     # eject virtual .xex + cold boot (--warm =
                                      #   warm start; --keep = don't eject)
   atari.py status [-p P]             # firmware status line (boot stage, mounts,
@@ -208,6 +211,31 @@ def cmd_eject(args):
     print("virtual .xex ejected from D1:")
 
 
+KEY_NAMES = {
+    "start": 0x3F, "select": 0x40, "option": 0x41, "help": 0x3E,
+    "esc": 0x29, "enter": 0x28, "return": 0x28, "space": 0x2C, "tab": 0x2B,
+    "backspace": 0x2A, "up": 0x52, "down": 0x51, "left": 0x50, "right": 0x4F,
+    "f9": 0x42, "f11": 0x44, "f12": 0x45,
+}
+for _i in range(1, 9):
+    KEY_NAMES[f"f{_i}"] = 0x39 + _i          # f1..f8 = 0x3A..0x41 (f6/f7/f8 = start/select/option)
+for _i, _c in enumerate("abcdefghijklmnopqrstuvwxyz"):
+    KEY_NAMES[_c] = 0x04 + _i
+for _i, _c in enumerate("1234567890"):
+    KEY_NAMES[_c] = 0x1E + _i
+
+
+def cmd_key(args):
+    name = args.key.lower()
+    hid = KEY_NAMES.get(name)
+    if hid is None:
+        hid = int(args.key, 0)
+    mod = (0x01 if args.ctrl else 0) | (0x02 if args.shift else 0)
+    with AtariLink(args.port) as l:
+        l.key(hid, mod=mod, hold_ms=args.hold)
+    print(f"key 0x{hid:02X} mod 0x{mod:02X} held {args.hold} ms")
+
+
 def cmd_reset(args):
     with AtariLink(args.port) as l:
         l.reset(warm=args.warm, keep=args.keep)
@@ -251,6 +279,11 @@ def main():
         lambda sp: sp.add_argument("bytes", nargs="+"))
     add("fwpeek", cmd_fwpeek, lambda sp: sp.add_argument("addr"),
         lambda sp: sp.add_argument("len", nargs="?", default="64"))
+    add("key", cmd_key,
+        lambda sp: sp.add_argument("key", help="start/select/option/f1..f12/esc/enter/up/down/a..z/0..9 or 0xNN HID code"),
+        lambda sp: sp.add_argument("--shift", action="store_true"),
+        lambda sp: sp.add_argument("--ctrl", action="store_true"),
+        lambda sp: sp.add_argument("--hold", type=int, default=100, help="hold time ms (default 100)"))
     add("reset", cmd_reset,
         lambda sp: sp.add_argument("--warm", action="store_true"),
         lambda sp: sp.add_argument("--keep", action="store_true",
