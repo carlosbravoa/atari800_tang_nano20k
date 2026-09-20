@@ -3326,6 +3326,11 @@ int main() {
                 cursor(2, 11);
                 printf("(Directory is empty)");
             }
+        } else if (r == FR_NOT_READY) {
+            cursor(2, 11);
+            printf("No SD card, or card not readable.");
+            cursor(2, 12);
+            printf("Use a FAT32 card, fully inserted.");
         } else {
             cursor(2, 11);
             printf("Failed to open root: %x", (unsigned int)r);
@@ -3344,15 +3349,15 @@ int main() {
         cursor(2, 24);
         printf("Please check your SD card files.");
         cursor(2, 26);
-        printf("Press any key to retry...");
-        
-        delay(300);
+        printf("Insert SD card, then press S1");
+        // Hot-inserting the card and "pressing a key to retry" left the card layer wedged
+        // (HW-observed on a new board); the honest instruction is a reboot: S1 resets the
+        // whole firmware. Stay reachable over the PC Link (files can still be sent); a
+        // bridge reset request (0x03/0x04) leaves this screen for the menu.
         for (;;) {
-            int joy1, joy2;
-            joy_get(&joy1, &joy2);
-            if (joy1 || joy2) break;
-            bridge_poll();           // reachable at the fail screen: a PC can
-            uart_keyboard_poll();    // even send the ROMs and retry remotely
+            bridge_poll();
+            uart_keyboard_poll();
+            if (bridge_req) { bridge_req = 0; break; }
         }
     }
 

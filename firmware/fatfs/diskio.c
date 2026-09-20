@@ -53,7 +53,7 @@ DSTATUS disk_initialize (
 			sd_initialized = 1;
 			return 0;
 		} else {
-			print("Cannot initialize sd\n");
+			uart_printf("sd: init failed\n");   // serial log only — was print() to the OSD, which scribbled over the ROM-error screen on every retry
 			sd_initialized = 0;
 			return STA_NOINIT;
 		}
