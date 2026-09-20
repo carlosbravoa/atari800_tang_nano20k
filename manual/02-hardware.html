@@ -28,6 +28,8 @@
 <main>
 <h1>2. Hardware setup</h1>
 <p class="lead">What to plug in, what to wire to the header pins, and which pins to leave alone.</p>
+<figure><img src="img/boards_two.jpg" alt="The two boards: the Tang Nano 20K (HDMI on the left, USB-C on the right, S1 and S2 buttons, five LEDs) and the CH9350 USB-host board (USB-A socket, five-position DIP switch, pins GND / 485 / RX / TX / 5V)"><figcaption>The two boards of the minimal machine. Top: Sipeed Tang Nano 20K, HDMI on the left, USB-C on the right, S1 and S2 buttons and the LEDs beside them. Bottom: CH9350 USB keyboard host, with its DIP switch block and the GND / RX / TX / 5V pins on the right.</figcaption></figure>
+<div class="tip"><strong>The minimal machine is these two boards and three wires.</strong>The Tang Nano 20K runs the Atari; the CH9350 board turns any USB keyboard into an Atari keyboard, and with the OSD's arrow-keys-as-joystick option (<a href="09-keyboard.html">Keyboard</a>) that keyboard also plays games. DB9 joystick sockets are the alternative if you don't have the USB host board, and the way to play with real sticks; they are described further down.</div>
 
 <h2>What you need</h2>
 <div class="tbl"><table>
@@ -39,7 +41,7 @@
 <tr><td>DB9 joystick(s)</td><td>Standard Atari/Commodore digital joystick, wired to header pins (the board has no DB9 connector). One stick on port 1 is enough to drive the OSD.</td></tr>
 <tr><td>Dupont jumper wires</td><td>To wire the joystick and keyboard to the GPIO header</td></tr>
 </table></div>
-<div class="placeholder">Photo: the Tang Nano 20K board with the header pins used by this project labelled (53, 25–29, 41/42, 48, 54/56, GND, 5V) and the S1/S2 buttons and LEDs identified (to be supplied)</div>
+<p>The pin numbers are printed on the underside of the Tang Nano 20K next to each header pin (visible in the wiring photo above); the buttons and LEDs are labelled on the top side, S1 and S2 at the USB-C end.</p>
 
 <h2>The board</h2>
 <p>The Tang Nano 20K provides everything except the input connectors on board:</p>
@@ -60,7 +62,7 @@
 GND            ─────────────────►  GND  (any GND pin)
 5V/VCC         ─────────────────►  5V   (powers the module)
 UART TX        ─────────────────►  Pin 53 (IOR38B)</code></pre>
-<figure><img src="img/build_case.jpg" alt="A complete build in a 3D-printed case: the Tang Nano 20K on top with the micro-SD card, the CH9350 USB-host board below it with its USB-A socket on the side, and two DB9 joystick sockets at the front, all wired to the header pins"><figcaption>CH9350 wiring in a finished build (GND, 5V and TXD to pin 53 run from the module in the middle up to the header). A complete build in a 3D-printed case: Tang Nano 20K (top, micro-SD in its slot), CH9350 USB keyboard host (middle, DIP switches visible, USB-A socket on the left side), two DB9 joystick sockets (bottom). Not pretty inside, but one box with a keyboard port and two joystick ports is a machine.</figcaption></figure>
+<figure><img src="img/minimal_wiring.jpg" alt="Minimal wiring: three jumper wires from the Tang Nano 20K header (5V, GND, pin 53) to the CH9350 board (5V, GND, TX)"><figcaption>The minimal setup, complete: three jumper wires between the two boards, 5V and GND to power the host board and its TX to the Tang Nano's pin 53. Nothing else is needed: with the OSD's arrow-keys-as-joystick option the keyboard plays games too.</figcaption></figure>
 <h3>Option A: CH9350 module</h3>
 <p>The CH9350 is a plug-and-play USB-host-to-UART converter.</p>
 <ol>
@@ -102,7 +104,7 @@ The frame goes out on the Pico's UART TX pin at <strong>115200 baud</strong>.</l
 <tr><td>7</td><td>+5 V</td><td>not connected</td><td>not connected</td></tr>
 </table></div>
 <p>Joystick 1 sits on the left header and Joystick 2 on the right header, each as a block of consecutive pins.</p>
-<p>The two DB9 sockets in the build photo above are wired exactly as the table: five signal wires plus GND each, to the header pins.</p>
+<figure><img src="img/build_case.jpg" alt="A complete build in a 3D-printed case with two DB9 joystick sockets wired to the header"><figcaption>Two DB9 sockets wired as in the table, five signal wires plus GND each, in a boxed build together with the keyboard host.</figcaption></figure>
 <div class="warn"><strong>Never wire to these pins</strong>
 <ul>
 <li><strong>Pins 69–76 and 79</strong> — they belong to the on-board BL616 MCU (UART/HSPI and the WS2812 LED). The BL616 is always on and drives them, which produces phantom joystick input.</li>
