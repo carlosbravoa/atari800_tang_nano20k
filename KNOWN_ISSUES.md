@@ -55,12 +55,16 @@ all other modes are bit-identical. (Current MiSTer still has this bug.)
 ## Tiger Attack freezes during play — core-side, under investigation (2026-09-20)
 
 The PAL explanation below does **not** hold for Tiger Attack: the identical disk runs on an
-NTSC-configured Altirra. Autopsy of a freeze over the PC Link (RAM image archived): the game's
-deferred vertical-blank handler was found nested nine frames deep on the 6502 stack (one entry
-at $8A6E, exits at $8AC3/$8CFF/$9DD5), then the CPU halted. On this machine the handler takes
-longer than a frame, or receives more interrupts, than on a real NTSC Atari — a timing
-deviation in the core, not the game. Next step is the full-core simulator (the tool that found
-the ANTIC fine-scroll bug) to time that handler cycle by cycle.
+NTSC-configured Altirra. Two freezes were autopsied over the PC Link (RAM images archived):
+in both the 6502 had stopped executing (RAM and stack static, firmware and SIO healthy) while
+running the game's vertical-blank/DLI code. The core halts permanently on the 6502's JAM
+opcodes, which are only reached by wrong-path execution, so something upstream of that goes
+wrong first. The wrapper's SDRAM sharing was reviewed and cannot explain a freeze with the PC
+Link idle; the remaining candidates are ANTIC vertical-scroll/DLI timing in the upstream core
+(the game fine-scrolls vertically on every display-list line) or SDRAM data marginality. A
+MiSTer NTSC comparison is pending. Avoid heavy `atari.py peek/screen` polling during play
+meanwhile: PicoRV32 SDRAM traffic can delay an ANTIC fetch past its window (separate issue,
+fix drafted).
 
 ## Some PAL vertical-scrolling games glitch (this is an NTSC-only machine)
 
