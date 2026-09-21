@@ -65,7 +65,7 @@
 <h2 id="pal">Títulos PAL en una máquina NTSC</h2>
 <p>Unos pocos juegos PAL exigentes muestran sprites corruptos, una imagen que salta o tiembla, o se congelan <em>durante el juego</em>. Dos ejemplos conocidos:</p>
 <ul>
-<li><strong>Tiger Attack</strong> (Atari UK, 1988) — sprites corruptos; congelamientos ocasionales.</li>
+<li><strong>Tiger Attack</strong> (Atari UK, 1988) — un leve desgarro (tearing) de la imagen al hacer scroll. Por lo demás se juega bien; los congelamientos que se le atribuían eran el error del teclado como joystick corregido en la v3.1.2.</li>
 <li><strong>Astro Droid</strong> (Red Rat Software, 1987) — temblor vertical; sprites corruptos o con colores incorrectos.</li>
 </ul>
 <p>La causa más probable es que se trata de juegos PAL corriendo en una máquina solo NTSC. Ambos son títulos británicos de bajo costo construidos en torno a la temporización PAL de ANTIC (312 líneas a 50 Hz) y a un scroll fino vertical agresivo en cada cuadro — escribiendo <code>VSCROL</code> a mitad de cuadro, a menudo desde interrupciones de display list. En una máquina NTSC (262 líneas a 60 Hz) las regiones de scroll, las líneas objetivo de las interrupciones y las posiciones de los sprites ya no coinciden, lo que produce exactamente estos síntomas. Un Atari real, o un MiSTer, configurado en NTSC se comporta de la misma manera. No es un problema de carga ni una falla de la memoria o de la ruta de video de la placa: los juegos con scroll compatibles con NTSC, como <strong>River Raid</strong>, que usan scroll grueso actualizado una vez por cuadro, no se ven afectados.</p>

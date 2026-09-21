@@ -65,7 +65,7 @@
 <h2 id="pal">PAL titles on an NTSC machine</h2>
 <p>A few demanding PAL games show garbled sprites, a jumpy or jittery image, or freezes <em>during play</em>. Two known examples:</p>
 <ul>
-<li><strong>Tiger Attack</strong> (Atari UK, 1988) — sprites garbled; occasional freezes.</li>
+<li><strong>Tiger Attack</strong> (Atari UK, 1988) — minor image tearing while scrolling. It plays fine otherwise; the freezes once blamed on it were the keyboard-joystick bug fixed in v3.1.2.</li>
 <li><strong>Astro Droid</strong> (Red Rat Software, 1987) — vertical jitter; sprites garbled or wrong colours.</li>
 </ul>
 <p>The most likely cause is that these are PAL games running on an NTSC-only machine. Both are British budget titles built around PAL ANTIC timing (312 lines at 50 Hz) and aggressive per-frame vertical fine scrolling — writing <code>VSCROL</code> mid-frame, often from display-list interrupts. On an NTSC machine (262 lines at 60 Hz) the scroll regions, interrupt line targets and sprite positions no longer line up, which produces exactly these symptoms. A real Atari, or MiSTer, set to NTSC behaves the same way. It is not a loading problem and not a fault in the board's memory or video path: NTSC-friendly scrollers such as <strong>River Raid</strong>, which use coarse scrolling updated once per frame, are unaffected.</p>

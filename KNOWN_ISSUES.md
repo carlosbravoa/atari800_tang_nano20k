@@ -80,7 +80,8 @@ title" and "core timing" theories for this game were wrong.
 A few demanding titles show garbled sprites, a jumpy/jittery image, or freezes **during
 play**:
 
-- **Tiger Attack** (Atari UK, 1988) — sprites garbled; occasional freezes.
+- **Tiger Attack** (Atari UK, 1988) — minor image tearing while scrolling; plays fine otherwise
+  (the freezes once blamed on it were the keyboard-joystick bug, fixed in v3.1.2).
 - **Astro Droid** (Red Rat Software, 1987) — vertical jitter; sprites garbled / wrong colours.
 
 **Most likely cause: these are PAL games, and this build is NTSC-only.** Both are PAL
