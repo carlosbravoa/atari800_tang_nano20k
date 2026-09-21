@@ -79,6 +79,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 
 <h2 id="gui">13.4 La aplicación de escritorio: <code>atari_gui.py</code></h2>
 <pre><code>python3 tools/atari_gui.py</code></pre>
+<figure><img src="../img/pclink_app.png" alt="La ventana de escritorio Atari PC Link: un selector de puerto y el botón Connect arriba con el estado /dev/ttyUSB1 — A8OK en verde; una columna izquierda de botones Send file, Run .xex, Destination folder, Eject virtual disk, Warm start, Cold boot, Ping; y las pestañas Log, Type, Printer, Live Keys, con la pestaña Log mostrando los mensajes de arranque del firmware" style="image-rendering:auto"><figcaption>La aplicación de escritorio conectada a una placa: el puerto y el estado arriba, las acciones a la izquierda, y la pestaña Log con los mensajes de arranque del firmware, un montaje de disco, una transferencia de archivo y dos líneas de impresora.</figcaption></figure>
 <ul>
 <li><strong>Connect</strong> (arriba) — puerto detectado automáticamente; muestra <code>A8OK</code> cuando el Atari responde.</li>
 <li><strong>Columna izquierda</strong> — <em>Send file…</em>, <em>Run .xex…</em> (con un campo <em>Destination folder</em>, por defecto <code>PC</code>, y una barra de progreso), <em>Eject</em>, <em>Warm start</em>, <em>Cold boot</em>, <em>Ping</em>. Los archivos de texto (<code>.txt</code>/<code>.lst</code>/<code>.bas</code>) enviados desde aquí se convierten automáticamente a finales de línea ATASCII. Un <code>.xex</code> ejecutado de forma remota aparece en la línea D1: del OSD y se puede desconectar desde cualquiera de los dos lados.</li>
@@ -87,6 +88,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <li><strong>Pestaña Printer</strong> — todo lo que imprime el Atari se acumula aquí (§13.6): <em>Save as .txt</em>, <em>Save as PDF</em>, <em>Print…</em>, <em>Clear</em>.</li>
 <li><strong>Pestaña Live Keys</strong> — haz clic en el recuadro y teclea directamente en el Atari (incluidos Backspace/Esc/Tab/Enter). Pulsa <kbd>F12</kbd> en el teclado real para recuperar la máquina; la aplicación se desconecta limpiamente.</li>
 </ul>
+<figure><img src="../img/pclink_app_type.png" alt="La misma ventana en la pestaña Type: un cuadro de texto con un programa BASIC de seis líneas, con los botones Type it on the Atari y Load file, y la nota ~18 chars/s; OSD must be closed" style="image-rendering:auto"><figcaption>La pestaña Type con un listado BASIC corto listo para teclearse en el Atari.</figcaption></figure>
 
 <h2 id="typing">13.5 Reglas del tecleo</h2>
 <ul>

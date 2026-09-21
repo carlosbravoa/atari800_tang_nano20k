@@ -79,6 +79,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 
 <h2 id="gui">13.4 The desktop app: <code>atari_gui.py</code></h2>
 <pre><code>python3 tools/atari_gui.py</code></pre>
+<figure><img src="img/pclink_app.png" alt="The Atari PC Link desktop window: a Port selector and Connect button on top with the status /dev/ttyUSB1 — A8OK in green; a left column of buttons Send file, Run .xex, Destination folder, Eject virtual disk, Warm start, Cold boot, Ping; and tabs Log, Type, Printer, Live Keys, with the Log tab showing the firmware boot messages" style="image-rendering:auto"><figcaption>The desktop app connected to a board: the port and status on top, the actions down the left, and the Log tab showing the firmware's boot messages, a disk mount, a file transfer and two printer lines.</figcaption></figure>
 <ul>
 <li><strong>Connect</strong> (top) — port auto-detected; shows <code>A8OK</code> when the Atari answers.</li>
 <li><strong>Left column</strong> — <em>Send file…</em>, <em>Run .xex…</em> (with a <em>Destination folder</em> field, default <code>PC</code>, with a progress bar), <em>Eject</em>, <em>Warm start</em>, <em>Cold boot</em>, <em>Ping</em>. Text files (<code>.txt</code>/<code>.lst</code>/<code>.bas</code>) sent here are auto-converted to ATASCII line endings. A remotely-run <code>.xex</code> appears on the OSD's D1: line and can be detached from either side.</li>
@@ -87,6 +88,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <li><strong>Printer tab</strong> — everything the Atari prints collects here (§13.6): <em>Save as .txt</em>, <em>Save as PDF</em>, <em>Print…</em>, <em>Clear</em>.</li>
 <li><strong>Live Keys tab</strong> — click the box and type straight onto the Atari (Backspace/Esc/Tab/Enter included). Press <kbd>F12</kbd> on the real keyboard to take the machine back; the app detaches cleanly.</li>
 </ul>
+<figure><img src="img/pclink_app_type.png" alt="The same window on the Type tab: a text box holding a six-line BASIC program, with the buttons Type it on the Atari and Load file, and the note ~18 chars/s; OSD must be closed" style="image-rendering:auto"><figcaption>The Type tab with a short BASIC listing ready to be typed onto the Atari.</figcaption></figure>
 
 <h2 id="typing">13.5 Typing rules</h2>
 <ul>
