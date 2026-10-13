@@ -63,6 +63,7 @@
 <li><strong>R: serial device (850 / modem)</strong> — work in progress, opt-in and <strong>default OFF</strong>. BobTerm can dial a live telnet BBS over the USB-C cable: the firmware serves the Altirra 850 handler and <code>tools/atari_net.py --modem</code> is the PC-side modem. Enable it in OSD → Options → <em>Modem (R:)</em> (it needs the two Altirra <code>.bin</code> files on the SD card — see <code>tools/fujinet_850/README.md</code>). Some text garbles under fast BBS bursts. When OFF it has zero effect on normal use.</li>
 <li><strong>Joystick paddles</strong> — analogue pot inputs are not implemented. Powered controllers (paddles, mice, active autofire pads) are not supported.</li>
 <li><strong>The!Cart 32/64/128 MB</strong> — cannot fit the 8 MB SDRAM and are rejected. Cartridges are supported up to 4 MB (MegaCart); unsupported CAR types show their type id on screen. See <a href="07-cartridges.html">Cartridges</a>.</li>
+<li><strong>VBXE</strong> — not supported, and not possible on this board. The MiSTer core includes a VBXE implementation, but it needs 512 KB of video RAM in FPGA block RAM; the Tang Nano 20K has about 103 KB in total and this design already uses most of it. Moving that memory to SDRAM would starve the CPU and ANTIC, and VBXE's 24-bit, 640-pixel-wide output does not fit the genlocked HDMI path. The port compiles a stub in its place.</li>
 <li><strong>Machine is NTSC only</strong> — a runtime PAL/NTSC switch is on the roadmap, but PAL is not supported today.</li>
 </ul>
 

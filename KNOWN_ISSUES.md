@@ -110,3 +110,27 @@ reference machine, PAL support is **deferred / not planned**.
 **To confirm the diagnosis:** run the same games on MiSTer (or a real Atari) **set to NTSC**.
 If they glitch the same way → confirmed PAL/NTSC mismatch (nothing to fix here). If they run
 clean on NTSC hardware → reopen as a core/wrapper investigation.
+
+## VBXE is not supported (and cannot be on this board)
+
+The upstream MiSTer core ships a VBXE implementation (`rtl/common/a8core/vbxe.vhdl` +
+`vbxe_blitter.vhdl`, by Wojciech Mostowski, 2025). This port deliberately compiles a stub
+in its place (`src/vbxe_stub.vhdl`) with the VBXE switch tied off. It is not a missing
+feature we forgot to wire up — the Tang Nano 20K cannot hold it:
+
+- **VRAM.** VBXE needs 512 KB of video RAM, which MiSTer keeps in FPGA block RAM. The
+  GW2AR-18 has about 103 KB of block RAM in total and this design already uses 92% of it.
+  Moving the VRAM to SDRAM would mean a new arbiter client streaming one byte per hi-res
+  pixel for the overlay plus XDL fetches plus blitter traffic, concurrent with the CPU and
+  ANTIC — the same bandwidth/arbitration wall that killed the SDRAM frame-buffer attempt.
+- **Video path.** With VBXE on, the core emits 24-bit RGB with per-pixel palette selection
+  and up to 640-pixel-wide overlays. Our scandoubler ring stores an 8-bit GTIA colour code
+  at 352 pixels per line and scales by an integer 3×. Supporting VBXE output means a wider,
+  deeper ring, the VBXE palette moved to the pixel-clock side and non-integer scaling —
+  all new logic on the HDMI path, which has no headroom left.
+- **Logic.** The VBXE engine is roughly 2300 lines of VHDL on a chip at 88% logic usage.
+
+### Status: WONTFIX on the Tang Nano 20K
+There is no useful partial VBXE (every feature software uses depends on the 512 KB VRAM).
+The core-side hooks are wired, so a larger FPGA with spare SDRAM bandwidth could swap the
+stub for the real entity; on this board it stays a stub.
