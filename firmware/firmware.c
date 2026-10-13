@@ -116,31 +116,10 @@ static uint32_t sio_cmd_timeout = 0;   // millis timestamp of first byte in curr
 uint8_t dbg_last_sio_cmd = 0;
 uint16_t dbg_last_sio_sector = 0;
 int dbg_last_sio_status = 0;
-uint32_t dbg_sio_read_count = 0;
-uint32_t dbg_sio_write_count = 0;
-uint32_t dbg_sio_status_count = 0;
 uint32_t dbg_sio_err_count = 0;
-uint32_t dbg_sio_rx_byte_count = 0;
-uint32_t dbg_sio_timeout_count = 0;
-uint8_t dbg_rx_buf[12] = {0};
-uint8_t dbg_rx_cmd_line_buf[12] = {0};
-uint8_t dbg_rx_buf_idx = 0;
-
-typedef struct {
-    uint8_t device;
-    uint8_t cmd;
-    uint8_t aux1;
-    uint8_t aux2;
-    uint8_t checksum;
-    uint8_t processed;
-} dbg_cmd_frame_t;
-
-dbg_cmd_frame_t dbg_cmd_history[4];
-uint8_t dbg_cmd_history_idx = 0;
-
-uint32_t dbg_sio_cmd_low_ticks = 0;
-uint32_t dbg_sio_txd_low_ticks = 0;
-uint32_t dbg_sio_tx_count = 0;   // bytes pushed to the TX FIFO (reg_sio_tx)
+// (2026-10-13: the never-displayed SIO counters / command history / rx capture
+// buffers were removed for image size — only the four shown on the OSD triage
+// line and in bridge STATUS remain.)
 // TX-line diagnostics, latched while the core is running (sampled in main loop):
 uint8_t  dbg_tx_pe_prev   = 0;   // last pokey tick-counter value seen
 uint8_t  dbg_tx_pe_moved  = 0;   // POKEY_ENABLE counter ever advanced (TX clock alive)
@@ -161,7 +140,6 @@ void sio_txdiag_sample(void) {
 //     NOT SDRAM -> reliable, no arbiter starvation, no hang) ---
 uint32_t dbg_frame_rate = 0;          // measured Atari frames/sec (~60 = correct NTSC)
 uint32_t dbg_lines_per_frame = 0;     // scanlines per frame (~262 = correct NTSC)
-uint32_t dbg_resp_time_us = 0;        // duration of the last sio_process_command (us)
 static uint32_t fr_last_cycle = 0;
 static uint16_t fr_last_vs = 0;
 
@@ -1319,28 +1297,7 @@ void sio_init(void) {
     dbg_last_sio_cmd = 0;
     dbg_last_sio_sector = 0;
     dbg_last_sio_status = 0;
-    dbg_sio_read_count = 0;
-    dbg_sio_write_count = 0;
-    dbg_sio_status_count = 0;
     dbg_sio_err_count = 0;
-    dbg_sio_rx_byte_count = 0;
-    dbg_sio_timeout_count = 0;
-    for (int i = 0; i < 12; i++) {
-        dbg_rx_buf[i] = 0;
-        dbg_rx_cmd_line_buf[i] = 0;
-    }
-    dbg_rx_buf_idx = 0;
-    for (int i = 0; i < 4; i++) {
-        dbg_cmd_history[i].device = 0;
-        dbg_cmd_history[i].cmd = 0;
-        dbg_cmd_history[i].aux1 = 0;
-        dbg_cmd_history[i].aux2 = 0;
-        dbg_cmd_history[i].checksum = 0;
-        dbg_cmd_history[i].processed = 0;
-    }
-    dbg_cmd_history_idx = 0;
-    dbg_sio_cmd_low_ticks = 0;
-    dbg_sio_txd_low_ticks = 0;
 }
 
 void delay_us(uint32_t us) {
@@ -1389,7 +1346,6 @@ void sio_tx_byte(uint8_t b) {
         // Wait until TX FIFO is not full
     }
     reg_sio_tx = b;
-    dbg_sio_tx_count++;
 }
 
 void sio_wait_tx_empty(void) {
@@ -1873,7 +1829,6 @@ static void sio_printer(uint8_t cmd, uint8_t aux1) {
         sio_tx_byte(0x41); sio_wait_tx_empty();    // ACK data
         delay_us(250);
         sio_tx_byte(0x43);                         // Complete
-        dbg_sio_write_count++;
         int eol = 0;
         char line[44];
         int k = 0;
@@ -2081,7 +2036,6 @@ void sio_process_command(void) {
 
     switch (cmd) {
         case 0x53: { // Status command
-            dbg_sio_status_count++;
             // 1. Send ACK (with command-to-ACK SIO delay)
             delay_us(250);
             sio_tx_byte(0x41); // 'A'
@@ -2131,7 +2085,6 @@ void sio_process_command(void) {
             // stack (HW-proven 2026-07-20: first successful MyDOS boot = serial
             // link started flapping). dbg_sio_read_count / dbg_last_sio_sector
             // carry the same info to STATUS and the OSD debug line.
-            dbg_sio_read_count++;
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = 128;
             
@@ -2178,7 +2131,7 @@ void sio_process_command(void) {
         
         case 0x57:   // Write sector command (with verify)
         case 0x50: { // Write sector command (without verify)
-            dbg_sio_write_count++;   // no per-sector log — see READ (BL616 flood)
+            // no per-sector log — see READ (BL616 flood)
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = (atr_sector_size[slot] == 128 || sector <= 3) ? 128 : 256;
 
@@ -2228,7 +2181,6 @@ void sio_process_command(void) {
         case 0x21:   // Format disk (image's own geometry)
         case 0x22: { // Format enhanced/medium density (1050 ED only)
             uart_printf("SIO FORMAT %b\n", cmd);
-            dbg_sio_write_count++;
             uint8_t *sector_buf = sio_sector_buf;
             int sector_len = (atr_sector_size[slot] == 256) ? 256 : 128;
             uint32_t data_size = atr_mounted[slot]
@@ -2311,20 +2263,7 @@ static void sio_poll_hwcapture(void) {
     // drain them so the upcoming data phase starts clean.
     while (!sio_rx_empty()) { (void)reg_sio_rx; }
 
-    dbg_cmd_frame_t *f = &dbg_cmd_history[dbg_cmd_history_idx];
-    f->device = sio_cmd_buf[0]; f->cmd = sio_cmd_buf[1];
-    f->aux1 = sio_cmd_buf[2];   f->aux2 = sio_cmd_buf[3];
-    f->checksum = sio_cmd_buf[4];
-    uint8_t calc = sio_checksum(sio_cmd_buf, 4);
-    f->processed = (calc != f->checksum) ? 2
-                 : (f->device != 0x31 && f->device != 0x32) ? 0 : 1;
-    dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
-
-    uint32_t rsp_t0 = reg_cycle;
-   
     sio_process_command();
-   
-    dbg_resp_time_us = (uint32_t)(reg_cycle - rsp_t0) / 27;
     sio_cmd_idx = 0;
     while (!sio_rx_empty()) { (void)reg_sio_rx; }
 }
@@ -2341,30 +2280,16 @@ void sio_poll(void) {
 #endif
     if (!atr_mounted[0] && !atr_mounted[1] && !xex_active) return;
 
-    uint32_t diag = reg_sio_diag;
-    if (((diag >> 13) & 1) == 0) {
-        dbg_sio_cmd_low_ticks++;
-    }
-    if (((diag >> 12) & 1) == 0) {
-        dbg_sio_txd_low_ticks++;
-    }
-
     // Timeout: if a partial frame sits for >200 ms, reset accumulator
     if (sio_cmd_idx > 0 && (time_millis() - sio_cmd_timeout) > 200) {
         uart_printf("SIO: frame timeout, resetting (had %d bytes)\n", sio_cmd_idx);
-        dbg_sio_timeout_count++;
         sio_cmd_idx = 0;
     }
 
     for (int i = 0; i < 256 && !sio_rx_empty(); i++) {
         uint16_t rx_val  = reg_sio_rx;
-        dbg_sio_rx_byte_count++;
         uint8_t  byte      = rx_val & 0xFF;
         uint8_t  cmd_active = (rx_val >> 8) & 1;
-        dbg_rx_buf[dbg_rx_buf_idx] = byte;
-        dbg_rx_cmd_line_buf[dbg_rx_buf_idx] = cmd_active;
-        dbg_rx_buf_idx = (dbg_rx_buf_idx + 1);
-        if (dbg_rx_buf_idx >= 12) dbg_rx_buf_idx = 0;
 
         if (!cmd_active) {
             // Data-phase byte — not expected here; ignore
@@ -2385,27 +2310,7 @@ void sio_poll(void) {
         }
 
         if (sio_cmd_idx == 5) {
-            dbg_cmd_frame_t *f = &dbg_cmd_history[dbg_cmd_history_idx];
-            f->device = sio_cmd_buf[0];
-            f->cmd = sio_cmd_buf[1];
-            f->aux1 = sio_cmd_buf[2];
-            f->aux2 = sio_cmd_buf[3];
-            f->checksum = sio_cmd_buf[4];
-            uint8_t calc_sum = sio_checksum(sio_cmd_buf, 4);
-            if (calc_sum != f->checksum) {
-                f->processed = 2; // Checksum error
-            } else if (f->device != 0x31 && f->device != 0x32) {
-                f->processed = 0; // Ignored (not D1)
-            } else {
-                f->processed = 1; // Processed
-            }
-            dbg_cmd_history_idx = (dbg_cmd_history_idx + 1) % 4;
-
-            uint32_t rsp_t0 = reg_cycle;
-           
             sio_process_command();
-           
-            dbg_resp_time_us = (uint32_t)(reg_cycle - rsp_t0) / 27;
             sio_cmd_idx = 0;
 
             // Anti-lag resync: the response above blocks for several ms, during
@@ -2845,10 +2750,12 @@ int bridge_mkdirs(char *path) {
 int bridge_put_open(const char *path) {
     return f_open(&bridge_file, path, FA_CREATE_ALWAYS | FA_WRITE);
 }
+// 0 ok, else the FRESULT (FR_DENIED if the card took fewer bytes than asked).
 int bridge_put_chunk(const uint8_t *buf, unsigned int len) {
     unsigned int bw;
-    if (f_write(&bridge_file, buf, len, &bw) != FR_OK || bw != len) return -1;
-    return 0;
+    FRESULT r = f_write(&bridge_file, buf, len, &bw);
+    if (r != FR_OK) return (int)r;
+    return bw != len ? (int)FR_DENIED : 0;
 }
 int bridge_put_close(void) {
     return f_close(&bridge_file) == FR_OK ? 0 : -1;
@@ -2889,16 +2796,25 @@ static void bridge_cmd_put(void) {
     uint32_t left = size;
     while (left > 0) {
         unsigned int chunk = left > 256 ? 256 : left;
+        int r = 0;                              // -1 = RX byte lost, >0 = FRESULT
         for (unsigned int i = 0; i < chunk; i++) {
             int c = blrx_getc(2000);
-            if (c < 0) { bridge_put_close(); f_unlink(path);
-                         bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return; }
+            if (c < 0) { r = -1; break; }
             buf[i] = (uint8_t)c;
             sum += (uint8_t)c;
         }
-        if (bridge_put_chunk(buf, chunk)) {
-            bridge_put_close(); f_unlink(path);
-            bridge_quiet = 0; bridge_putc(BRIDGE_NAK); return;
+        if (r == 0) r = bridge_put_chunk(buf, chunk);
+        if (r) {
+            // Abort. After a card-level error (FR_DISK_ERR/FR_INT_ERR) do NOT
+            // rewrite directory + FAT sectors on top of it — leave the partial
+            // file for fsck rather than risk the volume (2026-10-12 incident).
+            bridge_put_close();
+            if (r != (int)FR_DISK_ERR && r != (int)FR_INT_ERR) f_unlink(path);
+            bridge_quiet = 0;
+            bridge_putc(BRIDGE_NAK);
+            uart_printf("put abort @%d: %s %d\n", (int)(size - left),
+                        r < 0 ? "rx lost" : "f_write", r);
+            return;
         }
         left -= chunk;
         sio_poll();                 // Atari runs live behind the transfer

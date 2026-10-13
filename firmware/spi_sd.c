@@ -91,9 +91,26 @@ void spi_writeblock(const uint8_t *ptr, int length) {
 
 static int sdhc_card = 0;
 
+// Wait until the card releases its busy indication (DO held LOW while it is
+// still programming a block after a write). The SD spec requires the host to see
+// 0xFF before issuing ANY command; spec maximum busy time is 250 ms. Without this
+// the next command frame went out while the card was still busy: the busy line
+// (0x00) reads exactly like a successful R1 and the following data block was
+// streamed into a card that was not listening (2026-10-12 SD-corruption incident,
+// INVESTIGATE.md #24). Returns 1 ready / 0 timed out (card presumed wedged).
+static int sd_wait_ready(void) {
+    uint32_t t0 = time_millis();
+    while (spi_receive() != 0xFF) {
+        if (time_millis() - t0 > 500) return 0;
+    }
+    return 1;
+}
+
 uint8_t sd_send_command(uint8_t cmd, uint32_t arg) {
     uint8_t response = 0xFF;
     uint8_t status;
+
+    if (!sd_wait_ready()) return 0xFF;    // never talk to a busy card
 
     // If non-SDHC card, use byte addressing rather than block (512) addressing
     if(!sdhc_card) {
@@ -311,7 +328,6 @@ int sd_readsector(uint32_t start_block, uint8_t *buffer, uint32_t sector_count) 
 
 int sd_writesector(uint32_t start_block, const uint8_t *buffer, uint32_t sector_count) {
     uint8_t response;
-    int retries = 0;
 
     DEBUG("sd_writesector: %d %d\n", start_block, sector_count);
     while (sector_count--) {
@@ -341,29 +357,12 @@ int sd_writesector(uint32_t start_block, const uint8_t *buffer, uint32_t sector_
             return 0;
         }
 
-        // Wait for data write complete
-        while(spi_sendrecv(0xFF) == 0) {
-            // Timeout
-	        if(retries > 5000) {
-                DEBUG("sd_writesector: Timeout\n");
-                return 0;
-            }
-	        ++retries;
-        }
-
-        // Additional 8 SPI clocks
-        spi_send(0xff);
-
-	    retries = 0;
-	
-        // Wait for data write complete
-        while(spi_sendrecv(0xFF) == 0) {
-            // Timeout
-            if(retries > 5000) {
-                DEBUG("sd_writesector: Timeout\n");
-                return 0;
-            }
-            ++retries;
+        // Wait for the programming to finish — TIMED (spec max 250 ms). The old
+        // 5000-iteration poll gave up after ~50 ms, well inside what large cards
+        // take during internal garbage collection.
+        if (!sd_wait_ready()) {
+            DEBUG("sd_writesector: Timeout\n");
+            return 0;
         }
     }
     return 1;
