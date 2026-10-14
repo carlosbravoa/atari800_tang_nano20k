@@ -10,9 +10,14 @@ OBJCOPY = $(RISCV)-objcopy
 OBJDUMP = $(RISCV)-objdump
 # EXTRA_CFLAGS: append build-time options, e.g. `make EXTRA_CFLAGS=-DSIO_HW_CAPTURE`
 # to enable the Phase B hardware SIO command-capture path (default = software path).
+# -msave-restore: function prologues/epilogues call the libgcc __riscv_save/restore
+# stubs instead of inlining the register pushes. Pure code-size lever (text 51356 ->
+# ~46.5 KB, headroom 556 B -> ~5.3 KB on 2026-10-14), no RTL change, so bitstream
+# placement is untouched. Safe: every firmware timing path reads reg_cycle (hardware
+# counter), SIO/SPI are hardware blocks — nothing depends on instruction count.
 EXTRA_CFLAGS ?=
-CFLAGS  = -Wall -Os -g -ffunction-sections -fdata-sections -mabi=ilp32 -march=rv32i -ffreestanding -I. $(EXTRA_CFLAGS)
-LFLAGS = -mabi=ilp32 -march=rv32i -Wl,--build-id=none,-Bstatic,-T,baremetal.ld,--gc-sections -nostdlib
+CFLAGS  = -Wall -Os -g -ffunction-sections -fdata-sections -mabi=ilp32 -march=rv32i -msave-restore -ffreestanding -I. $(EXTRA_CFLAGS)
+LFLAGS = -mabi=ilp32 -march=rv32i -msave-restore -Wl,--build-id=none,-Bstatic,-T,baremetal.ld,--gc-sections -nostdlib
 LIBS = -lgcc
 
 SRCS := start.S firmware.c picorv32.c spi_sd.c spiflash.c \
