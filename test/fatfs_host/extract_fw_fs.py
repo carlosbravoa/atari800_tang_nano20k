@@ -17,7 +17,8 @@ FUNCS = ["mount_atr", "atr_sector_offset", "atr_read_sector", "atr_write_sector"
          "atr_format", "create_blank_atr",
          "bridge_mkdirs", "bridge_put_open", "bridge_put_chunk", "bridge_put_close",
          "hdd_path", "hdd_open", "hdd_read", "hdd_write", "hdd_close",
-         "hdd_status", "hdd_delete", "hdd_rename"]
+         "hdd_status", "hdd_delete", "hdd_rename",
+         "hdd_text_put", "hdd_list", "hdd_openr"]
 
 src = SRC.read_text()
 

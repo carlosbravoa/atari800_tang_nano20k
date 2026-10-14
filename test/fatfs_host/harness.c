@@ -33,6 +33,7 @@ int cba_stage, cba_err;
 FIL bridge_file;
 #define HDD_HANDLES 2
 #define HDD_DIRBUF  1024
+#define HDD_LFN_W   27
 FIL hdd_fil[HDD_HANDLES];
 uint8_t hdd_open_f[HDD_HANDLES];
 char hdd_dirbuf[HDD_DIRBUF];
@@ -350,6 +351,108 @@ int main(int argc, char **argv) {
             printf("FAIL: unsafe path %s\n", pp); return 1; }
         if (hdd_path("H1:GAME.SAV", pp) || strcmp(pp, "/HDD/GAME.SAV")) {
             printf("FAIL: spec path %s\n", pp); return 1; }
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_sdctl")) {             /* sd: LIST (40) / OPENR (47) for ASH */
+        uint8_t st[4], buf[128];
+        char dl[1025];
+        /* fixture: /README.TXT, /games/{A.ATR,B.ATR,sub/}, a 35-char long name,
+           /many/F00..F39 for the MORE paging */
+        FIL f; UINT bw;
+        if (f_open(&f, "/README.TXT", FA_WRITE | FA_CREATE_ALWAYS)) die("mk readme");
+        const char *txt = "hello from the sd card\x9b";
+        if (f_write(&f, txt, strlen(txt), &bw)) die("wr readme");
+        f_close(&f);
+        if (f_mkdir("/games") || f_mkdir("/games/sub")) die("mkdir");
+        if (f_open(&f, "/games/A.ATR", FA_WRITE | FA_CREATE_ALWAYS)) die("mk a");
+        for (int i = 0; i < 12345; i += 128) {
+            uint8_t z[128] = {0}; UINT n = 12345 - i > 128 ? 128 : 12345 - i;
+            if (f_write(&f, z, n, &bw)) die("wr a");
+        }
+        f_close(&f);
+        if (f_open(&f, "/games/B.ATR", FA_WRITE | FA_CREATE_ALWAYS)) die("mk b"); f_close(&f);
+        if (f_open(&f, "/games/a very long file name indeed.xex", FA_WRITE | FA_CREATE_ALWAYS)) die("mk lfn"); f_close(&f);
+        if (f_mkdir("/many")) die("mkdir many");
+        for (int i = 0; i < 40; i++) {
+            char nm[24]; sprintf(nm, "/many/F%02d", i);
+            if (f_open(&f, nm, FA_WRITE | FA_CREATE_ALWAYS)) die("mk many"); f_close(&f);
+        }
+        /* helper: read the listing on handle h into dl */
+        #define READ_LISTING(h) do {                                            \
+            hdd_status(h, st);                                                  \
+            int dav = st[2] | (st[3] << 8);                                     \
+            if (dav <= 0 || dav > 1024) { die("listing avail"); }               \
+            int got = 0;                                                        \
+            while (got < dav) {                                                 \
+                int n = hdd_read(h, (uint8_t *)dl + got, dav - got > 128 ? 128 : dav - got); \
+                if (n <= 0) { die("listing read"); }                            \
+                got += n;                                                       \
+            }                                                                   \
+            dl[got] = 0; hdd_close(h);                                          \
+        } while (0)
+        /* 1. root listing: dirs flagged 'd' with 8 spaces, file with right-aligned size, END */
+        if (hdd_list("/", 0, 1)) die("list /");
+        READ_LISTING(1);
+        if (!strstr(dl, "d          games\x9b")) { printf("FAIL: root dir line: %s\n", dl); return 1; }
+        if (!strstr(dl, "f       23 README.TXT\x9b")) { printf("FAIL: root file line: %s\n", dl); return 1; }
+        if (!strstr(dl, "END\x9b")) die("root END");
+        if (strstr(dl, "MORE")) die("root MORE");
+        /* 2. subdir listing: size 12345, LFN cut at 27 chars */
+        if (hdd_list("/games", 0, 1)) die("list /games");
+        READ_LISTING(1);
+        if (!strstr(dl, "f    12345 A.ATR\x9b")) { printf("FAIL: size col: %s\n", dl); return 1; }
+        if (!strstr(dl, "d          sub\x9b")) die("sub dir line");
+        if (!strstr(dl, " a very long file name indee\x9b")) { printf("FAIL: lfn cut: %s\n", dl); return 1; }
+        /* 3. missing dir / a file as dir -> error */
+        if (hdd_list("/nope", 0, 1) == 0) die("list missing");
+        if (hdd_list("/README.TXT", 0, 1) == 0) die("list a file");
+        /* 4. paging: 40 entries x 13 bytes > 1 KB? no (520 B) — force MORE with the
+              27-char-name rule: 40 x "f        0 F00"EOL = 40 x 15 = 600 B fits; so
+              check paging logic via start index instead, then a real MORE with 90 files */
+        if (hdd_list("/many", 0, 0)) die("list many");
+        READ_LISTING(0);
+        if (!strstr(dl, "F00\x9b") || !strstr(dl, "F39\x9b") || !strstr(dl, "END\x9b")) die("many all");
+        if (hdd_list("/many", 38, 0)) die("list many@38");
+        READ_LISTING(0);
+        if (strstr(dl, "F37\x9b") || !strstr(dl, "F38\x9b") || !strstr(dl, "F39\x9b") || !strstr(dl, "END\x9b")) {
+            printf("FAIL: start=38: %s\n", dl); return 1; }
+        for (int i = 40; i < 90; i++) {
+            char nm[24]; sprintf(nm, "/many/F%02d", i);
+            if (f_open(&f, nm, FA_WRITE | FA_CREATE_ALWAYS)) die("mk many2"); f_close(&f);
+        }
+        int total = 0, pages = 0, start = 0;
+        for (;;) {
+            if (hdd_list("/many", start, 1)) die("list page");
+            READ_LISTING(1);
+            int cnt = 0; for (char *p = dl; *p; p++) if (*p == '\x9b') cnt++;
+            int more = strstr(dl, "MORE\x9b") != NULL;
+            if (!more && !strstr(dl, "END\x9b")) die("page tail");
+            cnt--;                                  /* the tail line */
+            total += cnt; start += cnt; pages++;
+            if (!more) break;
+            if (pages > 10) die("paging runaway");
+        }
+        if (total != 90 || pages < 2) { printf("FAIL: paged total %d in %d pages\n", total, pages); return 1; }
+        /* 5. OPENR: any path, read-only, status/read/close like H: mode 4 */
+        if (hdd_openr("/README.TXT", 1)) die("openr");
+        hdd_status(1, st);
+        int avail = st[2] | (st[3] << 8);
+        if (avail != (int)strlen(txt)) { printf("FAIL: openr avail %d\n", avail); return 1; }
+        if (hdd_read(1, buf, avail) != avail) die("openr read");
+        if (memcmp(buf, txt, avail)) die("openr verify");
+        if (hdd_close(1)) die("openr close");
+        if (hdd_openr("/games", 1) == 0) die("openr on a directory");
+        if (hdd_openr("/nope.txt", 1) == 0) die("openr missing");
+        if (hdd_openr("", 1) == 0) die("openr empty");
+        if (hdd_write(1, (const uint8_t *)"x", 1) == 0) die("openr writable?!");
+        /* 6. a listing on one handle + a file on the other coexist */
+        if (hdd_openr("/README.TXT", 0)) die("openr h0");
+        if (hdd_list("/games", 0, 1)) die("list h1");
+        hdd_status(0, st);
+        if ((st[2] | (st[3] << 8)) != (int)strlen(txt)) die("h0 clobbered by listing");
+        hdd_close(0); hdd_close(1);
+        #undef READ_LISTING
         return 0;
     }
 

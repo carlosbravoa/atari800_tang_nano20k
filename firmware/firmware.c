@@ -1033,6 +1033,70 @@ int hdd_rename(const char *oldname, const char *newname) {
     return f_rename(po, pn) == FR_OK ? 0 : -2;
 }
 
+// ── sd: control XIOs for ASH (the Atari Shell), phase 2 of the ASH-TN spec ──
+// XIO 40 LIST and 47 OPENR give the 6502 READ-ONLY reach over the whole card
+// (absolute SD paths; user decision 2026-10-14 — the OSD already exposes it).
+// Writes stay confined to /HDD through hdd_path. Listings reuse the single 1 KB
+// H: text buffer: one listing open at a time, exactly like H: mode 6.
+#define HDD_LFN_W 27                              // the OSD's displayable-name rule
+
+// Append s to the H: text buffer; -1 if it would not leave room for the tail.
+static int hdd_text_put(const char *s) {
+    int L = strlen(s);
+    if (hdd_dirlen + L + 6 > HDD_DIRBUF) return -1;
+    while (*s) hdd_dirbuf[hdd_dirlen++] = *s++;
+    return 0;
+}
+
+// XIO 40: entries of `path` from index `start` as "<d|f> <size8> <name>"EOL lines
+// (size right-aligned in 8 columns, dirs = spaces; name = long name cut to 27),
+// then "END"EOL — or "MORE"EOL when the buffer filled first (the shell re-lists
+// with start = entries received so far). Hidden/system entries skipped like the
+// OSD. 0 ok; -2 = cannot open (missing, or not a directory).
+static int hdd_list(const char *path, int start, int h) {
+    DIR d; FILINFO fi;
+    if (h < 0 || h >= HDD_HANDLES) return -1;
+    if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
+    if (f_opendir(&d, path[0] ? path : "/")) return -2;
+    hdd_dirlen = 0; hdd_dirpos = 0;
+    int idx = 0;
+    const char *tail = "END\x9b";
+    while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+        if (fi.fattrib & (AM_HID | AM_SYS)) continue;
+        if (idx++ < start) continue;
+        char line[2 + 8 + 1 + HDD_LFN_W + 2];
+        int L = 0, is_dir = (fi.fattrib & AM_DIR) != 0;
+        line[L++] = is_dir ? 'd' : 'f';
+        line[L++] = ' ';
+        char num[12]; int ni = 0;
+        if (!is_dir) {
+            unsigned sz = (unsigned)fi.fsize;
+            do { num[ni++] = '0' + sz % 10; sz /= 10; } while (sz);
+        }
+        for (int k = ni; k < 8; k++) line[L++] = ' ';
+        while (ni) line[L++] = num[--ni];
+        line[L++] = ' ';
+        const char *nm = fi.fname;
+        for (int k = 0; *nm && k < HDD_LFN_W; k++) line[L++] = *nm++;
+        line[L++] = 0x9b; line[L] = 0;
+        if (hdd_text_put(line)) { tail = "MORE\x9b"; break; }
+    }
+    f_closedir(&d);
+    hdd_text_put(tail);
+    hdd_open_f[h] = 2;
+    return 0;
+}
+
+// XIO 47: open any SD file read-only on handle h (then READ/STATUS/CLOSE exactly
+// as an H: mode-4 file). -4 = not found, or a directory (f_open refuses those).
+static int hdd_openr(const char *path, int h) {
+    if (h < 0 || h >= HDD_HANDLES || !path[0]) return -1;
+    if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
+    if (f_open(&hdd_fil[h], path, FA_READ)) return -4;
+    hdd_open_f[h] = 1;
+    return 0;
+}
+
 // return 0: user chose a ROM (*choice), 1: no choice made, -1: error
 int menu_loadrom(int *choice, int carts, int slot) {
     int page = 0, pages, total;
@@ -1709,8 +1773,67 @@ static void rs232_stream_loop(void) {
 //          via STATUS avail; short reads are an error by design).
 // W(0x57): aux1=len aux2=handle; data frame.
 // C(0x43): aux2=handle.   S(0x53): aux2=handle -> {err,flags,avail16}.
-// X(0x58): aux1=32 rename ("OLD,NEW" frame) / 33 delete (name frame).
+// X(0x58): aux1=32 rename ("OLD,NEW" frame) / 33 delete (name frame);
+// 40 LIST / 41 MOUNT / 42 UNMOUNT / 43 CART / 44 BOOT / 45 STATUS / 47 OPENR = the
+// sd: control set for ASH (spec: ash-tn-proposal.md §3, pinned 2026-10-14).
 // Unknown commands: SILENT (boot-glitch lesson — never answer what you don't know).
+extern int bridge_req;
+extern char bridge_req_path[68];
+extern char mounted_atr_name[ATR_DRIVES][16];
+int bridge_req_slot = 0;                       // drive index for deferred MOUNT/UNMOUNT
+
+// OSD display name (16 B) = basename of an SD path.
+static void name_from_path(char *dst, const char *path) {
+    const char *base = strrchr(path, '/');
+    strncpy(dst, base ? base + 1 : path, 16);
+    dst[15] = '\0';
+}
+
+// XIO 45 STATUS as an H: text listing: "d1: name"…"d4: name", "cart: name",
+// "xex: 0|1", "boot: basic|ash", "END" ('-' = empty). The shell polls this after
+// a deferred MOUNT to see the result.
+static int hdd_statuslist(int h) {
+    if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
+    hdd_dirlen = 0; hdd_dirpos = 0;
+    for (int s = 0; s < ATR_DRIVES; s++) {
+        char hd[5] = { 'd', (char)('1' + s), ':', ' ', 0 };
+        hdd_text_put(hd);
+        hdd_text_put((atr_mounted[s] || (s == 0 && xex_active)) ? mounted_atr_name[s] : "-");
+        hdd_text_put("\x9b");
+    }
+    hdd_text_put("cart: "); hdd_text_put((reg_cart_mode & 0xff) ? mounted_cart_name : "-");
+    hdd_text_put("\x9bxex: "); hdd_text_put(xex_active ? "1" : "0");
+    hdd_text_put("\x9b" "boot: "); hdd_text_put(option_boot_ash ? "ash" : "basic");
+    hdd_text_put("\x9b" "END\x9b");
+    hdd_open_f[h] = 2;
+    return 0;
+}
+
+// XIO 41–44 MOUNT/UNMOUNT/CART/BOOT are ACKed now and EXECUTED from the main loop
+// through the PC Link's deferred-request path (never reset the core or do slow SD
+// work inside the SIO handler; the shell polls STATUS afterwards). Serviced only
+// while the OSD is closed, like the PC Link. 0 = queued, -1 = malformed frame.
+static int sd_defer(int fn, char *frame) {
+    int slot = frame[0] - '1';
+    char *path = frame + 1;                        // MOUNT/UNMOUNT: frame[0] = drive
+    if (fn == 44) {
+        if (frame[0] == 'C') { bridge_req = 2; return 0; }
+        if (frame[0] == 'W') { bridge_req = 3; return 0; }
+        return -1;
+    }
+    if (fn == 43) { slot = 0; path = frame; }
+    if (slot < 0 || slot >= ATR_DRIVES) return -1;
+    if (fn == 42) { bridge_req = 5; bridge_req_slot = slot; return 0; }
+    if (!path[0]) return -1;
+    strncpy(bridge_req_path, path, sizeof(bridge_req_path) - 1);
+    bridge_req_path[sizeof(bridge_req_path) - 1] = 0;
+    char *ext = strrchr(path, '.');
+    if (fn == 43) bridge_req = 6;
+    else if (ext && strcasecmp(ext, ".xex") == 0) bridge_req = 1;   // = atari.py run (D1:)
+    else { bridge_req = 4; bridge_req_slot = slot; }
+    return 0;
+}
+
 static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
     uint8_t *buf = sio_sector_buf;
     int h = aux2 & 0x03;
@@ -1786,6 +1909,14 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
             char *comma = strchr((char *)buf, ',');
             if (comma) { *comma = 0; r = hdd_rename((char *)buf, comma + 1); }
         }
+        else if (aux1 == 40) {                                   // sd: LIST path, start@62..63
+            int start = buf[62] | (buf[63] << 8);
+            buf[62] = 0;
+            r = hdd_list((char *)buf, start, h);
+        }
+        else if (aux1 == 45) r = hdd_statuslist(h);
+        else if (aux1 == 47) r = hdd_openr((char *)buf, h);
+        else if (aux1 >= 41 && aux1 <= 44) r = sd_defer(aux1, (char *)buf);
         delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
         break;
     }
@@ -3544,20 +3675,36 @@ int main() {
                     }
                     mount_silent = 0;
                     if (mr == 0) {
-                       
-                        char *base = strrchr(bridge_req_path, '/');
-                        strncpy(mounted_atr_name[0],
-                                base ? base + 1 : bridge_req_path, 16);
-                        mounted_atr_name[0][15] = '\0';
+                        name_from_path(mounted_atr_name[0], bridge_req_path);
                         cold_boot_xex();
                     } else {
                         uart_printf("run: mount failed %d\n", mr);
                     }
                 } else if (r == 2) {
                     cold_boot_atari();
-                } else {
+                } else if (r == 3) {
                     reg_virt_kbd_0 = 0x00000000;
                     warm_reset();
+                } else if (r == 4) {                 // sd: MOUNT atr (XIO 41)
+                    int s = bridge_req_slot;
+                    mount_silent = 1;
+                    int mr = mount_atr(bridge_req_path, s);
+                    mount_silent = 0;
+                    if (mr == 0) name_from_path(mounted_atr_name[s], bridge_req_path);
+                    else uart_printf("sd: mount D%d failed %d\n", s + 1, mr);
+                } else if (r == 5) {                 // sd: UNMOUNT (XIO 42)
+                    int s = bridge_req_slot;
+                    if (s == 0 && xex_active) { f_close(&xex_file); xex_active = false; }
+                    if (atr_mounted[s]) { f_close(&atr_file[s]); atr_mounted[s] = false; }
+                    strncpy(mounted_atr_name[s], "None", 16);
+                } else if (r == 6) {                 // sd: CART path (XIO 43) + cold boot
+                    mount_silent = 1;
+                    int cr = load_cartridge(bridge_req_path);
+                    mount_silent = 0;
+                    if (cr == 0) {
+                        name_from_path(mounted_cart_name, bridge_req_path);
+                        cold_boot_atari();
+                    } else uart_printf("sd: cart failed %d\n", cr);
                 }
             }
         }

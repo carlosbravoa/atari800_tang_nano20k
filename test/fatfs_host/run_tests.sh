@@ -125,6 +125,11 @@ for i in 1 2 3 4; do ./fatfs_host $IMG put a.atr /D$i.ATR > /dev/null; done
 fresh $IMG 64
 ./fatfs_host $IMG s_hdd > /dev/null; check "s_hdd          " $? $IMG
 
+# 15. sd: control XIOs for ASH: LIST any folder (format, LFN cut, start index,
+#     MORE/END paging) + OPENR any file read-only; errors on missing/dir
+fresh $IMG 64
+./fatfs_host $IMG s_sdctl > /dev/null; check "s_sdctl        " $? $IMG
+
 # 14. DD layouts: packed vs full-boot-sector images (the MyDOS-in-the-wild
 #     flavor — sectors 4+ were served 384 bytes off before atr_dd_fullboot)
 fresh $IMG 64
