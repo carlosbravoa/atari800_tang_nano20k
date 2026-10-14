@@ -27,7 +27,7 @@
 </ol></nav>
 <main>
 <h1>5. Opciones y atari.ini</h1>
-<p class="lead">La pantalla Options define las preferencias de entrada, video, audio, memoria y módem; "Save changes" las guarda en <code>atari.ini</code> en la tarjeta SD.</p>
+<p class="lead">La pantalla Options define las preferencias de entrada, video, audio, memoria, módem y arranque; "Save changes" las guarda en <code>atari.ini</code> en la tarjeta SD.</p>
 
 <h2>La pantalla Options</h2>
 <p>Abre el OSD (<kbd>F12</kbd> o S2) y selecciona <strong>8) Options</strong> (opciones).</p>
@@ -39,6 +39,7 @@
  RAM:          128 KB  &lt;- -&gt;
  Modem (R:):   OFF
  Keyboard:     ATARI
+ Boot:         BASIC
  Save changes
 <span class="bar"> Up/Down move  Enter select  F12 </span></div>
 <p>Muévete con <kbd>↑</kbd>/<kbd>↓</kbd> y pulsa <kbd>Enter</kbd> (o Fire) para cambiar un ítem. Los dos ítems marcados con <code>&lt;- -&gt;</code> se cambian, en cambio, con <kbd>←</kbd>/<kbd>→</kbd> (o con la palanca del joystick). <kbd>F12</kbd>, S2 o <strong>&lt;&lt; Return to main menu</strong> (volver al menú principal) te llevan de vuelta.</p>
@@ -102,6 +103,15 @@
 </table></div>
 <p><strong>ATARI</strong> trata tu teclado como un teclado Atari según la posición de las teclas (el modo por defecto, descrito en <a href="09-keyboard.html">Teclado</a>). <strong>PC</strong>, en cambio, hace que cada tecla escriba lo que está impreso en un teclado de PC de EE. UU.: <kbd>Shift</kbd>+<kbd>2</kbd> da <code>@</code>, la tecla de comillas da <code>'</code> y <code>"</code>, las teclas de corchetes dan <code>[</code> y <code>]</code>. Se agregó en la v3.1; los detalles y la lista de diferencias están en <a href="09-keyboard.html#pc-layout">Teclado → Opción de distribución PC</a>. El texto pegado a través del PC Link sigue esta opción automáticamente.</p>
 
+<h2 id="boot">Boot</h2>
+<div class="tbl"><table>
+<tr><th>Valores</th><td><code>BASIC</code> (por defecto) / <code>ASH</code></td></tr>
+<tr><th>Se aplica</th><td>En el siguiente arranque en frío (encendido, Hard Reset, Detach)</td></tr>
+<tr><th>Clave ini</th><td><code>boot=basic</code> / <code>boot=ash</code></td></tr>
+</table></div>
+<p><strong>BASIC</strong> es la máquina de siempre: al encender aparece <code>READY</code>. <strong>ASH</strong> convierte el cartucho del <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a> en el <em>cartucho por defecto</em> de la máquina: pon <code>ASH.CAR</code> en la raíz de la tarjeta SD, y todo arranque en frío que encuentre la ranura de cartucho vacía — el encendido, <strong>7) Hard Reset</strong>, <strong>Cart: → Detach</strong>, un <code>reset</code> por el PC Link — termina en el shell en lugar de en BASIC. Un cartucho de juego que adjuntes desde el OSD solo está prestado: arranca como siempre, y Detach devuelve el shell. <strong>5) Boot to BASIC</strong> saca el cartucho ASH solo para ese arranque, así que BASIC sigue a un ítem de menú de distancia; lo mismo hace cualquier <code>.xex</code> que adjuntes o envíes por el PC Link (de lo contrario, un cartucho activo se quedaría con el arranque antes de que el OS mire D1:). Se agregó en la v3.3.</p>
+<p>Si <code>ASH.CAR</code> no existe o no se puede cargar, la máquina arranca BASIC sin avisar y la línea <code>Cart:</code> muestra <code>None</code>. Más detalles en <a href="07-cartridges.html#default-cart">Cartuchos → El cartucho por defecto</a>.</p>
+
 <h2>Save changes y la marca "*"</h2>
 <p>En cuanto cambias algo, la última fila pasa a decir <code>Save changes *</code> — el asterisco significa que hay cambios que no se han escrito en la tarjeta SD. Selecciónala para escribir todas las opciones en <code>/atari.ini</code>; la fila muestra <code>Options saved.</code> y el asterisco desaparece. Si no se puede escribir en la tarjeta, aparece el aviso <code>Cannot save options to SD</code>.</p>
 <div class="note"><strong>Los cambios sin guardar son temporales</strong>Los cambios que no guardes se mantienen solo durante la sesión actual. En el siguiente encendido (o cuando el reinicio por hardware con S1 vuelva a iniciar el firmware) se cargan de nuevo los valores de <code>atari.ini</code>.</div>
@@ -115,6 +125,7 @@ hpos=0
 stereo=0
 modem=0
 kbdlayout=0
+boot=basic
 ram=128
 </code></pre>
 <div class="tbl"><table>
@@ -125,6 +136,7 @@ ram=128
 <tr><td><code>stereo</code></td><td>0 / 1</td><td>Stereo OFF / ON</td></tr>
 <tr><td><code>ram</code></td><td>128 / 320 / 576 / 1088</td><td>Tamaño de RAM (cualquier otro valor vuelve a 128)</td></tr>
 <tr><td><code>modem</code></td><td>0 / 1</td><td>Modem (R:) OFF / ON</td></tr>
+<tr><td><code>boot</code></td><td>basic / ash</td><td>Boot BASIC / ASH (cualquier otro valor equivale a basic)</td></tr>
 </table></div>
 <p>Si lo prefieres, puedes editar el archivo en un PC; se lee una sola vez cuando se enciende la placa. Si el archivo no existe, todas las opciones toman sus valores por defecto.</p>
 

@@ -64,6 +64,9 @@ For a keyboard, the simplest is a **CH9350 USB-host board**: 5V, GND and its TX 
 - **Cartridges:** `.car` (52 mapper types, up to 4 MB — MegaCart 4 MB verified) and raw `.rom`
   2/4/8/16 KB. **Hard Reset power-cycles the cartridge** (multicart menus come back); F9 is the
   real RESET key and behaves like one
+- **Boot: BASIC / ASH** (OSD option, v3.3): optionally make the [Atari Shell](https://github.com/carlosbravoa/atari800-atari-shell)
+  cartridge (`/ASH.CAR`) the default cartridge, so power-on, Hard Reset and Detach land in the
+  shell instead of BASIC; Boot to BASIC and any `.xex` boot step around it. Off by default.
 - **`.xex` executables** booted from the SD card (or pushed from the PC)
 - **PC Link over the same USB-C cable:** send files, push-and-boot `.xex`, paste text as
   keystrokes, live remote keyboard, reset/eject, logs, `status`/`screen`/`peek`/`poke`

@@ -59,7 +59,7 @@
 </table></div>
 
 <h2>Desconectar un cartucho</h2>
-<p><strong>3) Cart:</strong> → <strong>2) Detach</strong> (desconectar) quita el cartucho y <strong>arranca en frío de vuelta en BASIC</strong> (la línea <code>Cart:</code> vuelve a <code>None</code>). Si no hay nada adjuntado, el menú simplemente dice <code>No cartridge inserted</code>.</p>
+<p><strong>3) Cart:</strong> → <strong>2) Detach</strong> (desconectar) quita el cartucho y <strong>arranca en frío de vuelta en BASIC</strong> (la línea <code>Cart:</code> vuelve a <code>None</code>) — o de vuelta en el shell cuando la opción Boot está en <code>ASH</code>, ver más abajo. Si no hay nada adjuntado, el menú simplemente dice <code>No cartridge inserted</code>.</p>
 
 <h2>Cartuchos multijuego, RESET y Hard Reset</h2>
 <p>Los cartuchos multijuego con bancos (las compilaciones Atarimax, por ejemplo) muestran un menú y luego desactivan el cartucho para ejecutar el juego elegido desde la RAM. Volver al menú funciona de forma distinta según el tipo de reinicio — y ambos se comportan como el hardware real:</p>
@@ -72,6 +72,9 @@
 
 <h2>Cartuchos y BASIC</h2>
 <p>Un cartucho en <code>$A000</code> ocupa el mismo rango de direcciones que el BASIC incorporado, así que mientras está adjuntado BASIC queda reemplazado — la máquina arranca el cartucho, como lo hace un XL real. Esto también significa que tanto <strong>4) Boot to OS</strong> como <strong>5) Boot to BASIC</strong> arrancan el cartucho mientras haya uno adjuntado; para recuperar BASIC, desconecta el cartucho primero.</p>
+
+<h2 id="default-cart">El cartucho por defecto (Boot: ASH)</h2>
+<p>Con Options → <strong>Boot</strong> en <code>ASH</code> (ver <a href="05-options.html#boot">Opciones</a>), <code>/ASH.CAR</code> en la tarjeta SD pasa a ser el cartucho por defecto de la máquina: cada vez que un arranque en frío encuentra la ranura vacía — el encendido, <strong>7) Hard Reset</strong>, <strong>Detach</strong>, un <code>reset</code> por el PC Link — el firmware lo vuelve a adjuntar, y el Atari aparece en el <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a>. Adjunta un cartucho de juego y arranca como siempre; Detach vuelve entonces al shell y no a BASIC. <strong>5) Boot to BASIC</strong>, <strong>Attach .xex</strong> y <code>atari.py run</code> sacan el cartucho ASH solo para ese arranque. Si <code>ASH.CAR</code> no existe o no se puede leer, la máquina arranca BASIC como si la opción estuviera apagada. Con <code>Boot</code> en <code>BASIC</code> (por defecto) nada de esto ocurre.</p>
 
 <h2>Tipos CAR soportados</h2>
 <p>Los 52 identificadores de tipo CAR soportados, con sus nombres, están listados en el <a href="16-appendix.html#a1">Apéndice</a>. Los tipos no soportados se rechazan en pantalla indicando su identificador, así que siempre sabrás con cuál te topaste.</p>

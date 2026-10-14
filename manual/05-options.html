@@ -27,7 +27,7 @@
 </ol></nav>
 <main>
 <h1>5. Options and atari.ini</h1>
-<p class="lead">The Options screen sets input, video, audio, memory and modem preferences; "Save changes" stores them in <code>atari.ini</code> on the SD card.</p>
+<p class="lead">The Options screen sets input, video, audio, memory, modem and boot preferences; "Save changes" stores them in <code>atari.ini</code> on the SD card.</p>
 
 <h2>The Options screen</h2>
 <p>Open the OSD (<kbd>F12</kbd> or S2) and select <strong>8) Options</strong>.</p>
@@ -39,6 +39,7 @@
  RAM:          128 KB  &lt;- -&gt;
  Modem (R:):   OFF
  Keyboard:     ATARI
+ Boot:         BASIC
  Save changes
 <span class="bar"> Up/Down move  Enter select  F12 </span></div>
 <p>Move with <kbd>↑</kbd>/<kbd>↓</kbd> and press <kbd>Enter</kbd> (or Fire) to toggle an item. The two items marked <code>&lt;- -&gt;</code> are changed with <kbd>←</kbd>/<kbd>→</kbd> (or the stick) instead. <kbd>F12</kbd>, S2 or <strong>&lt;&lt; Return to main menu</strong> takes you back.</p>
@@ -102,6 +103,15 @@
 </table></div>
 <p><strong>ATARI</strong> treats your keyboard as an Atari keyboard by key position (the default, described in <a href="09-keyboard.html">Keyboard</a>). <strong>PC</strong> makes each key type what is printed on a US PC keyboard instead: <kbd>Shift</kbd>+<kbd>2</kbd> gives <code>@</code>, the quote key gives <code>'</code> and <code>"</code>, the bracket keys give <code>[</code> and <code>]</code>. Added in v3.1; details and the list of differences are in <a href="09-keyboard.html#pc-layout">Keyboard → PC layout</a>. Text pasted over the PC Link follows this setting automatically.</p>
 
+<h2 id="boot">Boot</h2>
+<div class="tbl"><table>
+<tr><th>Values</th><td><code>BASIC</code> (default) / <code>ASH</code></td></tr>
+<tr><th>Applies</th><td>On the next cold boot (power-on, Hard Reset, Detach)</td></tr>
+<tr><th>ini key</th><td><code>boot=basic</code> / <code>boot=ash</code></td></tr>
+</table></div>
+<p><strong>BASIC</strong> is the machine as it has always been: power-on lands at <code>READY</code>. <strong>ASH</strong> makes the <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a> cartridge the machine's <em>default cartridge</em>: put <code>ASH.CAR</code> in the root of the SD card, and every cold boot that finds the cartridge slot empty — power-on, <strong>7) Hard Reset</strong>, <strong>Cart: → Detach</strong>, a PC Link <code>reset</code> — comes up in the shell instead of BASIC. A game cartridge you attach from the OSD is only borrowed: it boots as usual, and Detach brings the shell back. <strong>5) Boot to BASIC</strong> takes the ASH cartridge out for that one boot, so BASIC stays one menu item away; so does any <code>.xex</code> you attach or send over the PC Link (an enabled cartridge would otherwise take the boot before the OS looks at D1:). Added in v3.3.</p>
+<p>If <code>ASH.CAR</code> is missing or cannot be loaded, the machine silently boots BASIC and the <code>Cart:</code> line shows <code>None</code>. Details in <a href="07-cartridges.html#default-cart">Cartridges → The default cartridge</a>.</p>
+
 <h2>Save changes and the "*" marker</h2>
 <p>As soon as you change anything, the last row reads <code>Save changes *</code> — the star means there are changes that have not been written to the SD card. Select it to write all options to <code>/atari.ini</code>; the row shows <code>Options saved.</code> and the star disappears. If the card cannot be written you get the pop-up <code>Cannot save options to SD</code>.</p>
 <div class="note"><strong>Unsaved changes are temporary</strong>Changes you do not save stay in effect for the current session only. At the next power-on (or after the S1 hardware reset restarts the firmware) the values from <code>atari.ini</code> are loaded again.</div>
@@ -115,6 +125,7 @@ hpos=0
 stereo=0
 modem=0
 kbdlayout=0
+boot=basic
 ram=128
 </code></pre>
 <div class="tbl"><table>
@@ -125,6 +136,7 @@ ram=128
 <tr><td><code>stereo</code></td><td>0 / 1</td><td>Stereo OFF / ON</td></tr>
 <tr><td><code>ram</code></td><td>128 / 320 / 576 / 1088</td><td>RAM size (any other value falls back to 128)</td></tr>
 <tr><td><code>modem</code></td><td>0 / 1</td><td>Modem (R:) OFF / ON</td></tr>
+<tr><td><code>boot</code></td><td>basic / ash</td><td>Boot BASIC / ASH (any other value means basic)</td></tr>
 </table></div>
 <p>You can edit the file on a PC if you prefer; it is read once when the board powers on. If the file is missing, all options take their defaults.</p>
 

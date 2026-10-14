@@ -59,7 +59,7 @@
 </table></div>
 
 <h2>Detaching a cartridge</h2>
-<p><strong>3) Cart:</strong> → <strong>2) Detach</strong> removes the cartridge and <strong>cold-boots back to BASIC</strong> (the <code>Cart:</code> line returns to <code>None</code>). With nothing attached the menu just says <code>No cartridge inserted</code>.</p>
+<p><strong>3) Cart:</strong> → <strong>2) Detach</strong> removes the cartridge and <strong>cold-boots back to BASIC</strong> (the <code>Cart:</code> line returns to <code>None</code>) — or back to the shell when the Boot option is <code>ASH</code>, see below. With nothing attached the menu just says <code>No cartridge inserted</code>.</p>
 
 <h2>Multicarts, RESET and Hard Reset</h2>
 <p>Banked multicarts (Atarimax compilations, for example) show a menu, then switch the cartridge off to run the chosen game from RAM. Getting back to the menu works differently for the two kinds of reset — and both behave like real hardware:</p>
@@ -72,6 +72,9 @@
 
 <h2>Cartridges and BASIC</h2>
 <p>A cartridge at <code>$A000</code> occupies the same address range as the built-in BASIC, so while it is attached BASIC is replaced — the machine boots the cartridge, as a real XL does. This also means that <strong>4) Boot to OS</strong> and <strong>5) Boot to BASIC</strong> both boot the cartridge while one is attached; to get BASIC back, detach the cartridge first.</p>
+
+<h2 id="default-cart">The default cartridge (Boot: ASH)</h2>
+<p>With Options → <strong>Boot</strong> set to <code>ASH</code> (see <a href="05-options.html#boot">Options</a>), <code>/ASH.CAR</code> on the SD card becomes the machine's default cartridge: whenever a cold boot finds the slot empty — power-on, <strong>7) Hard Reset</strong>, <strong>Detach</strong>, a PC Link <code>reset</code> — the firmware attaches it again, so the Atari comes up in the <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a>. Attach a game cartridge and it boots as usual; Detach then returns to the shell rather than to BASIC. <strong>5) Boot to BASIC</strong>, <strong>Attach .xex</strong> and <code>atari.py run</code> each take the ASH cartridge out for that one boot. If <code>ASH.CAR</code> is missing or unreadable the machine boots BASIC as if the option were off. With <code>Boot</code> at <code>BASIC</code> (the default) nothing described here happens.</p>
 
 <h2>Supported CAR types</h2>
 <p>The 52 supported CAR type ids, with their names, are listed in the <a href="16-appendix.html#a1">Appendix</a>. Unsupported types are rejected on screen with their id, so you always know which one you hit.</p>
