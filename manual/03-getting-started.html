@@ -39,8 +39,20 @@
 │                    permanent "hard drive" (any ATR; MyDOS-formatted is ideal)
 ├── HDD/          ← optional: the H: device's folder — files here are
 │                    shared between the Atari (H:) and the PC link
+├── ASH.CAR       ← optional: the Atari Shell cartridge — ignored unless you
+│                    turn on Options → Boot: ASH (chapter 5)
 ├── games/        ← your .atr disks and .car/.rom cartridges, any folders,
 └── ...              long filenames fine</code></pre>
+<div class="tbl"><table>
+<thead><tr><th>File</th><th>Needed?</th><th>What happens without it</th></tr></thead>
+<tbody>
+<tr><td><code>ATARIXL.ROM</code></td><td><strong>Required</strong></td><td>The ROM error screen; the Atari cannot start.</td></tr>
+<tr><td><code>BASIC.ROM</code></td><td><strong>Required</strong></td><td>The ROM error screen; the Atari cannot start.</td></tr>
+<tr><td><code>HDD.ATR</code></td><td>Optional</td><td>No disk on D4:. See <a href="06-disks.html">Disks</a>.</td></tr>
+<tr><td><code>HDD/</code></td><td>Optional</td><td>The H: device is empty until you create the folder or send a file. See <a href="13-pc-link.html">PC Link</a>.</td></tr>
+<tr><td><code>ASH.CAR</code></td><td>Optional</td><td>Nothing — it is only read when Options → Boot is set to <code>ASH</code>; with the default <code>BASIC</code> it is never touched. See <a href="05-options.html#boot">Options</a>.</td></tr>
+<tr><td><code>atari.ini</code></td><td>Created by the firmware</td><td>Defaults are used until you Save changes in Options.</td></tr>
+</tbody></table></div>
 <div class="note"><strong>ROMs are not included</strong>You must supply your own <code>ATARIXL.ROM</code> and <code>BASIC.ROM</code>. Names are matched case-insensitively (<code>atarixl.rom</code> works too), but the sizes must be exact. The firmware loads both ROMs from the card at every power-on.</div>
 
 <h2>2. Flash the bitstream</h2>

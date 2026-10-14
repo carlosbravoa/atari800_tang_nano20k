@@ -114,11 +114,15 @@ Format a MicroSD card as **FAT32**. Place these files in the root directory:
 ├── BASIC.ROM     ← Atari BASIC ROM, exactly 8192 bytes
 ├── HDD.ATR       ← optional: auto-mounts on D4: at every boot (your "hard drive")
 ├── HDD/          ← optional: the H: device's folder, shared with the PC link
+├── ASH.CAR       ← optional: the Atari Shell cartridge — ignored unless you turn on
+│                    OSD → Options → Boot: ASH
 ├── games/        ← your .atr disks and .car/.rom cartridges, any folders,
 └── ...              long filenames fine
 ```
 
-File names are matched case-insensitively. You must supply your own ROM images — they are not
+**Only the two ROMs are required.** Everything else is optional and the machine behaves exactly
+the same without it: no `HDD.ATR` means no D4:, no `HDD/` means an empty H:, no `ASH.CAR`
+means the Boot option simply stays on BASIC. File names are matched case-insensitively. You must supply your own ROM images — they are not
 included in this repository. `atari.ini` (the saved OSD options) is created in the root by the
 firmware.
 

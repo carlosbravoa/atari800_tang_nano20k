@@ -39,8 +39,20 @@
 │                    "disco duro" permanente (cualquier ATR; ideal formateado con MyDOS)
 ├── HDD/          ← opcional: la carpeta del dispositivo H:; los archivos aquí
 │                    se comparten entre el Atari (H:) y el PC Link
+├── ASH.CAR       ← opcional: el cartucho del Atari Shell; se ignora salvo que
+│                    actives Options → Boot: ASH (capítulo 5)
 ├── games/        ← tus discos .atr y cartuchos .car/.rom, en las carpetas
 └── ...              que quieras; los nombres largos funcionan</code></pre>
+<div class="tbl"><table>
+<thead><tr><th>Archivo</th><th>¿Necesario?</th><th>Qué pasa si falta</th></tr></thead>
+<tbody>
+<tr><td><code>ATARIXL.ROM</code></td><td><strong>Obligatorio</strong></td><td>Aparece la pantalla de error de ROM; el Atari no puede arrancar.</td></tr>
+<tr><td><code>BASIC.ROM</code></td><td><strong>Obligatorio</strong></td><td>Aparece la pantalla de error de ROM; el Atari no puede arrancar.</td></tr>
+<tr><td><code>HDD.ATR</code></td><td>Opcional</td><td>No hay disco en D4:. Ver <a href="06-disks.html">Discos</a>.</td></tr>
+<tr><td><code>HDD/</code></td><td>Opcional</td><td>El dispositivo H: queda vacío hasta que crees la carpeta o envíes un archivo. Ver <a href="13-pc-link.html">PC Link</a>.</td></tr>
+<tr><td><code>ASH.CAR</code></td><td>Opcional</td><td>Nada: solo se lee cuando Options → Boot está en <code>ASH</code>; con el valor por defecto <code>BASIC</code> nunca se toca. Ver <a href="05-options.html#boot">Opciones</a>.</td></tr>
+<tr><td><code>atari.ini</code></td><td>Lo crea el firmware</td><td>Se usan los valores por defecto hasta que selecciones Save changes en Options.</td></tr>
+</tbody></table></div>
 <div class="note"><strong>Las ROM no vienen incluidas</strong>Debes conseguir tus propios <code>ATARIXL.ROM</code> y <code>BASIC.ROM</code>. Los nombres se reconocen sin distinguir mayúsculas de minúsculas (<code>atarixl.rom</code> también sirve), pero los tamaños deben ser exactos. El firmware carga ambas ROM desde la tarjeta en cada encendido.</div>
 
 <h2>2. Graba el bitstream</h2>

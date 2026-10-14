@@ -109,8 +109,9 @@
 <tr><td><code>.car</code></td><td>Cartridge image with a header that names the mapper type (table A.1). Up to 4 MB.</td></tr>
 <tr><td><code>.rom</code></td><td>Raw cartridge dump without mapper information. Only 2/4/8/16 KB are accepted.</td></tr>
 <tr><td><code>.xex</code></td><td>Atari binary-load executable (multi-segment <code>$FFFF</code>/INITAD/RUNAD). Attached on D1: it cold-boots straight into the program with BASIC disabled; served through a baked-in loader as a virtual boot disk.</td></tr>
-<tr><td><code>atari.ini</code></td><td>Saved OSD options on the SD card, written by Options → Save changes: <code>joystick=</code>, <code>scanlines=</code>, <code>hpos=</code>, <code>stereo=</code>, <code>ram=</code>, <code>modem=</code>. See <a href="05-options.html">chapter 5</a>.</td></tr>
+<tr><td><code>atari.ini</code></td><td>Saved OSD options on the SD card, written by Options → Save changes: <code>joystick=</code>, <code>scanlines=</code>, <code>hpos=</code>, <code>stereo=</code>, <code>ram=</code>, <code>modem=</code>, <code>kbdlayout=</code>, <code>boot=</code>. See <a href="05-options.html">chapter 5</a>.</td></tr>
 <tr><td><code>HDD.ATR</code></td><td>A disk image of that exact name in the SD card root; auto-mounted on D4: at every boot. MyDOS can format it up to 16 MB.</td></tr>
+<tr><td><code>ASH.CAR</code></td><td>Optional. The <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a> cartridge, placed in the SD card root; attached automatically as the default cartridge only when Options → Boot is <code>ASH</code>. Never read otherwise. See <a href="07-cartridges.html#default-cart">chapter 7</a>.</td></tr>
 </tbody></table></div>
 
 <h2 id="a4">A.4 FPGA pin reference</h2>

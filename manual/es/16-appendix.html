@@ -109,8 +109,9 @@
 <tr><td><code>.car</code></td><td>Imagen de cartucho con una cabecera que indica el tipo de mapeador (tabla A.1). Hasta 4 MB.</td></tr>
 <tr><td><code>.rom</code></td><td>Volcado de cartucho en bruto, sin información del mapeador. Solo se aceptan 2/4/8/16 KB.</td></tr>
 <tr><td><code>.xex</code></td><td>Ejecutable Atari de carga binaria (multisegmento <code>$FFFF</code>/INITAD/RUNAD). Adjuntado en D1:, arranca en frío directamente en el programa con BASIC desactivado; se sirve mediante un cargador integrado como disco de arranque virtual.</td></tr>
-<tr><td><code>atari.ini</code></td><td>Opciones del OSD guardadas en la tarjeta SD, escritas por Options → Save changes: <code>joystick=</code>, <code>scanlines=</code>, <code>hpos=</code>, <code>stereo=</code>, <code>ram=</code>, <code>modem=</code>. Consulta el <a href="05-options.html">capítulo 5</a>.</td></tr>
+<tr><td><code>atari.ini</code></td><td>Opciones del OSD guardadas en la tarjeta SD, escritas por Options → Save changes: <code>joystick=</code>, <code>scanlines=</code>, <code>hpos=</code>, <code>stereo=</code>, <code>ram=</code>, <code>modem=</code>, <code>kbdlayout=</code>, <code>boot=</code>. Consulta el <a href="05-options.html">capítulo 5</a>.</td></tr>
 <tr><td><code>HDD.ATR</code></td><td>Una imagen de disco con exactamente ese nombre en la raíz de la tarjeta SD; se monta automáticamente en D4: en cada arranque. MyDOS puede formatearla hasta 16 MB.</td></tr>
+<tr><td><code>ASH.CAR</code></td><td>Opcional. El cartucho del <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a>, colocado en la raíz de la tarjeta SD; se adjunta automáticamente como cartucho por defecto solo cuando Options → Boot está en <code>ASH</code>. En cualquier otro caso nunca se lee. Consulta el <a href="07-cartridges.html#default-cart">capítulo 7</a>.</td></tr>
 </tbody></table></div>
 
 <h2 id="a4">A.4 Referencia de pines de la FPGA</h2>
