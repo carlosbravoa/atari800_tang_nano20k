@@ -46,6 +46,15 @@ static const struct { unsigned char code; int kb; } ram_opts[] = {
 #define N_RAM_OPTS 4
 int option_ram_idx = 0;                      // index into ram_opts; 0 = 128 KB (default)
 
+int option_boot_ash = 0;                     // OSD Options "Boot: BASIC/ASH" = atari.ini boot=ash.
+                                             // 1 = /ASH.CAR is the DEFAULT CARTRIDGE: loaded at
+                                             // power-on and whenever a cold boot finds the cart
+                                             // slot empty (see load_default_cart). Default OFF =
+                                             // power-on READY, byte-for-byte as before.
+#define ASH_CART_FILE "/ASH.CAR"
+char mounted_cart_name[16] = "None";         // OSD "Cart:" line
+int mount_silent = 0;                        // boot-time/bridge automount: no interactive popups
+
 // Push the input-related options into the hardware config register (0xA4):
 // bit 8 = USB-host-keyboard enable (permanently 0: keyboard is UART/CH9350 only),
 // bit 9 = arrow-keys-as-joystick mode.
@@ -313,6 +322,9 @@ int load_option()  {
         if (strcmp(key, "kbdlayout") == 0) {
             option_kbd_layout = (atoi(value) != 0);
         }
+        if (strcmp(key, "boot") == 0) {
+            option_boot_ash = (strcmp(value, "ash") == 0);   // anything else = basic
+        }
         if (strcmp(key, "ram") == 0) {
             int kb = atoi(value);
             option_ram_idx = 0;   // default 128 KB if no match
@@ -357,6 +369,9 @@ int save_option() {
 
     err |= (f_puts("kbdlayout=", &f) < 0);
     err |= (f_puts(option_kbd_layout ? "1\n" : "0\n", &f) < 0);
+
+    err |= (f_puts("boot=", &f) < 0);
+    err |= (f_puts(option_boot_ash ? "ash\n" : "basic\n", &f) < 0);
 
     err |= (f_puts("ram=", &f) < 0);
     { char s[6]; int n = ram_opts[option_ram_idx].kb, k = 0, d = 1000;
@@ -484,7 +499,7 @@ int load_cartridge(char *filepath) {
     int r = f_open(&f, filepath, FA_READ);
     if (r != FR_OK) {
         uart_printf("cart: open '%s' failed %d\n", filepath, r);
-        message("Cannot open cartridge", 1);
+        if (!mount_silent) message("Cannot open cartridge", 1);
         return -1;
     }
     uint32_t fsize = f_size(&f);
@@ -498,7 +513,7 @@ int load_cartridge(char *filepath) {
         if (f_read(&f, hdr, 16, &br) != FR_OK || br != 16 ||
             hdr[0] != 'C' || hdr[1] != 'A' || hdr[2] != 'R' || hdr[3] != 'T') {
             f_close(&f);
-            message("Not a valid .CAR file", 1);
+            if (!mount_silent) message("Not a valid .CAR file", 1);
             return -2;
         }
         car_type = ((uint32_t)hdr[4] << 24) | ((uint32_t)hdr[5] << 16) |
@@ -515,7 +530,7 @@ int load_cartridge(char *filepath) {
             if (car_type >= 10)  *e++ = '0' + (car_type / 10) % 10;
             *e++ = '0' + car_type % 10;
             *e = '\0';
-            message(m, 1);
+            if (!mount_silent) message(m, 1);
             return -3;
         }
         data_size = fsize - 16;
@@ -528,13 +543,13 @@ int load_cartridge(char *filepath) {
             case 16384: mode = 0x21; break;
             default:
                 f_close(&f);
-                message("Raw .ROM must be 2/4/8/16K\nuse a .CAR instead", 1);
+                if (!mount_silent) message("Raw .ROM must be 2/4/8/16K\nuse a .CAR instead", 1);
                 return -4;
         }
     }
     if (data_size > CART_MAX_SIZE) {
         f_close(&f);
-        message("Cartridge too large (>4MB)\ndoes not fit 8MB SDRAM", 1);
+        if (!mount_silent) message("Cartridge too large (>4MB)\ndoes not fit 8MB SDRAM", 1);
         return -5;
     }
 
@@ -543,7 +558,7 @@ int load_cartridge(char *filepath) {
     f_close(&f);
     if (r != FR_OK || br != data_size) {
         uart_printf("cart: read failed %d (br=%d/%d)\n", r, (int)br, (int)data_size);
-        message("Cartridge read error", 1);
+        if (!mount_silent) message("Cartridge read error", 1);
         return -6;
     }
     reg_cart_mode = mode;
@@ -551,7 +566,6 @@ int load_cartridge(char *filepath) {
     return 0;
 }
 
-int mount_silent = 0;    // boot-time automount: suppress interactive popups
 int mount_atr(char *filepath, int slot) {
     if (atr_mounted[slot]) {
         f_close(&atr_file[slot]);
@@ -2331,10 +2345,38 @@ void sio_poll(void) {
 // screen, RTCLOK frozen, COLDST still 1; HW-autopsied 2026-07-19 after a
 // cart detach). Identical to the fix that cured xex attach-auto-boot (#2)
 // and Boot OS (#3): every cold-boot flow now shares the proven sequence.
+// Default cartridge (Options "Boot: ASH" / atari.ini boot=ash). Called from the power-on
+// path and from cold_boot_atari(): when a cold boot finds the cart slot EMPTY, /ASH.CAR
+// goes in. So power-on, Hard Reset, Cart->Detach and a bridge cold reset all come back
+// to the shell; a game cart attached from the OSD is only "borrowed" (its mode is set
+// before the cold boot, never overridden); Boot to OS / Boot to BASIC bypass this (they
+// call load_system_roms directly). Missing or bad file = silent fallback to BASIC (the
+// HDD.ATR rule): the OSD Cart line stays "None" and the uart log says why.
+static void load_default_cart(void) {
+    if (!option_boot_ash || (reg_cart_mode & 0xff) != 0) return;
+    mount_silent = 1;
+    if (load_cartridge(ASH_CART_FILE) == 0)
+        strcpy(mounted_cart_name, "ASH.CAR");
+    else
+        uart_printf("boot: no %s -> BASIC\n", ASH_CART_FILE);
+    mount_silent = 0;
+}
+
+// Take the ASH cart OUT for one boot: Boot to BASIC, and every .xex boot (an enabled
+// cartridge takes the boot before the OS ever looks at D1:, so `atari.py run` and OSD
+// Attach .xex would otherwise land in the shell). A game cart stays in, as today.
+// The next Hard Reset / Detach / bridge cold boot puts ASH back (load_default_cart).
+static void drop_default_cart(void) {
+    if (strcmp(mounted_cart_name, "ASH.CAR") != 0) return;
+    reg_cart_mode = 0;
+    strcpy(mounted_cart_name, "None");
+}
+
 static void cold_boot_atari(void) {
     reg_virt_kbd_0 = 0x00000000;
     apply_machine_options();                        // RAM_SELECT stable before core leaves reset
     sio_init();
+    load_default_cart();                            // boot=ash and slot empty -> /ASH.CAR
     *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1 (Cold start)
     load_system_roms();                             // long clean reset + release
 }
@@ -2342,7 +2384,7 @@ static void cold_boot_atari(void) {
 // Cold-boot the virtual XEX disk on D1: with OPTION held (BASIC disabled), then
 // keep servicing SIO so the boot loader's sector reads are answered during boot.
 static void cold_boot_xex(void) {
-   
+    drop_default_cart();                            // the xex must get the boot, not ASH
     reg_virt_kbd_0 = 0x00410000;                    // hold OPTION (disable BASIC)
     sio_init();                                     // SIO ready before the core is released
     // Use the SAME reliable sequence as the "Boot OS" menu item, which boots an attached
@@ -2550,6 +2592,11 @@ void menu_options() {
         print(option_kbd_layout ? "PC" : "ATARI");
 
         cursor(2, 20);
+        print("Boot:");
+        cursor(16, 20);
+        print(option_boot_ash ? "ASH" : "BASIC");
+
+        cursor(2, 21);
         print(options_dirty ? "Save changes *" : "Save changes");
 
         delay(300);
@@ -2573,7 +2620,7 @@ void menu_options() {
                     option_ram_idx--; options_dirty = 1; draw_ram_line(); delay(180);
                 }
             }
-            if (joy_choice(12, 9, &choice) == 1) {
+            if (joy_choice(12, 10, &choice) == 1) {
                 // Every item applies its change LIVE (so you can see it) but does NOT write
                 // to SD — only "Save changes" persists. Leaving without saving keeps the
                 // changes for this session; they revert to the saved values on next boot.
@@ -2615,6 +2662,10 @@ void menu_options() {
                     options_dirty = 1;
                     break; // redraw UI
                 } else if (choice == 8) {
+                    option_boot_ash = !option_boot_ash;   // BASIC <-> ASH default cartridge
+                    options_dirty = 1;                    // takes effect on the next cold boot
+                    break; // redraw UI
+                } else if (choice == 9) {
                     status("Saving options...");
                     if (save_option()) {
                         message("Cannot save options to SD", 1);
@@ -2709,7 +2760,6 @@ char bridge_req_path[68];               // full path, subfolders allowed
 // OSD drive/cart display names — global so the bridge keeps the menu truthful
 // when it mounts/ejects behind the menu's back (remote RUN/eject).
 char mounted_atr_name[ATR_DRIVES][16] = {"None", "None", "None", "None"};
-char mounted_cart_name[16] = "None";
 int bridge_boot_stage = 0;   // 0 start, 1 sd ok, 2 options, 3 roms tried, 4 running
 int bridge_rom_ok = -1;
 int bridge_quiet = 0;                   // mute uart_printf during transfers: the
@@ -3196,6 +3246,7 @@ int main() {
     // mid-state and FatFs reads can fail transiently (e.g. FR_INT_ERR on the 2nd
     // file). Retry with a full unmount/re-mount (resets FatFs state + forces a
     // fresh SD re-init on the next access) before giving up.
+    load_default_cart();          // boot=ash: /ASH.CAR into the slot before the ROMs go in
     int rom_ok = load_system_roms();
     for (int attempt = 0; rom_ok != 0 && attempt < 5; attempt++) {
         uart_printf("ROM load failed (0x%x), remount+retry %d\n", rom_ok, attempt + 1);
@@ -3413,6 +3464,7 @@ int main() {
                 reg_virt_kbd_0 = 0x00000000; // Release OPTION
             } else if (choice == 4) {
                 reg_virt_kbd_0 = 0x00000000; // Ensure OPTION released
+                drop_default_cart();         // "Boot to BASIC" means BASIC even with boot=ash
                 sio_init();                  // before load_system_roms() releases the core (see choice 3)
                 load_system_roms();
                 booted = true;
