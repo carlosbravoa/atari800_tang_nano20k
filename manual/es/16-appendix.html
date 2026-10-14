@@ -95,7 +95,7 @@
 <tbody>
 <tr><td><code>D1:</code>–<code>D4:</code></td><td>Unidades de disco (SIO). D1:/D2: se adjuntan desde el OSD; D3:/D4: atienden los montajes automáticos y el PC Link (<code>/HDD.ATR</code> se monta automáticamente en D4:).</td><td><a href="06-disks.html">Cap. 6</a></td></tr>
 <tr><td><code>P:</code></td><td>Impresora (dispositivo SIO <code>$40</code>, estilo 820). La salida va al PC por el enlace USB-C.</td><td><a href="13-pc-link.html#printer">§13.6</a></td></tr>
-<tr><td><code>H:</code></td><td>Carpeta compartida (manejador CIO instalado desde el PC con <code>hdd-install</code>). Los archivos son archivos normales dentro de <code>/HDD</code> en la tarjeta SD.</td><td><a href="13-pc-link.html#h">§13.8</a></td></tr>
+<tr><td><code>H:</code></td><td>Carpeta compartida (manejador CIO instalado desde el PC con <code>hdd-install</code>). Los archivos son archivos normales dentro de <code>/HDD</code> en la tarjeta SD. El mismo dispositivo lleva también las llamadas de control <em>sd:</em> (XIO 40–47: listar cualquier carpeta, abrir cualquier archivo solo lectura, montar, desmontar, cartucho, arranque, estado) que el <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a> usa para explorar y manejar la máquina desde la tarjeta; el software común nunca las ve.</td><td><a href="13-pc-link.html#h">§13.8</a></td></tr>
 <tr><td><code>R:</code></td><td>Módem 850 para BobTerm y otro software que use R:. Opcional (Options → Modem), en desarrollo.</td><td><a href="13-pc-link.html#net">§13.9</a></td></tr>
 <tr><td><code>N:</code></td><td>Dispositivo de red, retransmitido a un procesador de red en el PC. Prototipo, todavía no publicado.</td><td><a href="13-pc-link.html#net">§13.9</a></td></tr>
 </tbody></table></div>
