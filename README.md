@@ -180,6 +180,7 @@ python3 tools/atari.py run  build/demo.xex  # push + boot (the make-run dev loop
 python3 tools/atari.py type listing.bas     # paste as keystrokes
 python3 tools/atari.py screen               # text dump of the Atari's screen
 python3 tools/atari_gui.py                  # the desktop app
+python3 tools/ashterm.py get d1:game.xex    # with ASH running: any Atari file -> PC
 ```
 
 All 16 commands, the app, printer capture, the H: folder, the D4: hard drive and remote

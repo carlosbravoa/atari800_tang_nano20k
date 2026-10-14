@@ -247,6 +247,29 @@ python3 tools/atari.py peek 0x12 3            # jiffy clock (is it alive?)
 python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink
 ```
 
+### ASH terminal — `ashterm.py`
+If the Atari is running [ASH](https://github.com/carlosbravoa/atari800-atari-shell)
+(the Atari Shell: `ASH.CAR` from the OSD or the Boot: ASH option, or
+`atari.py run ash-tn.xex`), the PC can drive the shell directly instead of
+typing: ASH keeps a small mailbox in page 6, the tool pokes a command line,
+the shell runs it and mirrors its output into RAM, the tool peeks it back.
+Exact output, no keystroke timing, and it works while a disk is loading.
+
+```bash
+python3 tools/ashterm.py                      # interactive: the prompt is ASH's own path
+python3 tools/ashterm.py -c "ls -l" -c "pwd"  # run commands, print output, exit
+python3 tools/ashterm.py get d1:game.xex      # copy ANY Atari file to the PC (disk, h:,
+                                              #   MyDOS subdir) — the missing "get"
+python3 tools/ashterm.py put notes.txt d1:    # send to h: then cp to the destination
+```
+
+Exit status 1 on a failed command. The error texts say what to check: no board
+on USB, the board answers but ASH is not running, or ASH is busy (a pager, the
+editor, a running program). `Ctrl-C` in the interactive terminal sends BREAK to
+the running command. The mailbox contract is owned and documented by the ASH
+project (`ash/tn.s`); this tool only uses `peek`/`poke`/`send` from
+`atari_link.py`, so it needs no firmware support.
+
 ---
 
 ## 7. Limitations to know
@@ -255,8 +278,9 @@ python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink
   It installs above MEMLO (coexists with a resident DOS — bug #19 fixed), but
   BASIC only picks up the raised MEMLO on `NEW` — install first, then `NEW`,
   then load your program.
-- **No file download from the SD over the bridge yet** — Atari→PC text goes via
-  the printer path (`LIST "P:"` / `LPRINT`); a `get` command is planned.
+- **No file download from the SD over the bridge itself** — Atari→PC text goes via
+  the printer path (`LIST "P:"` / `LPRINT`). With ASH running, `ashterm.py get`
+  copies any file the Atari can read (mounted ATRs included) to the PC.
 - **The `HDD.ATR` automount runs once at firmware start** — after you `send` a
   new one, power-cycle the board for it to take effect.
 - **`type` needs the OSD closed** (an open menu eats keystrokes).
