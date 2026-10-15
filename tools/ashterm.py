@@ -15,6 +15,9 @@ and the ASH.CAR cartridge). Uses only AtariLink.peek/poke/send from atari_link.p
   ashterm put FILE [DST]       send a file to h: (the SD /HDD folder), then
                                `cp` it to DST on the Atari (default: stays on h:)
 
+While a command runs, and while the interactive prompt is idle, the PC also
+answers the shell's `pc` ping and its `date` request (local PC time).
+
 Exit status 1 on a failed command. Errors say what to check: the board on
 USB, ASH-TN running, or the shell being busy (pager / editor / a program).
 """
@@ -29,6 +32,7 @@ MB = 0x0640
 MB_CMDREQ, MB_STATUS, MB_ERR, MB_CIOERR = 0x643, 0x644, 0x645, 0x646
 MB_OUT, MB_CAP, MB_LEN, MB_SEQ = 0x647, 0x649, 0x64B, 0x64D
 MB_PING, MB_PONG, MB_ABORT, MB_RAM, MB_MORE = 0x64E, 0x64F, 0x650, 0x651, 0x653
+MB_TIMEREQ, MB_TIME = 0x654, 0x655          # `date`: shell sets TIMEREQ=1; PC writes yy mm dd hh mm ss, clears it
 MB_CMD, MB_PROMPT = 0x660, 0x6B0
 RAMWIN = 0x8000
 EOL = 0x9B
@@ -117,6 +121,19 @@ class Ash:
     def pong(self, hdr):
         if hdr[MB_PING - MB] != hdr[MB_PONG - MB]:
             self.poke(MB_PONG, bytes([hdr[MB_PING - MB]]))
+        if hdr[MB_TIMEREQ - MB]:                   # `date`: local time, binary, yy = year - 2000
+            t = time.localtime()
+            self.poke(MB_TIME, bytes([t.tm_year - 2000, t.tm_mon, t.tm_mday,
+                                      t.tm_hour, t.tm_min, t.tm_sec]))
+            self.poke(MB_TIMEREQ, b"\x00")
+
+    def idle_service(self):
+        """One idle-time poll: answer PING / TIMEREQ raised from the Atari keyboard
+        while no command of ours is running (interactive prompt). Never raises."""
+        try:
+            self.pong(self.l.peek(MB, 0x20))
+        except LinkError:
+            pass
 
     def run(self, line, sink=None, timeout=120):
         """Run one command; stream its output to sink(text). Returns (status, err, cioerr)."""
@@ -215,9 +232,25 @@ def main():
                     rc = 1
         else:
             print("ASH-TN terminal — Ctrl-D or 'exit' to leave; the Atari keeps running")
+            # Idle poller: while we sit at the prompt, answer the shell's `pc` ping and
+            # `date` request (raised from the Atari keyboard) every ~250 ms. The serial
+            # link is one byte stream, so EVERY access is serialised through `link`:
+            # the main thread holds it for prompt() and run(), the poller for each tick
+            # (an unguarded first tick once raced prompt() and wedged both sides).
+            import threading
+            link = threading.Lock()
+            stop = threading.Event()
+            def poller():
+                while not stop.wait(0.25):
+                    with link:
+                        ash.idle_service()
+            th = threading.Thread(target=poller, daemon=True)
+            th.start()
             while True:
                 try:
-                    line = input(f"{ash.prompt()}$ ")
+                    with link:
+                        p = ash.prompt()
+                    line = input(f"{p}$ ")
                 except (EOFError, KeyboardInterrupt):
                     print()
                     break
@@ -226,14 +259,17 @@ def main():
                 if not line.strip():
                     continue
                 try:
-                    st, err, cio = ash.run(line, sink=lambda t: print(t, end="", flush=True))
+                    with link:
+                        st, err, cio = ash.run(line, sink=lambda t: print(t, end="", flush=True))
                 except KeyboardInterrupt:
-                    ash.l.poke(MB_ABORT, b"\x01")
+                    with link:
+                        ash.l.poke(MB_ABORT, b"\x01")
                     print("\n(abort sent)")
                     continue
                 if st == 3:
                     print("(program launched; ASH is no longer running)")
                     break
+            stop.set()                         # after the loop: the poller ends with the prompt
     except AshError as e:
         sys.exit(f"ashterm: {e}")
     finally:
