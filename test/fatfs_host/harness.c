@@ -537,6 +537,25 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (!strcmp(cmd, "s_putguard")) {          /* bridge PUT must not hit an open file */
+        if (mount_atr("/D1.ATR", 0)) die("mount");
+        if (bridge_put_open("/D1.ATR") == 0) die("PUT onto a mounted ATR allowed");
+        if (bridge_put_open("/d1.atr") == 0) die("PUT onto a mounted ATR (lowercase) allowed");
+        f_close(&atr_file[0]); atr_mounted[0] = false;
+        if (hdd_openr("/D1.ATR", 1)) die("openr");
+        if (bridge_put_open("/D1.ATR") == 0) die("PUT onto an H:-open file allowed");
+        hdd_close(1);
+        if (f_open(&xex_file, "/D1.ATR", FA_READ)) die("xex open"); xex_active = true;
+        if (bridge_put_open("/D1.ATR") == 0) die("PUT onto the active xex allowed");
+        f_close(&xex_file); xex_active = false;
+        /* last: a PUT with nothing open succeeds (and truncates the file) */
+        if (bridge_put_open("/D1.ATR")) die("PUT after unmount refused"); bridge_put_close();
+        if (bridge_put_open("/ATARIXL.ROM")) die("ROM rescue PUT refused");   /* names are NOT guarded here */
+        bridge_put_close(); f_unlink("/ATARIXL.ROM");
+        if (bridge_put_open("/OTHER.BIN")) die("ordinary PUT refused"); bridge_put_close();
+        return 0;
+    }
+
     if (!strcmp(cmd, "s_fourslots")) {         /* D1-D4 all live at once */
         for (int sl = 0; sl < 4; sl++) {
             char nm[16];

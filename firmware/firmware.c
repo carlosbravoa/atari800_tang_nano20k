@@ -1109,10 +1109,9 @@ static int hdd_openr(const char *path, int h) {
 // FAT START CLUSTER (the dup-mount guard's technique): every spelling of a path
 // (case, 8.3 alias) resolves to one directory entry, so none can slip past. The
 // probe uses handle h's own FIL, so the handle is consumed (closed) by these calls.
-static int sd_guarded(const char *path, int h) {
-    if (!strcasecmp(path, "/ATARIXL.ROM") || !strcasecmp(path, "/BASIC.ROM") ||
-        !strcasecmp(path, OPTION_FILE) || !strcasecmp(path, ASH_CART_FILE)) return 1;
-    FIL *p = &hdd_fil[h];
+// Cluster half of the guard with an explicit probe FIL (the bridge PUT uses
+// bridge_file); h = the H: handle to leave out of the check, -1 = none.
+static int sd_guarded_p(const char *path, FIL *p, int h) {
     if (f_open(p, path, FA_READ)) return 0;    // missing, or a directory: nothing open on it
     uint32_t c = p->obj.sclust;
     f_close(p);
@@ -1124,6 +1123,12 @@ static int sd_guarded(const char *path, int h) {
             (c != 0 || (hdd_fil[o].flag & FA_WRITE))) return 1;
     if (cart_sclust && cart_sclust == c) return 1;
     return 0;
+}
+
+static int sd_guarded(const char *path, int h) {
+    if (!strcasecmp(path, "/ATARIXL.ROM") || !strcasecmp(path, "/BASIC.ROM") ||
+        !strcasecmp(path, OPTION_FILE) || !strcasecmp(path, ASH_CART_FILE)) return 1;
+    return sd_guarded_p(path, &hdd_fil[h], h);
 }
 
 static void hdd_drop(int h) {                  // free handle h (whatever it holds)
@@ -3010,6 +3015,11 @@ int bridge_mkdirs(char *path) {
     return 0;
 }
 int bridge_put_open(const char *path) {
+    // Never overwrite a file the firmware holds open (a mounted ATR, the virtual
+    // .xex, an H: handle, the attached cart): the same-file-open-twice case that
+    // wiped a card in 2026-07. Names (ROMs, atari.ini) are NOT guarded here — the
+    // PC link is the ROM-rescue path. The PC gets a NAK; ashterm reports it.
+    if (sd_guarded_p(path, &bridge_file, -1)) return -1;
     return f_open(&bridge_file, path, FA_CREATE_ALWAYS | FA_WRITE);
 }
 // 0 ok, else the FRESULT (FR_DENIED if the card took fewer bytes than asked).

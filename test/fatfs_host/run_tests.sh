@@ -136,6 +136,12 @@ fresh $IMG 64
 ./fatfs_host $IMG put a.atr /D1.ATR > /dev/null
 ./fatfs_host $IMG s_sdwrite > /dev/null; check "s_sdwrite      " $? $IMG
 
+# 17. bridge PUT guard: never onto a mounted ATR / H:-open file / active xex;
+#     names (ROM rescue) stay allowed
+fresh $IMG 64
+./fatfs_host $IMG put a.atr /D1.ATR > /dev/null
+./fatfs_host $IMG s_putguard > /dev/null; check "s_putguard     " $? $IMG
+
 # 14. DD layouts: packed vs full-boot-sector images (the MyDOS-in-the-wild
 #     flavor — sectors 4+ were served 384 bytes off before atr_dd_fullboot)
 fresh $IMG 64

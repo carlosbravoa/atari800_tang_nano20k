@@ -15,11 +15,11 @@ OUT = pathlib.Path(__file__).resolve().parent / "fw_fs_extracted.c"
 
 FUNCS = ["mount_atr", "atr_sector_offset", "atr_read_sector", "atr_write_sector",
          "atr_format", "create_blank_atr",
-         "bridge_mkdirs", "bridge_put_open", "bridge_put_chunk", "bridge_put_close",
          "hdd_path", "hdd_open", "hdd_read", "hdd_write", "hdd_close",
          "hdd_status", "hdd_delete", "hdd_rename",
          "hdd_text_put", "hdd_list", "hdd_openr",
-         "sd_guarded", "hdd_drop", "sd_openw", "sd_delete", "sd_rename", "sd_mkdir"]
+         "sd_guarded_p", "sd_guarded", "hdd_drop", "sd_openw", "sd_delete", "sd_rename", "sd_mkdir",
+         "bridge_mkdirs", "bridge_put_open", "bridge_put_chunk", "bridge_put_close"]
 
 src = SRC.read_text()
 
