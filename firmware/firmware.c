@@ -506,7 +506,7 @@ int load_cartridge(char *filepath) {
         return -1;
     }
     uint32_t fsize = f_size(&f);
-    cart_sclust = f.obj.sclust;             // phase 2b guard: never write the attached image
+    uint32_t sclust = f.obj.sclust;         // recorded for the write guard only on success
     uint32_t data_size = fsize;
     uint8_t mode = 0;
     uint32_t car_type = 0;                  // 0 = raw .rom (no header)
@@ -566,6 +566,7 @@ int load_cartridge(char *filepath) {
         return -6;
     }
     reg_cart_mode = mode;
+    cart_sclust = sclust;                   // phase 2b guard: never write the attached image
     uart_printf("cart: '%s' loaded, %d bytes, CAR type %d, mode 0x%b\n", filepath, (int)data_size, car_type, mode);   // printf has no %u/%02x: %d + %b
     return 0;
 }
@@ -1121,7 +1122,9 @@ static int sd_guarded_p(const char *path, FIL *p, int h) {
     for (int o = 0; o < HDD_HANDLES; o++)       // c == 0 (empty file): only a WRITE-open twin counts
         if (o != h && hdd_open_f[o] == 1 && hdd_fil[o].obj.sclust == c &&
             (c != 0 || (hdd_fil[o].flag & FA_WRITE))) return 1;
-    if (cart_sclust && cart_sclust == c) return 1;
+    // Only while a cart is actually mapped: Detach and drop_default_cart clear
+    // reg_cart_mode, and the file must then be replaceable (e.g. a new ASH.CAR).
+    if ((reg_cart_mode & 0xff) && cart_sclust == c) return 1;
     return 0;
 }
 

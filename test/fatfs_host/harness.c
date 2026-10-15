@@ -38,6 +38,7 @@ FIL bridge_file;
 #define ASH_CART_FILE "/ASH.CAR"
 uint8_t  sd_rw = 0;
 uint32_t cart_sclust = 0;
+uint32_t reg_cart_mode = 0;              /* stands in for the iosys register */
 FIL hdd_fil[HDD_HANDLES];
 uint8_t hdd_open_f[HDD_HANDLES];
 char hdd_dirbuf[HDD_DIRBUF];
@@ -527,8 +528,12 @@ int main(int argc, char **argv) {
         /* 7. attached cartridge guard */
         MKFILE("/C.CAR", "cart image");
         if (f_open(&f, "/C.CAR", FA_READ)) die("open car"); cart_sclust = f.obj.sclust; f_close(&f);
+        reg_cart_mode = 0x0E;                                     /* attached */
         if (sd_delete("/C.CAR", 1) == 0) die("delete attached cart");
-        cart_sclust = 0;
+        if (bridge_put_open("/C.CAR") == 0) die("PUT onto attached cart");
+        reg_cart_mode = 0;                                        /* detached / dropped, cluster left stale */
+        if (bridge_put_open("/C.CAR")) die("PUT onto a DROPPED cart refused (stale cluster)");
+        bridge_put_close();
         if (sd_delete("/C.CAR", 1)) die("delete cart after detach");
         /* 8. the gate query text + closing the gate */
         sd_rw = 0;
