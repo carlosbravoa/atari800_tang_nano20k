@@ -277,7 +277,10 @@ extern void snes_data(uint32_t data) {
  */ 
 // #pragma GCC optimize ("no-tree-loop-distribute-patterns")
 
-void* memcpy(void * dst, void const * src, size_t len) {
+// __attribute__((used)): with -flto the linker would drop these as unreferenced
+// and then GCC emits calls to them (it synthesises memcpy/memset/memcmp/strlen
+// for struct copies, zeroing loops and the like). Keep them resident.
+__attribute__((used)) void* memcpy(void * dst, void const * src, size_t len) {
    uint32_t * plDst = (uint32_t *) dst;
    uint32_t const * plSrc = (uint32_t const *) src;
 
@@ -304,7 +307,7 @@ void* memcpy(void * dst, void const * src, size_t len) {
  * Super-slow memset function.
  * TODO: write word by word.
  */ 
-void* memset(void* s, int c, size_t n) {
+__attribute__((used)) void* memset(void* s, int c, size_t n) {
    uint8_t* p = (uint8_t*)s;
    for(size_t i=0; i<n; ++i) {
        *p = (uint8_t)c;
@@ -313,7 +316,7 @@ void* memset(void* s, int c, size_t n) {
    return s;
 }
 
-int memcmp(const void *s1, const void *s2, size_t n) {
+__attribute__((used)) int memcmp(const void *s1, const void *s2, size_t n) {
    uint8_t *p1 = (uint8_t *)s1;
    uint8_t *p2 = (uint8_t *)s2;
    for (int i = 0; i < n; i++) {
@@ -438,7 +441,7 @@ char *strrchr(const char *s, int c) {
    return r;
 }
 
-size_t strlen(const char *s) {
+__attribute__((used)) size_t strlen(const char *s) {
    size_t r = 0;
    while (*s != '\0') {
       r++;
