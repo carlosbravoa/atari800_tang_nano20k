@@ -287,7 +287,13 @@ ashterm: firmware: sd: mount D1 failed 4  (mounting on D1 failed: no such file)
 ```
 
 The second case matters: a mount or cartridge load runs in the firmware after
-the shell has already answered, so the shell alone cannot tell you it failed. The mailbox contract is owned and documented by the ASH
+the shell has already answered, so the shell alone cannot tell you it failed.
+
+While ashterm is not running, the board's USB bridge chip holds on to the
+firmware's log output; the next time ashterm connects it files those lines in
+the log tagged `old` (their real time is unknown). So a failed mount or an SD
+error from an evening without the PC shows up the next time you connect.
+Commands typed on the Atari while ashterm was not running are not recorded. The mailbox contract is owned and documented by the ASH
 project (`ash/tn.s`); this tool only uses `peek`/`poke`/`send` from
 `atari_link.py`, so it needs no firmware support.
 

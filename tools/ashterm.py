@@ -200,6 +200,7 @@ class Ash:
         except LinkError:
             raise AshError(NO_BOARD)
         self.l.on_log = self.log.firmware_bytes   # keep the firmware's log lines, don't drop them
+        self.missed = self.log.backlog(self.l.backlog)   # logged while nobody was connected
         self.hdr = None
         if not self.alive():
             raise AshError(NO_ASH)

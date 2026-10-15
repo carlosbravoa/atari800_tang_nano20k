@@ -176,13 +176,26 @@ class SessionLog:
         except OSError:
             pass
 
-    def firmware_bytes(self, data):
-        """Raw bytes the firmware sent outside a reply (its uart log). Keep whole
-        printable lines; acks, NAKs and stale reply fragments are dropped."""
+    def backlog(self, data):
+        """What the firmware logged while no PC was connected (the USB bridge chip holds
+        it until the next connection). Real times are unknown, so the lines are tagged
+        'old' and kept out of the per-command lists."""
+        lines = self._lines(data)            # a cut-off last line stays buffered and joins live data
+        if lines:
+            self.write("old", f"{len(lines)} firmware line(s) logged while ashterm was not connected:")
+        for line in lines:
+            h = fw_hint(line)
+            self.write("old", line + (f"  -- {h}" if h else ""))
+        return lines
+
+    def _lines(self, data):
+        """Whole printable lines from raw firmware bytes; acks, NAKs, status lines and
+        stale reply fragments are dropped. A trailing partial line stays buffered."""
         self._buf += data
-        *lines, self._buf = self._buf.split(b"\n")
+        *raw_lines, self._buf = self._buf.split(b"\n")
         self._buf = self._buf[-256:]
-        for raw in lines:
+        out = []
+        for raw in raw_lines:
             line = raw.decode("latin1").strip().lstrip("+K\x15")
             if len(line) < 4 or not re.search(r"[a-zA-Z]{2}", line):
                 continue
@@ -190,6 +203,12 @@ class SessionLog:
                 continue
             if line.startswith(("ST u:", "key=")):
                 continue
+            out.append(line)
+        return out
+
+    def firmware_bytes(self, data):
+        """Raw bytes the firmware sent outside a reply (its uart log)."""
+        for line in self._lines(data):
             self.pending_fw.append(line)
             h = fw_hint(line)
             self.write("fw", line + (f"  -- {h}" if h else ""))

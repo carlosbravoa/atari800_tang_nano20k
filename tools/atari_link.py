@@ -98,6 +98,7 @@ class AtariLink:
         # instances once split an event stream 50/50 (HW-hit; one served the
         # request, the other broke the next one). Fail loudly instead.
         self.ser = serial.Serial(self.port, BAUD, timeout=timeout, exclusive=True)
+        self.backlog = b""          # what the firmware logged while no PC reader was attached
         if settle:
             self._settle_drain()
 
@@ -113,7 +114,9 @@ class AtariLink:
         self.ser.timeout = 0.05
         try:
             while time.time() < deadline and time.time() < end:
-                if self.ser.read(4096):
+                b = self.ser.read(4096)
+                if b:
+                    self.backlog += b          # kept for callers that want it (ashterm's log)
                     deadline = time.time() + quiet
         finally:
             self.ser.timeout = old_to
