@@ -54,6 +54,9 @@ int option_boot_ash = 0;                     // OSD Options "Boot: BASIC/ASH" = 
 #define ASH_CART_FILE "/ASH.CAR"
 char mounted_cart_name[16] = "None";         // OSD "Cart:" line
 int mount_silent = 0;                        // boot-time/bridge automount: no interactive popups
+uint8_t  sd_rw = 0;                          // ASH phase 2b: per-session SD write gate (XIO 48);
+                                             // cleared on every cold boot (load_system_roms)
+uint32_t cart_sclust = 0;                    // FAT start cluster of the attached cart image (guard)
 
 // Push the input-related options into the hardware config register (0xA4):
 // bit 8 = USB-host-keyboard enable (permanently 0: keyboard is UART/CH9350 only),
@@ -503,6 +506,7 @@ int load_cartridge(char *filepath) {
         return -1;
     }
     uint32_t fsize = f_size(&f);
+    cart_sclust = f.obj.sclust;             // phase 2b guard: never write the attached image
     uint32_t data_size = fsize;
     uint8_t mode = 0;
     uint32_t car_type = 0;                  // 0 = raw .rom (no header)
@@ -1097,6 +1101,67 @@ static int hdd_openr(const char *path, int h) {
     return 0;
 }
 
+// ── Phase 2b: writing to the card from the shell (XIO 48–52) ────────────────
+// Behind sd_rw (per-session gate, XIO 48, closed at every cold boot) AND guards
+// that stay on with the gate open: the two ROMs, atari.ini and the default
+// cartridge by name; and anything the firmware holds open — mounted D1–D4 ATRs,
+// the virtual .xex, a file on the other H: handle, the attached cart image — by
+// FAT START CLUSTER (the dup-mount guard's technique): every spelling of a path
+// (case, 8.3 alias) resolves to one directory entry, so none can slip past. The
+// probe uses handle h's own FIL, so the handle is consumed (closed) by these calls.
+static int sd_guarded(const char *path, int h) {
+    if (!strcasecmp(path, "/ATARIXL.ROM") || !strcasecmp(path, "/BASIC.ROM") ||
+        !strcasecmp(path, OPTION_FILE) || !strcasecmp(path, ASH_CART_FILE)) return 1;
+    FIL *p = &hdd_fil[h];
+    if (f_open(p, path, FA_READ)) return 0;    // missing, or a directory: nothing open on it
+    uint32_t c = p->obj.sclust;
+    f_close(p);
+    for (int s = 0; s < ATR_DRIVES; s++)
+        if (atr_mounted[s] && atr_file[s].obj.sclust == c) return 1;
+    if (xex_active && xex_file.obj.sclust == c) return 1;
+    for (int o = 0; o < HDD_HANDLES; o++)       // c == 0 (empty file): only a WRITE-open twin counts
+        if (o != h && hdd_open_f[o] == 1 && hdd_fil[o].obj.sclust == c &&
+            (c != 0 || (hdd_fil[o].flag & FA_WRITE))) return 1;
+    if (cart_sclust && cart_sclust == c) return 1;
+    return 0;
+}
+
+static void hdd_drop(int h) {                  // free handle h (whatever it holds)
+    if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
+}
+
+// XIO 49 OPENW: create/truncate `path` for writing on handle h (then WRITE/CLOSE as H: mode 8).
+static int sd_openw(const char *path, int h) {
+    if (!sd_rw || h < 0 || h >= HDD_HANDLES || !path[0]) return -1;
+    hdd_drop(h);
+    if (sd_guarded(path, h)) return -3;
+    if (f_open(&hdd_fil[h], path, FA_CREATE_ALWAYS | FA_WRITE)) return -4;
+    hdd_open_f[h] = 1;
+    return 0;
+}
+
+// XIO 50 DELETE: files and EMPTY directories (f_unlink refuses non-empty ones).
+static int sd_delete(const char *path, int h) {
+    if (!sd_rw || h < 0 || h >= HDD_HANDLES || !path[0]) return -1;
+    hdd_drop(h);
+    if (sd_guarded(path, h)) return -3;
+    return f_unlink(path) == FR_OK ? 0 : -2;
+}
+
+// XIO 51 RENAME: rename or move within the card (frame = old, 0, new, 0).
+static int sd_rename(const char *oldp, const char *newp, int h) {
+    if (!sd_rw || h < 0 || h >= HDD_HANDLES || !oldp[0] || !newp[0]) return -1;
+    hdd_drop(h);
+    if (sd_guarded(oldp, h) || sd_guarded(newp, h)) return -3;
+    return f_rename(oldp, newp) == FR_OK ? 0 : -2;
+}
+
+// XIO 52 MKDIR.
+static int sd_mkdir(const char *path) {
+    if (!sd_rw || !path[0]) return -1;
+    return f_mkdir(path) == FR_OK ? 0 : -2;
+}
+
 // return 0: user chose a ROM (*choice), 1: no choice made, -1: error
 int menu_loadrom(int *choice, int carts, int slot) {
     int page = 0, pages, total;
@@ -1288,6 +1353,7 @@ int load_system_roms(void) {
         }
     }
 
+    sd_rw = 0;                               // ASH write gate closes on every cold boot
     // Force cold boot on next boot
     *(volatile uint8_t *)(0x00200000 + 0x0244) = 1; // COLDST = 1
     
@@ -1917,6 +1983,21 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         else if (aux1 == 45) r = hdd_statuslist(h);
         else if (aux1 == 47) r = hdd_openr((char *)buf, h);
         else if (aux1 >= 41 && aux1 <= 44) r = sd_defer(aux1, (char *)buf);
+        else if (aux1 == 48) {                                   // WRITEMODE 0 ro / 1 rw / 2 query
+            if (buf[0] == 2) {
+                hdd_drop(h);
+                hdd_dirlen = 0; hdd_dirpos = 0;
+                hdd_text_put(sd_rw ? "rw\x9b" "END\x9b" : "ro\x9b" "END\x9b");
+                hdd_open_f[h] = 2; r = 0;
+            } else if (buf[0] <= 1) { sd_rw = buf[0]; r = 0; }
+        }
+        else if (aux1 == 49) r = sd_openw((char *)buf, h);
+        else if (aux1 == 50) r = sd_delete((char *)buf, h);
+        else if (aux1 == 51) {                                   // old, 0, new, 0
+            int n = strlen((char *)buf);
+            r = (n < 62) ? sd_rename((char *)buf, (char *)buf + n + 1, h) : -1;
+        }
+        else if (aux1 == 52) r = sd_mkdir((char *)buf);
         delay_us(250); sio_tx_byte(r == 0 ? 0x43 : 0x45);
         break;
     }

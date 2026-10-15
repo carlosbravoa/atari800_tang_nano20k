@@ -130,6 +130,12 @@ fresh $IMG 64
 fresh $IMG 64
 ./fatfs_host $IMG s_sdctl > /dev/null; check "s_sdctl        " $? $IMG
 
+# 16. phase 2b: SD writes from the shell — session gate, name/cluster guards
+#     (ROMs, ini, ASH.CAR, mounted ATR, active xex, other handle, cart), ops
+fresh $IMG 64
+./fatfs_host $IMG put a.atr /D1.ATR > /dev/null
+./fatfs_host $IMG s_sdwrite > /dev/null; check "s_sdwrite      " $? $IMG
+
 # 14. DD layouts: packed vs full-boot-sector images (the MyDOS-in-the-wild
 #     flavor — sectors 4+ were served 384 bytes off before atr_dd_fullboot)
 fresh $IMG 64

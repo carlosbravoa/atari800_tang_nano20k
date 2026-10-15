@@ -34,6 +34,10 @@ FIL bridge_file;
 #define HDD_HANDLES 2
 #define HDD_DIRBUF  1024
 #define HDD_LFN_W   27
+#define OPTION_FILE   "/atari.ini"
+#define ASH_CART_FILE "/ASH.CAR"
+uint8_t  sd_rw = 0;
+uint32_t cart_sclust = 0;
 FIL hdd_fil[HDD_HANDLES];
 uint8_t hdd_open_f[HDD_HANDLES];
 char hdd_dirbuf[HDD_DIRBUF];
@@ -453,6 +457,83 @@ int main(int argc, char **argv) {
         if ((st[2] | (st[3] << 8)) != (int)strlen(txt)) die("h0 clobbered by listing");
         hdd_close(0); hdd_close(1);
         #undef READ_LISTING
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_sdwrite")) {           /* phase 2b: gate + guards + write ops */
+        FIL f; UINT bw; uint8_t st[4], buf[128];
+        #define MKFILE(p, txt) do { if (f_open(&f, p, FA_WRITE | FA_CREATE_ALWAYS)) die("mk " p); \
+            if (f_write(&f, txt, strlen(txt), &bw)) die("wr " p); f_close(&f); } while (0)
+        MKFILE("/A.TXT", "alpha\x9b");
+        MKFILE("/ATARIXL.ROM", "rom"); MKFILE("/BASIC.ROM", "rom"); MKFILE("/atari.ini", "ini"); MKFILE("/ASH.CAR", "car");
+        /* 1. gate closed: every write op refused, and the files are untouched */
+        if (sd_mkdir("/W") == 0) die("mkdir with gate closed");
+        if (sd_openw("/N.TXT", 1) == 0) die("openw with gate closed");
+        if (sd_delete("/A.TXT", 1) == 0) die("delete with gate closed");
+        if (sd_rename("/A.TXT", "/B.TXT", 1) == 0) die("rename with gate closed");
+        if (hdd_openr("/A.TXT", 1)) die("A.TXT vanished"); hdd_close(1);
+        if (hdd_openr("/N.TXT", 1) == 0) die("N.TXT created with gate closed");
+        /* 2. gate open: the normal life cycle */
+        sd_rw = 1;
+        if (sd_mkdir("/W")) die("mkdir");
+        if (sd_openw("/W/N.TXT", 1)) die("openw");
+        const char *msg = "written from the shell\x9b";
+        if (hdd_write(1, (const uint8_t *)msg, strlen(msg))) die("write");
+        if (hdd_close(1)) die("close");
+        if (hdd_openr("/W/N.TXT", 1)) die("reopen");
+        hdd_status(1, st); int avail = st[2] | (st[3] << 8);
+        if (avail != (int)strlen(msg) || hdd_read(1, buf, avail) != avail || memcmp(buf, msg, avail)) die("readback");
+        hdd_close(1);
+        if (sd_rename("/W/N.TXT", "/W/M.TXT", 1)) die("rename");
+        if (sd_rename("/W/M.TXT", "/M.TXT", 1)) die("move");
+        if (hdd_openr("/M.TXT", 1)) die("moved file"); hdd_close(1);
+        if (sd_delete("/M.TXT", 1)) die("delete");
+        if (hdd_openr("/M.TXT", 1) == 0) die("ghost after delete");
+        if (sd_delete("/W", 1)) die("rmdir empty");
+        if (sd_mkdir("/W")) die("mkdir again");
+        MKFILE("/W/X.TXT", "x");
+        if (sd_delete("/W", 1) == 0) die("rmdir non-empty allowed");
+        if (sd_openw("/W/X.TXT", 1)) die("truncate existing"); hdd_close(1);
+        /* 3. name guards hold with the gate open, in any case spelling */
+        const char *names[] = {"/ATARIXL.ROM", "/basic.rom", "/Atari.ini", "/ash.car"};
+        for (int i = 0; i < 4; i++) {
+            if (sd_openw(names[i], 1) == 0) { printf("FAIL: openw %s\n", names[i]); return 1; }
+            if (sd_delete(names[i], 1) == 0) { printf("FAIL: delete %s\n", names[i]); return 1; }
+            if (sd_rename(names[i], "/Z", 1) == 0) { printf("FAIL: rename %s\n", names[i]); return 1; }
+            if (sd_rename("/A.TXT", names[i], 1) == 0) { printf("FAIL: rename onto %s\n", names[i]); return 1; }
+        }
+        /* 4. mounted ATR guard (by cluster: works under another spelling), lifted after unmount */
+        if (mount_atr("/D1.ATR", 0)) die("mount");
+        if (sd_delete("/d1.atr", 1) == 0) die("delete mounted (lowercase)");
+        if (sd_rename("/D1.ATR", "/X.ATR", 1) == 0) die("rename mounted");
+        if (sd_openw("/D1.ATR", 1) == 0) die("openw mounted");
+        f_close(&atr_file[0]); atr_mounted[0] = false;
+        if (sd_rename("/D1.ATR", "/X.ATR", 1)) die("rename after unmount");
+        /* 5. virtual xex guard */
+        MKFILE("/G.XEX", "xex");
+        if (f_open(&xex_file, "/G.XEX", FA_READ)) die("open xex"); xex_active = true;
+        if (sd_delete("/G.XEX", 1) == 0) die("delete active xex");
+        f_close(&xex_file); xex_active = false;
+        if (sd_delete("/G.XEX", 1)) die("delete xex after eject");
+        /* 6. other-handle guard: a file open for reading or writing on handle 0 */
+        if (hdd_openr("/A.TXT", 0)) die("openr h0");
+        if (sd_openw("/A.TXT", 1) == 0) die("openw over a read-open file");
+        if (sd_delete("/A.TXT", 1) == 0) die("delete a read-open file");
+        hdd_close(0);
+        if (sd_openw("/N1.TXT", 0)) die("openw h0");             /* fresh, empty: cluster 0 */
+        if (sd_openw("/N1.TXT", 1) == 0) die("dup write-open of a fresh file");
+        if (sd_openw("/N2.TXT", 1)) die("another fresh file on h1 must be allowed");
+        hdd_close(0); hdd_close(1);
+        /* 7. attached cartridge guard */
+        MKFILE("/C.CAR", "cart image");
+        if (f_open(&f, "/C.CAR", FA_READ)) die("open car"); cart_sclust = f.obj.sclust; f_close(&f);
+        if (sd_delete("/C.CAR", 1) == 0) die("delete attached cart");
+        cart_sclust = 0;
+        if (sd_delete("/C.CAR", 1)) die("delete cart after detach");
+        /* 8. the gate query text + closing the gate */
+        sd_rw = 0;
+        if (sd_mkdir("/W2") == 0) die("mkdir after gate closed again");
+        #undef MKFILE
         return 0;
     }
 
