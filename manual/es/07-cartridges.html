@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>Shell ASH</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Solución de problemas</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Problemas conocidos</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Apéndice</a></li>
 </ol></nav>
 <main>
 <h1>7. Cartuchos</h1>
@@ -35,7 +36,7 @@
 <tr><td><code>.car</code></td><td><strong>4 MB</strong></td><td>La ventana de cartucho de 4 MB en la SDRAM de la placa (el chip es de 8 MB; el resto contiene la RAM del Atari y las ROM)</td></tr>
 <tr><td><code>.rom</code> (en bruto)</td><td><strong>16 KB</strong></td><td>Un volcado en bruto no lleva información del mapeador (mapper), así que solo se pueden cargar los tamaños simples sin bancos — 2, 4, 8 y 16 KB</td></tr>
 </table></div>
-<p>Un archivo <code>.car</code> es un volcado en bruto con una pequeña cabecera que indica el <em>tipo</em> de cartucho (su esquema de conmutación de bancos). Se soportan 52 tipos CAR, desde los cartuchos simples de 8K/16K hasta XEGS, XEGS conmutable, AtariMax, OSS, SDX, Williams, SIC!, Turbosoft y MegaCart de hasta 4 MB. La lista completa está en el <a href="16-appendix.html#a1">Apéndice</a>.</p>
+<p>Un archivo <code>.car</code> es un volcado en bruto con una pequeña cabecera que indica el <em>tipo</em> de cartucho (su esquema de conmutación de bancos). Se soportan 52 tipos CAR, desde los cartuchos simples de 8K/16K hasta XEGS, XEGS conmutable, AtariMax, OSS, SDX, Williams, SIC!, Turbosoft y MegaCart de hasta 4 MB. La lista completa está en el <a href="17-appendix.html#a1">Apéndice</a>.</p>
 <p>Un <code>.rom</code> en bruto de más de 16 KB se rechaza con <code>Raw .ROM must be 2/4/8/16K — use a .CAR instead</code>: sin cabecera, el firmware no puede saber qué mapeador usa el cartucho. Convierte los volcados más grandes a <code>.car</code> con cualquier herramienta de cartuchos Atari, para que el tipo quede guardado en la cabecera.</p>
 
 <h2>Por qué el límite de 4 MB</h2>
@@ -77,7 +78,7 @@
 <p>Con Options → <strong>Boot</strong> en <code>ASH</code> (ver <a href="05-options.html#boot">Opciones</a>), <code>/ASH.CAR</code> en la tarjeta SD pasa a ser el cartucho por defecto de la máquina: cada vez que un arranque en frío encuentra la ranura vacía — el encendido, <strong>7) Hard Reset</strong>, <strong>Detach</strong>, un <code>reset</code> por el PC Link — el firmware lo vuelve a adjuntar, y el Atari aparece en el <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a>. Adjunta un cartucho de juego y arranca como siempre; Detach vuelve entonces al shell y no a BASIC. <strong>5) Boot to BASIC</strong>, <strong>Attach .xex</strong> y <code>atari.py run</code> sacan el cartucho ASH solo para ese arranque. Si <code>ASH.CAR</code> no existe o no se puede leer, la máquina arranca BASIC como si la opción estuviera apagada. Con <code>Boot</code> en <code>BASIC</code> (por defecto) nada de esto ocurre.</p>
 
 <h2>Tipos CAR soportados</h2>
-<p>Los 52 identificadores de tipo CAR soportados, con sus nombres, están listados en el <a href="16-appendix.html#a1">Apéndice</a>. Los tipos no soportados se rechazan en pantalla indicando su identificador, así que siempre sabrás con cuál te topaste.</p>
+<p>Los 52 identificadores de tipo CAR soportados, con sus nombres, están listados en el <a href="17-appendix.html#a1">Apéndice</a>. Los tipos no soportados se rechazan en pantalla indicando su identificador, así que siempre sabrás con cuál te topaste.</p>
 
 <footer class="pn"><a href="06-disks.html">← Anterior: Discos</a><a href="08-executables.html">Siguiente: Ejecutables (.xex) →</a></footer>
 </main></div></body></html>

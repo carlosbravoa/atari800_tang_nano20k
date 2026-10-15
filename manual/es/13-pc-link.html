@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
 <li><a href="13-pc-link.html" class="cur"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>Shell ASH</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Solución de problemas</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Problemas conocidos</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Apéndice</a></li>
 </ol></nav>
 <main>
 <h1>13. PC Link</h1>
@@ -66,7 +67,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <tr><td><code>kbd</code></td><td>Teclado remoto en vivo: lo que tecleas en el PC llega al Atari. Ctrl-] sale; pulsar <kbd>F12</kbd> en el teclado propio del Atari abre el OSD y termina la sesión.</td><td><code>atari.py kbd</code></td></tr>
 <tr><td><code>eject</code></td><td>Saca el <code>.xex</code> virtual de D1:.</td><td><code>atari.py eject</code></td></tr>
 <tr><td><code>reset [--warm] [--keep]</code></td><td>Expulsa el <code>.xex</code> virtual y hace un arranque en frío. <code>--warm</code> = reinicio en caliente en su lugar; <code>--keep</code> = no expulsar antes.</td><td><code>atari.py reset</code><br><code>atari.py reset --warm</code></td></tr>
-<tr><td><code>status</code></td><td>Telemetría en una línea: etapa de arranque, resultado de la carga de ROMs, unidades montadas, contadores SIO, canario de pila (ver §13.10).</td><td><code>atari.py status</code></td></tr>
+<tr><td><code>status</code></td><td>Telemetría en una línea: etapa de arranque, resultado de la carga de ROMs, unidades montadas, contadores SIO, canario de pila (ver §13.11).</td><td><code>atari.py status</code></td></tr>
 <tr><td><code>screen</code></td><td>Volcado en texto de la pantalla del Atari (GRAPHICS 0), leído desde su propia memoria.</td><td><code>atari.py screen</code></td></tr>
 <tr><td><code>peek ADDR [LEN]</code></td><td>Volcado hexadecimal de la memoria del Atari (64 bytes por defecto).</td><td><code>atari.py peek 0x12 3</code> (el reloj de jiffies)</td></tr>
 <tr><td><code>poke ADDR B [B…]</code></td><td>Escribe bytes en la memoria del Atari.</td><td><code>atari.py poke 0x2C8 0x35</code> (borde rosado)</td></tr>
@@ -95,7 +96,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <li>El tecleo llega a la máquina solo mientras el menú OSD está <strong>cerrado</strong> (un menú abierto se traga las pulsaciones, la misma regla de enmascaramiento que el teclado físico).</li>
 <li>Los caracteres se asignan según la distribución del teclado <strong>Atari</strong>.</li>
 <li>La velocidad es de unos 18 caracteres por segundo. Después de cada RETURN el firmware espera 250 ms, porque BASIC tokeniza la línea mientras su buffer de teclado solo guarda un carácter; los listados de varias líneas llegan intactos.</li>
-<li>Las sesiones largas de <code>type</code> pueden, ocasionalmente, hacer caer el enlace USB. Las herramientas se recuperan solas y reintentan; para programas grandes es preferible la vía H: + <code>ENTER</code> de §13.11.</li>
+<li>Las sesiones largas de <code>type</code> pueden, ocasionalmente, hacer caer el enlace USB. Las herramientas se recuperan solas y reintentan; para programas grandes es preferible la vía H: + <code>ENTER</code> de §13.12.</li>
 </ul>
 
 <h2 id="printer">13.6 Captura de impresora</h2>
@@ -159,7 +160,44 @@ python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</co
 </ol>
 <div class="note"><strong>Estado</strong>En desarrollo: parte del texto se corrompe con ráfagas rápidas de la BBS. Utilizable para sesiones de BBS; todavía no a nivel de versión publicada bajo carga sostenida.</div>
 
-<h2 id="telemetry">13.10 Telemetría y depuración remota</h2>
+<h2 id="ashterm">13.10 El terminal de ASH: <code>ashterm.py</code></h2>
+<p><code>ashterm</code> es el lado PC de <a href="14-ash.html">ASH, el shell del Atari</a>. Ejecuta comandos de ASH desde el PC con la salida exacta y sin teclear, copia archivos en ambas direcciones y atiende los comandos de red del shell (<code>date</code>, <code>wget</code>, <code>tnfs://</code>). Se comunica con ASH a través de un pequeño buzón en la memoria del Atari, así que necesita la edición de ASH para esta placa corriendo en el Atari: el cartucho <code>ASH.CAR</code> (con <strong>Boot: ASH</strong> o adjuntado desde el OSD) o <code>ASH-TN.XEX</code>. No necesita nada más que la <a href="#setup">configuración inicial</a> de arriba.</p>
+<h3>El terminal</h3>
+<pre><code>python3 tools/ashterm.py</code></pre>
+<p>El prompt muestra el directorio actual de ASH, igual que en el televisor. Escribe cualquier comando de ASH; la salida aparece en el PC cuando el comando termina. (No se transmite mientras el comando corre: cuando ASH está leyendo un disco, ashterm reduce al mínimo su propio tráfico por el cable para no perturbar ninguna transferencia de disco.) <kbd>Ctrl</kbd>+<kbd>C</kbd> envía BREAK al comando en curso. <code>exit</code> o <kbd>Ctrl</kbd>+<kbd>D</kbd> salen de ashterm; el Atari sigue funcionando.</p>
+<h3>Un solo comando, o una transferencia de archivos</h3>
+<div class="tbl"><table>
+<tr><th>Comando</th><th>Qué hace</th></tr>
+<tr><td><code>ashterm.py -c "ls -l sd:/games"</code></td><td>Ejecuta un comando (repite <code>-c</code> para varios), imprime su salida y termina. El código de salida es 1 si un comando falló, así que sirve en scripts.</td></tr>
+<tr><td><code>ashterm.py get SRC [DST]</code></td><td>Copia al PC cualquier archivo que el Atari pueda leer: de un disco, de <code>h:</code>, de una carpeta MyDOS o de la tarjeta SD (<code>get d1:game.bas</code>, <code>get sd:/games/x.xex</code>).</td></tr>
+<tr><td><code>ashterm.py put FILE [DST]</code></td><td>Envía un archivo del PC a <code>h:</code> (la carpeta <code>/HDD</code> de la tarjeta) y, si se indica <code>DST</code>, lo copia desde ahí (<code>put game.bas d1:</code>).</td></tr>
+<tr><td><code>ashterm.py log [N]</code></td><td>Muestra las últimas <code>N</code> líneas del registro de sesión (40 por defecto). No necesita la placa.</td></tr>
+</table></div>
+<h3>Atender los comandos de red del shell</h3>
+<p>Los comandos <code>date</code> y <code>wget</code> de ASH, y sus URL <code>http://</code>, <code>https://</code> y <code>tnfs://</code>, los resuelve el PC: el shell lo pide, ashterm descarga con la conexión a internet del propio PC y entrega el archivo por el cable. Esto solo funciona mientras ashterm está corriendo. El terminal interactivo atiende las peticiones en cualquier momento, incluidas las de comandos tecleados en el teclado del Atari mientras espera en su prompt; una llamada única con <code>-c</code> solo las atiende durante su propio comando. Sin ashterm, el shell espera unos dos segundos y responde <em>no answer from the pc</em>.</p>
+<h3>Registro de sesión y errores explicados</h3>
+<p>ashterm lleva un registro en <code>~/.local/state/ashterm/ashterm.log</code> (<code>--log FILE</code> lo cambia de lugar, <code>--no-log</code> lo desactiva). Anota cada comando y su resultado, cada petición de red que atendió y los mensajes del propio firmware: discos montados, errores de la tarjeta SD y de SIO, transferencias de archivos. Los mensajes que el firmware generó mientras ashterm no estaba corriendo se agregan la próxima vez que se conecta, marcados como <code>old</code>. Cuando un comando falla, ashterm lo explica bajo el mensaje breve de ASH:</p>
+<pre><code>D4:/$ cat d2:x
+cat: i/o error 138
+ashterm: i/o error: CIO 138 = drive not responding. The drive did not answer in time:
+         nothing mounted on that drive, or the firmware was busy with a PC link transfer.
+D4:/$ mount d1: sd:/NOPE.ATR
+ashterm: firmware: sd: mount D1 failed 4  (mounting on D1 failed: no such file)</code></pre>
+<p>El segundo ejemplo es el importante: un montaje o la carga de un cartucho los realiza el firmware después de que ASH ya respondió, así que ASH por sí solo no puede avisarte de que falló. (Las explicaciones de ashterm están en inglés.)</p>
+<h3>Para tener en cuenta</h3>
+<ul>
+<li><strong>Un programa a la vez.</strong> ashterm ocupa el cable hacia la placa mientras está corriendo; <code>atari.py</code>, la aplicación de escritorio y <code>atari_net.py</code> no pueden conectarse mientras tanto (ni al revés). Sal de ashterm antes de usarlos.</li>
+<li><strong>Mensajes y qué significan:</strong>
+<div class="tbl"><table>
+<tr><th>ashterm dice</th><th>Revisa</th></tr>
+<tr><td><code>no board found on USB</code></td><td>Que la placa esté conectada y encendida, y que ningún otro programa tenga ocupado su puerto.</td></tr>
+<tr><td><code>the board answers but ASH-TN is not running on it</code></td><td>El Atari está en BASIC, en un juego o en el OSD. Arranca ASH (ver el <a href="14-ash.html">capítulo 14</a>).</td></tr>
+<tr><td><code>ASH is not at its prompt</code></td><td>ASH está ocupado en el Atari: un paginador, el editor o un programa que inició. Termina eso en el Atari y vuelve a intentar.</td></tr>
+<tr><td><code>ASH-TN speaks mailbox version N, this ashterm needs M</code></td><td>La versión de ASH y las herramientas de este repositorio no coinciden. Usa la versión de ASH que corresponde a esta versión del firmware (o actualiza ambas).</td></tr>
+</table></div></li>
+</ul>
+
+<h2 id="telemetry">13.11 Telemetría y depuración remota</h2>
 <p>El puente responde en todo momento, incluso en la pantalla de error de ROM, así que una máquina que no arranca se puede examinar y rescatar desde el PC.</p>
 <ul>
 <li><code>status</code> devuelve una línea que empieza por <code>ST</code>. Campos: <code>u:</code> tiempo de funcionamiento del firmware en ms; <code>bs:</code> etapa de arranque (0 inicio, 1 SD ok, 2 opciones, 3 ROMs intentadas, 4 en marcha); <code>rom:</code> resultado de la carga de ROMs; <code>x:</code> hay un <code>.xex</code> virtual activo; <code>m:</code> cuatro dígitos, uno por unidad D1:–D4: (1 = montada); <code>c:</code>/<code>s:</code>/<code>st:</code> último comando, sector y estado SIO; <code>e:</code> contador de errores SIO; <code>cn:</code> el canario de pila del firmware; más los contadores <code>hd:</code> y <code>nt:</code> del manejador H: y del dispositivo de red.</li>
@@ -170,7 +208,7 @@ python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</co
 <li>Cómo leer las respuestas: una respuesta de <code>status</code> nombra la etapa en la que el firmware quedó trabado. Un silencio serial total significa que la máquina nunca llegó al firmware: apágala y vuelve a encenderla.</li>
 </ul>
 
-<h2 id="recipes">13.11 Recetas</h2>
+<h2 id="recipes">13.12 Recetas</h2>
 <h3>Pegar un programa BASIC corto</h3>
 <p>Cierra el OSD y luego:</p>
 <pre><code>python3 tools/atari.py type mygame.bas
@@ -186,13 +224,13 @@ RUN</code></pre>
 <pre><code>python3 tools/atari.py run build/demo.xex     # sends + cold-boots into it</code></pre>
 <p>El programa aparece en la línea D1: del OSD; <code>atari.py eject</code> lo quita.</p>
 <h3>Llevar un listado del Atari al PC</h3>
-<p>Todavía no hay descarga de archivos a través del puente, pero el Atari puede imprimir hacia el PC:</p>
+<p><code>atari.py</code> no descarga archivos (con ASH corriendo, <a href="#ashterm"><code>ashterm.py get</code></a> trae cualquier archivo), pero desde BASIC el Atari puede imprimir hacia el PC:</p>
 <pre><code>LIST "P:"</code></pre>
 <p>Llega como texto en <code>atari.py log</code> o en la pestaña Printer de la aplicación de escritorio (luego <em>Save as .txt</em>).</p>
 <h3>Compartir archivos de datos en ambos sentidos</h3>
 <ul>
 <li>PC → Atari: <code>python3 tools/atari.py send --text data.txt HDD/DATA.TXT</code>, y luego <code>OPEN #1,4,0,"H:DATA.TXT"</code> en el Atari.</li>
-<li>Atari → PC: escribe en H: desde BASIC (<code>OPEN #1,8,0,"H:OUT.TXT"</code> …). El archivo queda ahora en <code>/HDD/OUT.TXT</code> en la tarjeta SD; el PC lo lee directamente la próxima vez que pueda leer la tarjeta. (Está previsto un comando <code>get</code> para el puente.)</li>
+<li>Atari → PC: escribe en H: desde BASIC (<code>OPEN #1,8,0,"H:OUT.TXT"</code> …). El archivo queda ahora en <code>/HDD/OUT.TXT</code> en la tarjeta SD; el PC lo lee directamente la próxima vez que pueda leer la tarjeta. Con ASH corriendo, <code>ashterm.py get h:out.txt</code> lo trae de inmediato.</li>
 </ul>
 <h3>Depuración remota</h3>
 <pre><code>python3 tools/atari.py status                 # boot stage, mounts, SIO health
@@ -200,19 +238,20 @@ python3 tools/atari.py screen                 # what's on the Atari screen now
 python3 tools/atari.py peek 0x12 3            # jiffy clock (is it alive?)
 python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink</code></pre>
 
-<h2 id="limits">13.12 Limitaciones</h2>
+<h2 id="limits">13.13 Limitaciones</h2>
 <div class="note"><strong>Usa las herramientas que vienen con tu versión del firmware</strong>Desde la v3.2.1 el puente solo acepta comandos enmarcados (un byte de sincronización, el comando y un byte de verificación), de modo que los bytes sueltos en el enlace USB ya no pueden provocar un reinicio ni una escritura en memoria. La carpeta <code>tools/</code> de la misma versión publicada siempre coincide; un <code>atari.py</code> antiguo frente a un firmware más nuevo simplemente no obtiene respuesta.</div>
 <ul>
 <li><strong>El alcance de H: es la sesión:</strong> RESET lo borra; vuelve a ejecutar <code>hdd-install</code>. Se instala por encima de MEMLO y convive con un DOS residente, pero BASIC solo toma el MEMLO elevado con <code>NEW</code>.</li>
-<li><strong>Todavía no hay descarga de archivos desde la tarjeta SD a través del puente.</strong> El texto Atari → PC va por la vía de la impresora (<code>LIST "P:"</code> / <code>LPRINT</code>); está previsto un comando <code>get</code>.</li>
+<li><strong><code>atari.py</code> no descarga archivos.</strong> Con ASH corriendo, <a href="#ashterm"><code>ashterm.py get</code></a> copia al PC cualquier archivo que el Atari pueda leer; sin él, el texto Atari → PC va por la vía de la impresora (<code>LIST "P:"</code> / <code>LPRINT</code>).</li>
+<li><strong><code>send</code> no sobrescribe un archivo en uso</strong> (desde la v3.3): una imagen de disco montada en una unidad, el cartucho adjuntado, el <code>.xex</code> virtual, un archivo abierto en H:. El firmware se niega con <code>firmware refused (NAK)</code>; desmonta o desconecta primero. <code>ATARIXL.ROM</code>, <code>BASIC.ROM</code> y <code>atari.ini</code> siempre se pueden reemplazar, así que una tarjeta con ROM dañadas se puede rescatar.</li>
 <li><strong>El montaje automático de <code>HDD.ATR</code> se ejecuta una sola vez al iniciar el firmware.</strong> Después de enviar uno nuevo con <code>send</code>, apaga y vuelve a encender la placa.</li>
 <li><strong><code>type</code> necesita el OSD cerrado.</strong></li>
 <li><strong>Las sesiones largas de <code>type</code></strong> pueden, ocasionalmente, hacer caer el enlace USB; las herramientas se recuperan solas y reintentan, pero la vía H: + <code>ENTER</code> lo evita para programas grandes.</li>
-<li><strong>Problema conocido:</strong> <kbd>F12</kbd> puede no responder mientras hay una sesión serial con el PC en curso; el botón S2 sigue abriendo el OSD (ver el <a href="15-known-issues.html">capítulo 15</a>).</li>
+<li><strong>Problema conocido:</strong> <kbd>F12</kbd> puede no responder mientras hay una sesión serial con el PC en curso; el botón S2 sigue abriendo el OSD (ver el <a href="16-known-issues.html">capítulo 16</a>).</li>
 </ul>
 
-<h2 id="recovery">13.13 Si el puente deja de responder</h2>
+<h2 id="recovery">13.14 Si el puente deja de responder</h2>
 <div class="tip"><strong>Recuperación</strong>Si el chip del puente deja de responder tras una tormenta de USB (por ejemplo, una sesión de tecleo muy larga), desconecta el cable USB de la placa, espera diez segundos y vuelve a conectarlo. El lado del Atari no se ve afectado.</div>
 
-<footer class="pn"><a href="12-ram.html">← Anterior: Ampliación de RAM</a><a href="14-troubleshooting.html">Siguiente: Solución de problemas →</a></footer>
+<footer class="pn"><a href="12-ram.html">← Anterior: Ampliación de RAM</a><a href="14-ash.html">Siguiente: Shell ASH →</a></footer>
 </main></div></body></html>

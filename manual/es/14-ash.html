@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>14. ASH, el shell del Atari — Manual Tang Atari 800</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">Manual de usuario</span><a class="lang" href="../14-ash.html" lang="en">English</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Capítulos"><ol>
+<li><a href="index.html"><span class="num">≡</span>Índice</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Introducción</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Instalación del hardware</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Primeros pasos</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>El menú OSD</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Opciones y atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Discos</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartuchos</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Ejecutables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Teclado</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-ash.html" class="cur"><span class="num">14</span>Shell ASH</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Solución de problemas</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Problemas conocidos</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Apéndice</a></li>
+</ol></nav>
+<main>
+<h1>14. ASH, el shell del Atari</h1>
+<p class="lead">ASH es un sistema operativo opcional para esta máquina: enciendes y llegas a una línea de comandos al estilo Unix en lugar de BASIC. Desde ahí recorres toda la tarjeta SD, montas discos, ejecutas programas y cartuchos, administras archivos, editas texto y, con el PC conectado, descargas archivos de internet y de servidores TNFS de FujiNet.</p>
+
+<h2>Activarlo (y desactivarlo)</h2>
+<ol>
+<li>Copia <code>ASH.CAR</code> en la <strong>raíz de la tarjeta SD</strong>, con exactamente ese nombre. Descárgalo desde la <a href="https://github.com/carlosbravoa/atari800-atari-shell/releases">página de versiones publicadas de ASH</a>.</li>
+<li>Abre el OSD → <strong>Options</strong> → <strong>Boot</strong> → <strong>ASH</strong> → <strong>Save changes</strong> (guardar cambios).</li>
+<li>Apaga y vuelve a encender (o usa <strong>Hard Reset</strong>, reinicio en frío). La máquina arranca directamente en el shell:</li>
+</ol>
+<pre><code>ASH 1.3 TN - the Atari SHell
+Type help for commands or basic to exit
+D4:/$</code></pre>
+<p>Vuelve a poner <strong>Boot</strong> en <strong>BASIC</strong> para recuperar el clásico <code>READY</code>. Si <code>ASH.CAR</code> no está o está dañado, la máquina arranca BASIC como siempre, sin avisar. También puedes probar ASH sin cambiar la opción: <strong>Cart</strong> → <strong>Attach</strong> → <code>ASH.CAR</code>.</p>
+<div class="tip"><strong>¿Por qué un cartucho?</strong> ASH se copia a la RAM en una fracción de segundo y luego desactiva el cartucho, así que los juegos ven una máquina normal con <code>$A000</code>–<code>$BFFF</code> libre. RESET siempre te devuelve al prompt.</div>
+
+<h2>El prompt</h2>
+<p>El indicador muestra dónde estás: <code>D1:/</code>–<code>D4:/</code> son las unidades de disco, <code>H:/</code> es la carpeta <code>/HDD</code> de la tarjeta SD y <code>SD:/games</code> es una carpeta cualquiera de la tarjeta SD. Cambia con <code>cd</code>, o escribe solo la unidad (<code>d2:</code>).</p>
+<ul>
+<li><kbd>Tab</kbd> completa nombres de archivo; <kbd>↑</kbd>/<kbd>↓</kbd> recuperan comandos anteriores; <kbd>Ctrl</kbd>+<kbd>U</kbd> borra la línea; <kbd>Break</kbd> cancela un comando.</li>
+<li>Los nombres con espacios van entre comillas dobles: <code>run "sd:/games/Candy Crunch.xex"</code>.</li>
+<li><code>help</code> muestra todos los comandos en una sola pantalla.</li>
+</ul>
+
+<h2>Explorar y ejecutar</h2>
+<table>
+<tr><th>Comando</th><th>Qué hace</th></tr>
+<tr><td><code>ls [-l] [path]</code></td><td>Lista un directorio (<code>*</code> = programa ejecutable, <code>/</code> = carpeta)</td></tr>
+<tr><td><code>cd path</code>, <code>pwd</code></td><td>Cambia / muestra el directorio actual: <code>cd sd:/games</code>, <code>cd ..</code>, <code>cd /</code></td></tr>
+<tr><td><code>cat</code>, <code>xxd</code>, <code>file</code></td><td>Muestra un archivo de texto, un volcado hexadecimal, o qué es un archivo (en un <code>.xex</code>: sus segmentos)</td></tr>
+<tr><td><code>run file</code>, o solo el nombre</td><td>Carga y ejecuta un programa: <code>run sd:/games/pitstop.xex</code>, o <code>pitstop</code> dentro de su carpeta</td></tr>
+<tr><td><code>df</code></td><td>Unidades presentes y su espacio libre</td></tr>
+</table>
+
+<h2>Discos, cartuchos y reinicio</h2>
+<table>
+<tr><th>Comando</th><th>Qué hace</th></tr>
+<tr><td><code>mount</code></td><td>Muestra qué hay en D1:–D4:, la ranura de cartucho y el ajuste de arranque</td></tr>
+<tr><td><code>mount d1: sd:/disks/x.atr</code></td><td>Pone una imagen de disco en una unidad (cualquiera, D1:–D4:)</td></tr>
+<tr><td><code>umount d1:</code></td><td>Vacía una unidad</td></tr>
+<tr><td><code>cart sd:/carts/x.car</code></td><td>Carga un cartucho y arranca con él. Desconéctalo desde el OSD (<strong>Detach</strong>) para volver a ASH (con <strong>Boot: ASH</strong>; si no, llegas a BASIC). <strong>Hard Reset</strong> reinicia el cartucho del juego, como al apagar y volver a encender.</td></tr>
+<tr><td><code>reboot</code></td><td>Un arranque en frío completo (se recargan las ROM y el cartucho se reinicia)</td></tr>
+<tr><td><code>basic</code> / <code>exit</code></td><td>Sale de ASH a Atari BASIC; el comando <code>DOS</code> de BASIC vuelve a ASH</td></tr>
+</table>
+
+<h2>Administrar archivos</h2>
+<p>ASH reemplaza al DOS. Su dispositivo <code>D:</code> sigue disponible para BASIC y para los programas que inicies desde él (<code>LOAD "D:GAME.BAS"</code>, guardar récords, etc.).</p>
+<table>
+<tr><th>Comando</th><th>Qué hace</th></tr>
+<tr><td><code>cp src dst</code></td><td>Copia entre discos, <code>h:</code> y la tarjeta SD; <code>dst</code> puede ser una carpeta</td></tr>
+<tr><td><code>rm</code>, <code>mv</code></td><td>Borra (con comodines en los discos: <code>rm d1:*.bak</code>), renombra o mueve</td></tr>
+<tr><td><code>mkdir</code>, <code>rmdir</code></td><td>Carpetas (en discos MyDOS y en la tarjeta SD)</td></tr>
+<tr><td><code>lock</code>, <code>unlock</code></td><td>Protege archivos en un disco</td></tr>
+<tr><td><code>format d2:</code></td><td>Borra un disco y lo deja como disco DOS 2 vacío (pregunta antes)</td></tr>
+<tr><td><code>edit file</code></td><td>Un editor de texto a pantalla completa: <kbd>Ctrl</kbd>+<kbd>S</kbd> guarda, <kbd>Ctrl</kbd>+<kbd>Q</kbd> sale</td></tr>
+<tr><td><code>lp file</code></td><td>Imprime un archivo de texto (llega al PC, ver <a href="13-pc-link.html">PC Link</a>)</td></tr>
+</table>
+<p>Los discos con escritura son de formato DOS 2 / MyDOS, de 720 sectores, densidad simple o doble; los discos más grandes son de solo lectura desde ASH.</p>
+<h3>Escribir en la tarjeta SD</h3>
+<p>La tarjeta SD es <strong>de solo lectura desde ASH por defecto</strong>. Escribe <code>sd rw</code> para permitir <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>mkdir</code> y <code>rmdir</code> en <code>sd:</code> hasta el siguiente arranque en frío; <code>sd ro</code> lo vuelve a desactivar y <code>sd</code> muestra el estado. Incluso con la escritura activada, el firmware se niega a borrar o sobrescribir los archivos ROM, <code>atari.ini</code>, <code>ASH.CAR</code> y cualquier archivo que esté montado o adjuntado en ese momento.</p>
+
+<h2>Red, a través del PC</h2>
+<p>Con la placa conectada a un computador y <code>ashterm</code> corriendo ahí en modo interactivo (ver <a href="13-pc-link.html#ashterm">PC Link → ashterm</a>), ASH puede usar la conexión a internet del PC. El Atari nunca habla con la red directamente: se lo pide al PC, que descarga el archivo y lo entrega por el enlace USB.</p>
+<table>
+<tr><th>Comando</th><th>Qué hace</th></tr>
+<tr><td><code>date</code></td><td>La fecha y hora del PC (después el Atari sigue contando; <code>date sync</code> vuelve a preguntar)</td></tr>
+<tr><td><code>wget URL [dest]</code></td><td>Descarga un archivo: a un disco, a <code>h:</code>, a la tarjeta SD (con <code>sd rw</code>), o <code>-</code> para mostrarlo</td></tr>
+<tr><td><code>ls</code>, <code>cat</code>, <code>run</code>, <code>cp</code></td><td>También aceptan URL <code>http://</code>, <code>https://</code> y <code>tnfs://</code></td></tr>
+</table>
+<pre><code>ls tnfs://tnfs.fujinet.online/ATARI
+run tnfs://tnfs.fujinet.online/ATARI/_lobby.xex
+cp tnfs://tnfs.fujinet.online/ATARI/games/x.atr sd:/disks/</code></pre>
+<p>TNFS es el protocolo de servidor de archivos que usa FujiNet; los servidores TNFS públicos tienen grandes bibliotecas de software que ASH recorre como si fueran un disco. Sin el programa del PC, estos comandos responden <em>no answer from the pc</em>; todo lo demás en ASH funciona sin PC.</p>
+
+<h2>Notas</h2>
+<ul>
+<li>Un programa que necesita un DOS específico (SpartaDOS, una llamada interna de DOS 2.x) puede no funcionar bajo ASH; en ese caso arranca ese DOS desde un disco.</li>
+<li>La parte residente de ASH usa <code>$0700</code>–<code>$1CFF</code> (la misma zona que DOS 2.5), así que todo lo que carga bajo DOS carga bajo ASH.</li>
+<li>ASH también existe como programa y disco de arranque (<code>ASH-TN.XEX</code>, <code>ASH-TN.ATR</code>), y en una edición genérica para cualquier Atari XL/XE (<code>ASH.XEX</code>, <code>ASH.ATR</code>), sin las funciones propias de esta placa.</li>
+</ul>
+
+<footer class="pn"><a href="13-pc-link.html">← Anterior: PC Link</a><a href="15-troubleshooting.html">Siguiente: Solución de problemas →</a></footer>
+</main></div></body></html>

@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>ASH shell</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Troubleshooting</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Known issues</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Appendix</a></li>
 </ol></nav>
 <main>
 <h1>3. Getting started</h1>
@@ -97,7 +98,7 @@ Leave User Code and IDCODE alone. Click <em>Save</em>.</li>
 <ul>
 <li>Install the driver from the Sipeed programmer package and reconnect the cable. Windows sometimes needs a second attempt after the first plug-in.</li>
 <li>Close any program that has the board's COM port open (the PC Link app, a terminal). The JTAG channel and the serial channel share the chip.</li>
-<li>Try another USB-C cable or port. Charge-only cables carry no data, and a marginal cable makes the board disconnect and reconnect (see <a href="14-troubleshooting.html">Troubleshooting</a>).</li>
+<li>Try another USB-C cable or port. Charge-only cables carry no data, and a marginal cable makes the board disconnect and reconnect (see <a href="15-troubleshooting.html">Troubleshooting</a>).</li>
 <li>In the cable settings, keep the frequency at <strong>2.5 MHz or lower</strong>; higher JTAG clocks are unreliable through the onboard chip.</li>
 </ul>
 <p>openFPGALoader can also run on Windows through MSYS2 (package <code>mingw-w64-ucrt-x86_64-openFPGALoader</code>) after replacing the driver of USB interface 0 with WinUSB using Zadig. It works, but it is more steps than the Programmer and a wrong Zadig choice can take the serial port down with it, so it is only worth it if you already use MSYS2.</p>
@@ -154,7 +155,7 @@ Leave User Code and IDCODE alone. Click <em>Save</em>.</li>
 <li><a href="05-options.html">Options &amp; atari.ini</a> — arrows as joystick, scanlines, picture position, stereo, RAM.</li>
 <li><a href="08-executables.html">Executables (.xex)</a> — run binary-load programs straight from the card.</li>
 <li><a href="13-pc-link.html">PC Link</a> — send files and type from the PC over the USB-C cable.</li>
-<li><a href="14-troubleshooting.html">Troubleshooting</a> — if something on this page did not go to plan.</li>
+<li><a href="15-troubleshooting.html">Troubleshooting</a> — if something on this page did not go to plan.</li>
 </ul>
 
 <footer class="pn"><a href="02-hardware.html">← Previous: Hardware setup</a><a href="04-osd.html">Next: The OSD menu →</a></footer>

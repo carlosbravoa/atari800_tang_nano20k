@@ -78,7 +78,7 @@ For a keyboard, the simplest is a **CH9350 USB-host board**: 5V, GND and its TX 
 Every item above is documented for users in the
 [manual](https://carlosbravoa.github.io/atari800_tang_nano20k/). Open problems and limitations:
 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) and
-[manual §15](https://carlosbravoa.github.io/atari800_tang_nano20k/15-known-issues.html).
+[manual §16](https://carlosbravoa.github.io/atari800_tang_nano20k/16-known-issues.html).
 
 > ⚠️ **Display compatibility:** jitter-free video needs a **non-standard timing** (1056×720
 > declared as 720p). Most TVs and monitors accept it directly; some strict/older displays and

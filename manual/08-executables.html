@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>ASH shell</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Troubleshooting</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Known issues</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Appendix</a></li>
 </ol></nav>
 <main>
 <h1>8. Executables (.xex)</h1>
@@ -65,7 +66,7 @@
 <h2>Limitations</h2>
 <ul>
 <li><strong>Page <code>$0600</code>–<code>$07FF</code>.</strong> The loader lives in this area while the program is being loaded. A program that itself loads into <code>$0600</code>–<code>$07FF</code> can clash with the running loader and fail to start. Relocating the loader to high RAM is a possible future fix.</li>
-<li><strong>Some demanding titles</strong> show intermittent graphics glitches — see <a href="15-known-issues.html">Known issues</a>. In particular a few PAL-timed games misbehave on this NTSC-only machine, whether loaded as <code>.xex</code> or otherwise.</li>
+<li><strong>Some demanding titles</strong> show intermittent graphics glitches — see <a href="16-known-issues.html">Known issues</a>. In particular a few PAL-timed games misbehave on this NTSC-only machine, whether loaded as <code>.xex</code> or otherwise.</li>
 <li>Only D1: can boot a <code>.xex</code>; it is not a DOS "L" load into a running system, but a cold boot.</li>
 </ul>
 

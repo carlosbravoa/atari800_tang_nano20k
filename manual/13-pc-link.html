@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
 <li><a href="13-pc-link.html" class="cur"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>ASH shell</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Troubleshooting</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Known issues</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Appendix</a></li>
 </ol></nav>
 <main>
 <h1>13. PC Link</h1>
@@ -66,7 +67,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <tr><td><code>kbd</code></td><td>Live remote keyboard: what you type on the PC lands on the Atari. Ctrl-] exits; pressing <kbd>F12</kbd> on the Atari's own keyboard opens the OSD and ends the session.</td><td><code>atari.py kbd</code></td></tr>
 <tr><td><code>eject</code></td><td>Pop the virtual <code>.xex</code> off D1:.</td><td><code>atari.py eject</code></td></tr>
 <tr><td><code>reset [--warm] [--keep]</code></td><td>Eject the virtual <code>.xex</code> and cold boot. <code>--warm</code> = warm start instead; <code>--keep</code> = do not eject first.</td><td><code>atari.py reset</code><br><code>atari.py reset --warm</code></td></tr>
-<tr><td><code>status</code></td><td>One-line telemetry: boot stage, ROM-load result, mounted drives, SIO counters, stack canary (see §13.10).</td><td><code>atari.py status</code></td></tr>
+<tr><td><code>status</code></td><td>One-line telemetry: boot stage, ROM-load result, mounted drives, SIO counters, stack canary (see §13.11).</td><td><code>atari.py status</code></td></tr>
 <tr><td><code>screen</code></td><td>Text dump of the Atari's screen (GRAPHICS 0), read from its own memory.</td><td><code>atari.py screen</code></td></tr>
 <tr><td><code>peek ADDR [LEN]</code></td><td>Hex-dump Atari memory (default 64 bytes).</td><td><code>atari.py peek 0x12 3</code> (the jiffy clock)</td></tr>
 <tr><td><code>poke ADDR B [B…]</code></td><td>Write bytes into Atari memory.</td><td><code>atari.py poke 0x2C8 0x35</code> (pink border)</td></tr>
@@ -95,7 +96,7 @@ python3 tools/atari.py ports       # list candidate ports</code></pre>
 <li>Typing reaches the machine only while the OSD menu is <strong>closed</strong> (an open menu eats keystrokes, the same masking rule as the physical keyboard).</li>
 <li>Characters map to the <strong>Atari</strong> keyboard layout.</li>
 <li>Speed is about 18 characters per second. After every RETURN the firmware settles for 250 ms, because BASIC tokenises the line while its keyboard buffer holds only one character; multi-line listings arrive intact.</li>
-<li>Long <code>type</code> sessions can occasionally drop the USB link. The tools self-heal and retry; for big programs prefer the H: + <code>ENTER</code> route in §13.11.</li>
+<li>Long <code>type</code> sessions can occasionally drop the USB link. The tools self-heal and retry; for big programs prefer the H: + <code>ENTER</code> route in §13.12.</li>
 </ul>
 
 <h2 id="printer">13.6 Printer capture</h2>
@@ -159,7 +160,44 @@ python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</co
 </ol>
 <div class="note"><strong>Status</strong>Work in progress: some text garbles under fast BBS bursts. Usable for BBS sessions, not yet release-grade under sustained load.</div>
 
-<h2 id="telemetry">13.10 Telemetry and remote debugging</h2>
+<h2 id="ashterm">13.10 The ASH terminal: <code>ashterm.py</code></h2>
+<p><code>ashterm</code> is the PC side of <a href="14-ash.html">ASH, the Atari shell</a>. It runs ASH commands from the PC with exact output and no typing, copies files in both directions, and serves the shell's network commands (<code>date</code>, <code>wget</code>, <code>tnfs://</code>). It talks to ASH through a small mailbox in Atari memory, so it needs ASH's board edition running on the Atari: the <code>ASH.CAR</code> cartridge (with <strong>Boot: ASH</strong> or attached from the OSD) or <code>ASH-TN.XEX</code>. It needs nothing beyond the <a href="#setup">one-time setup</a> above.</p>
+<h3>The terminal</h3>
+<pre><code>python3 tools/ashterm.py</code></pre>
+<p>The prompt shows ASH's current directory, exactly as on the TV. Type any ASH command; the output appears on the PC when the command has finished. (It is not streamed while the command runs: while ASH is reading a disk, ashterm keeps its own traffic on the cable to a minimum so that no disk transfer is disturbed.) <kbd>Ctrl</kbd>+<kbd>C</kbd> sends BREAK to the running command. <code>exit</code> or <kbd>Ctrl</kbd>+<kbd>D</kbd> leaves ashterm; the Atari keeps running.</p>
+<h3>One command, or a file transfer</h3>
+<div class="tbl"><table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>ashterm.py -c "ls -l sd:/games"</code></td><td>Run one command (repeat <code>-c</code> for several), print its output and exit. The exit status is 1 if a command failed, so it works in scripts.</td></tr>
+<tr><td><code>ashterm.py get SRC [DST]</code></td><td>Copy any file the Atari can read to the PC: from a disk, from <code>h:</code>, from a MyDOS folder or from the SD card (<code>get d1:game.bas</code>, <code>get sd:/games/x.xex</code>).</td></tr>
+<tr><td><code>ashterm.py put FILE [DST]</code></td><td>Send a PC file to <code>h:</code> (the card's <code>/HDD</code> folder), and if <code>DST</code> is given, copy it on from there (<code>put game.bas d1:</code>).</td></tr>
+<tr><td><code>ashterm.py log [N]</code></td><td>Show the last <code>N</code> lines of the session log (default 40). Needs no board.</td></tr>
+</table></div>
+<h3>Serving the shell's network commands</h3>
+<p>ASH's <code>date</code>, <code>wget</code> and its <code>http://</code>, <code>https://</code> and <code>tnfs://</code> URLs are done by the PC: the shell asks, ashterm fetches with the PC's own internet connection and delivers the file over the cable. This only works while ashterm is running. The interactive terminal serves requests at any time, including commands typed on the Atari keyboard while it sits at its prompt; a one-shot <code>-c</code> call serves them only during its own command. Without ashterm the shell waits about two seconds and says <em>no answer from the pc</em>.</p>
+<h3>Session log and plain-language errors</h3>
+<p>ashterm keeps a log at <code>~/.local/state/ashterm/ashterm.log</code> (<code>--log FILE</code> moves it, <code>--no-log</code> turns it off). It records every command and its result, every network request it served and the firmware's own messages: disks mounted, SD card and SIO errors, file transfers. Messages the firmware produced while ashterm was not running are added when it next connects, marked <code>old</code>. When a command fails, ashterm explains it under ASH's short message:</p>
+<pre><code>D4:/$ cat d2:x
+cat: i/o error 138
+ashterm: i/o error: CIO 138 = drive not responding. The drive did not answer in time:
+         nothing mounted on that drive, or the firmware was busy with a PC link transfer.
+D4:/$ mount d1: sd:/NOPE.ATR
+ashterm: firmware: sd: mount D1 failed 4  (mounting on D1 failed: no such file)</code></pre>
+<p>The second example matters: a mount or cartridge load is carried out by the firmware after ASH has already answered, so ASH alone cannot tell you it failed.</p>
+<h3>Things to know</h3>
+<ul>
+<li><strong>One program at a time.</strong> ashterm holds the cable to the board for as long as it runs; <code>atari.py</code>, the desktop app and <code>atari_net.py</code> cannot connect meanwhile (and vice versa). Leave ashterm before using them.</li>
+<li><strong>Messages and what they mean:</strong>
+<div class="tbl"><table>
+<tr><th>ashterm says</th><th>Check</th></tr>
+<tr><td><code>no board found on USB</code></td><td>The board is connected and powered, and no other program holds its port.</td></tr>
+<tr><td><code>the board answers but ASH-TN is not running on it</code></td><td>The Atari is at BASIC, in a game, or in the OSD. Boot ASH (see <a href="14-ash.html">chapter 14</a>).</td></tr>
+<tr><td><code>ASH is not at its prompt</code></td><td>ASH is busy on the Atari: a pager, the editor, or a program it started. Finish that on the Atari and retry.</td></tr>
+<tr><td><code>ASH-TN speaks mailbox version N, this ashterm needs M</code></td><td>The ASH build and this repository's tools do not match. Use the ASH release that matches this firmware release (or update both).</td></tr>
+</table></div></li>
+</ul>
+
+<h2 id="telemetry">13.11 Telemetry and remote debugging</h2>
 <p>The bridge answers everywhere, even at the ROM-failure screen, so a machine that will not boot can be examined and rescued from the PC.</p>
 <ul>
 <li><code>status</code> returns one line starting with <code>ST</code>. Fields: <code>u:</code> firmware uptime in ms; <code>bs:</code> boot stage (0 start, 1 SD ok, 2 options, 3 ROMs tried, 4 running); <code>rom:</code> ROM-load result; <code>x:</code> a virtual <code>.xex</code> is active; <code>m:</code> four digits, one per drive D1:–D4: (1 = mounted); <code>c:</code>/<code>s:</code>/<code>st:</code> last SIO command, sector and status; <code>e:</code> SIO error count; <code>cn:</code> the firmware stack canary; plus <code>hd:</code> and <code>nt:</code> counters for the H: handler and the network device.</li>
@@ -170,7 +208,7 @@ python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</co
 <li>Reading the answers: a <code>status</code> reply names the stage the firmware is stuck at. Total serial silence means the machine never reached the firmware at all — power-cycle it.</li>
 </ul>
 
-<h2 id="recipes">13.11 Recipes</h2>
+<h2 id="recipes">13.12 Recipes</h2>
 <h3>Paste a short BASIC program</h3>
 <p>Close the OSD, then:</p>
 <pre><code>python3 tools/atari.py type mygame.bas
@@ -186,13 +224,13 @@ RUN</code></pre>
 <pre><code>python3 tools/atari.py run build/demo.xex     # sends + cold-boots into it</code></pre>
 <p>The program shows up on the OSD's D1: line; <code>atari.py eject</code> removes it.</p>
 <h3>Get a listing from the Atari to the PC</h3>
-<p>There is no file download over the bridge yet, but the Atari can print to the PC:</p>
+<p><code>atari.py</code> has no file download (with ASH running, <a href="#ashterm"><code>ashterm.py get</code></a> fetches any file), but from BASIC the Atari can print to the PC:</p>
 <pre><code>LIST "P:"</code></pre>
 <p>It arrives as text in <code>atari.py log</code> or in the desktop app's Printer tab (then <em>Save as .txt</em>).</p>
 <h3>Share data files both ways</h3>
 <ul>
 <li>PC → Atari: <code>python3 tools/atari.py send --text data.txt HDD/DATA.TXT</code>, then <code>OPEN #1,4,0,"H:DATA.TXT"</code> on the Atari.</li>
-<li>Atari → PC: write to H: from BASIC (<code>OPEN #1,8,0,"H:OUT.TXT"</code> …). The file is now <code>/HDD/OUT.TXT</code> on the SD card; the PC reads it directly the next time it can read the card. (A bridge <code>get</code> command is planned.)</li>
+<li>Atari → PC: write to H: from BASIC (<code>OPEN #1,8,0,"H:OUT.TXT"</code> …). The file is now <code>/HDD/OUT.TXT</code> on the SD card; the PC reads it directly the next time it can read the card. With ASH running, <code>ashterm.py get h:out.txt</code> fetches it straight away.</li>
 </ul>
 <h3>Remote debugging</h3>
 <pre><code>python3 tools/atari.py status                 # boot stage, mounts, SIO health
@@ -200,19 +238,20 @@ python3 tools/atari.py screen                 # what's on the Atari screen now
 python3 tools/atari.py peek 0x12 3            # jiffy clock (is it alive?)
 python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink</code></pre>
 
-<h2 id="limits">13.12 Limitations</h2>
+<h2 id="limits">13.13 Limitations</h2>
 <div class="note"><strong>Use the tools that came with your firmware version</strong>Since v3.2.1 the bridge only accepts framed commands (a sync byte, the command, and a check byte), so stray bytes on the USB link can no longer trigger a reset or a memory write. The <code>tools/</code> folder of the same release always matches; an older <code>atari.py</code> against a newer firmware simply gets no answer.</div>
 <ul>
 <li><strong>H: is session-scoped:</strong> RESET clears it; re-run <code>hdd-install</code>. It installs above MEMLO and coexists with a resident DOS, but BASIC only picks up the raised MEMLO on <code>NEW</code>.</li>
-<li><strong>No file download from the SD card over the bridge yet.</strong> Atari → PC text goes via the printer path (<code>LIST "P:"</code> / <code>LPRINT</code>); a <code>get</code> command is planned.</li>
+<li><strong><code>atari.py</code> has no file download.</strong> With ASH running, <a href="#ashterm"><code>ashterm.py get</code></a> copies any file the Atari can read to the PC; without it, Atari → PC text goes via the printer path (<code>LIST "P:"</code> / <code>LPRINT</code>).</li>
+<li><strong><code>send</code> will not overwrite a file that is in use</strong> (since v3.3): a disk image mounted on a drive, the attached cartridge, the virtual <code>.xex</code>, a file open on H:. The firmware refuses with <code>firmware refused (NAK)</code>; unmount or detach first. <code>ATARIXL.ROM</code>, <code>BASIC.ROM</code> and <code>atari.ini</code> can always be replaced, so a card with broken ROMs can be rescued.</li>
 <li><strong>The <code>HDD.ATR</code> automount runs once at firmware start.</strong> After you <code>send</code> a new one, power-cycle the board.</li>
 <li><strong><code>type</code> needs the OSD closed.</strong></li>
 <li><strong>Long <code>type</code> sessions</strong> can occasionally drop the USB link; the tools self-heal and retry, but the H: + <code>ENTER</code> route avoids it for big programs.</li>
-<li><strong>Known issue:</strong> <kbd>F12</kbd> can be unresponsive while a PC serial session is engaged; the S2 button still opens the OSD (see <a href="15-known-issues.html">chapter 15</a>).</li>
+<li><strong>Known issue:</strong> <kbd>F12</kbd> can be unresponsive while a PC serial session is engaged; the S2 button still opens the OSD (see <a href="16-known-issues.html">chapter 16</a>).</li>
 </ul>
 
-<h2 id="recovery">13.13 If the bridge stops answering</h2>
+<h2 id="recovery">13.14 If the bridge stops answering</h2>
 <div class="tip"><strong>Recovery</strong>If the bridge chip stops answering after a USB storm (for example a very long typing session), unplug the board's USB cable, wait ten seconds, and plug it back in. The Atari side is unaffected.</div>
 
-<footer class="pn"><a href="12-ram.html">← Previous: 12. RAM expansion</a><a href="14-troubleshooting.html">Next: 14. Troubleshooting →</a></footer>
+<footer class="pn"><a href="12-ram.html">← Previous: 12. RAM expansion</a><a href="14-ash.html">Next: 14. ASH, the Atari shell →</a></footer>
 </main></div></body></html>

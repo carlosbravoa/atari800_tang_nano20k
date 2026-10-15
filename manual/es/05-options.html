@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>Shell ASH</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Solución de problemas</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Problemas conocidos</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Apéndice</a></li>
 </ol></nav>
 <main>
 <h1>5. Opciones y atari.ini</h1>
@@ -92,7 +93,7 @@
 <tr><th>Se aplica</th><td>En el siguiente arranque en frío</td></tr>
 <tr><th>Clave ini</th><td><code>modem=0</code> / <code>modem=1</code></td></tr>
 </table></div>
-<p>Soporte opcional del dispositivo serial <strong>R:</strong> (módem al estilo del 850) a través del cable USB-C, para que un programa de terminal como BobTerm pueda llamar a una BBS por telnet a través del PC. En OFF (por defecto) no tiene ningún efecto en el uso normal. Esta función está en desarrollo; ver <a href="13-pc-link.html">PC Link</a> y <a href="15-known-issues.html">Problemas conocidos</a>.</p>
+<p>Soporte opcional del dispositivo serial <strong>R:</strong> (módem al estilo del 850) a través del cable USB-C, para que un programa de terminal como BobTerm pueda llamar a una BBS por telnet a través del PC. En OFF (por defecto) no tiene ningún efecto en el uso normal. Esta función está en desarrollo; ver <a href="13-pc-link.html">PC Link</a> y <a href="16-known-issues.html">Problemas conocidos</a>.</p>
 <p>La opción Modem necesita dos archivos en la tarjeta SD que este proyecto no incluye: el handler 850 de Altirra y su relocalizador (obra de Avery Lee, redistribuida por el proyecto FujiNet). Descarga <code>850handler.bin</code> (1281 bytes) y <code>850relocator.bin</code> (341 bytes) del repositorio de firmware de FujiNet (<code>data/webui/device_specific/BUILD_ATARI/</code>) y colócalos en la tarjeta como <code>/PC/850HAND.BIN</code> y <code>/PC/850REL.BIN</code>, por ejemplo con <code>atari.py send 850handler.bin PC/850HAND.BIN</code>. El firmware se los entrega al Atari en el arranque en frío cuando Modem está en ON.</p>
 
 <h2>Keyboard</h2>

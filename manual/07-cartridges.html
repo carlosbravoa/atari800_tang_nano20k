@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Troubleshooting</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Known issues</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Appendix</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>ASH shell</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Troubleshooting</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Known issues</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Appendix</a></li>
 </ol></nav>
 <main>
 <h1>7. Cartridges</h1>
@@ -35,7 +36,7 @@
 <tr><td><code>.car</code></td><td><strong>4 MB</strong></td><td>The 4 MB cartridge window in the board's SDRAM (the chip is 8 MB; the rest holds Atari RAM and the ROMs)</td></tr>
 <tr><td><code>.rom</code> (raw)</td><td><strong>16 KB</strong></td><td>A raw dump carries no mapper information, so only the simple unbanked sizes — 2, 4, 8 and 16 KB — can be loaded</td></tr>
 </table></div>
-<p>A <code>.car</code> file is a raw dump with a small header that names the cartridge <em>type</em> (its bank-switching scheme). 52 CAR types are supported, from plain 8K/16K carts to XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, SIC!, Turbosoft and MegaCart up to 4 MB. The full list is in the <a href="16-appendix.html#a1">Appendix</a>.</p>
+<p>A <code>.car</code> file is a raw dump with a small header that names the cartridge <em>type</em> (its bank-switching scheme). 52 CAR types are supported, from plain 8K/16K carts to XEGS, switchable XEGS, AtariMax, OSS, SDX, Williams, SIC!, Turbosoft and MegaCart up to 4 MB. The full list is in the <a href="17-appendix.html#a1">Appendix</a>.</p>
 <p>A raw <code>.rom</code> larger than 16 KB is refused with <code>Raw .ROM must be 2/4/8/16K — use a .CAR instead</code>: without a header the firmware cannot know which mapper the cartridge uses. Convert bigger dumps to <code>.car</code> with any Atari cartridge tool so the type is stored in the header.</p>
 
 <h2>Why the 4 MB limit</h2>
@@ -77,7 +78,7 @@
 <p>With Options → <strong>Boot</strong> set to <code>ASH</code> (see <a href="05-options.html#boot">Options</a>), <code>/ASH.CAR</code> on the SD card becomes the machine's default cartridge: whenever a cold boot finds the slot empty — power-on, <strong>7) Hard Reset</strong>, <strong>Detach</strong>, a PC Link <code>reset</code> — the firmware attaches it again, so the Atari comes up in the <a href="https://github.com/carlosbravoa/atari800-atari-shell">Atari Shell</a>. Attach a game cartridge and it boots as usual; Detach then returns to the shell rather than to BASIC. <strong>5) Boot to BASIC</strong>, <strong>Attach .xex</strong> and <code>atari.py run</code> each take the ASH cartridge out for that one boot. If <code>ASH.CAR</code> is missing or unreadable the machine boots BASIC as if the option were off. With <code>Boot</code> at <code>BASIC</code> (the default) nothing described here happens.</p>
 
 <h2>Supported CAR types</h2>
-<p>The 52 supported CAR type ids, with their names, are listed in the <a href="16-appendix.html#a1">Appendix</a>. Unsupported types are rejected on screen with their id, so you always know which one you hit.</p>
+<p>The 52 supported CAR type ids, with their names, are listed in the <a href="17-appendix.html#a1">Appendix</a>. Unsupported types are rejected on screen with their id, so you always know which one you hit.</p>
 
 <footer class="pn"><a href="06-disks.html">← Previous: Disks</a><a href="08-executables.html">Next: Executables (.xex) →</a></footer>
 </main></div></body></html>

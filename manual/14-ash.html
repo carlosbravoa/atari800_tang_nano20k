@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>14. ASH, the Atari shell — Tang Atari 800 manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top"><a class="brand" href="index.html">Tang Atari 800</a><span class="sub">User manual</span><a class="lang" href="es/14-ash.html" lang="es">Español</a></header>
+<div class="wrap">
+<nav class="side" aria-label="Chapters"><ol>
+<li><a href="index.html"><span class="num">≡</span>Contents</a></li>
+<li><a href="01-overview.html"><span class="num">1</span>Overview</a></li>
+<li><a href="02-hardware.html"><span class="num">2</span>Hardware setup</a></li>
+<li><a href="03-getting-started.html"><span class="num">3</span>Getting started</a></li>
+<li><a href="04-osd.html"><span class="num">4</span>The OSD menu</a></li>
+<li><a href="05-options.html"><span class="num">5</span>Options &amp; atari.ini</a></li>
+<li><a href="06-disks.html"><span class="num">6</span>Disks</a></li>
+<li><a href="07-cartridges.html"><span class="num">7</span>Cartridges</a></li>
+<li><a href="08-executables.html"><span class="num">8</span>Executables (.xex)</a></li>
+<li><a href="09-keyboard.html"><span class="num">9</span>Keyboard</a></li>
+<li><a href="10-video.html"><span class="num">10</span>Video</a></li>
+<li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
+<li><a href="12-ram.html"><span class="num">12</span>RAM expansion</a></li>
+<li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
+<li><a href="14-ash.html" class="cur"><span class="num">14</span>ASH shell</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Troubleshooting</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Known issues</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Appendix</a></li>
+</ol></nav>
+<main>
+<h1>14. ASH, the Atari shell</h1>
+<p class="lead">ASH is an optional operating system for this machine: power on and you land at a Unix-style command line instead of BASIC. From there you browse the whole SD card, mount disks, run programs and cartridges, manage files, edit text and, with the PC connected, fetch files from the internet and from FujiNet TNFS servers.</p>
+
+<h2>Turning it on (and off)</h2>
+<ol>
+<li>Put <code>ASH.CAR</code> in the <strong>root of the SD card</strong>, with exactly that name. Download it from the <a href="https://github.com/carlosbravoa/atari800-atari-shell/releases">ASH releases page</a>.</li>
+<li>Open the OSD → <strong>Options</strong> → <strong>Boot</strong> → <strong>ASH</strong> → <strong>Save changes</strong>.</li>
+<li>Power-cycle (or Hard Reset). The machine boots straight into the shell:</li>
+</ol>
+<pre><code>ASH 1.3 TN - the Atari SHell
+Type help for commands or basic to exit
+D4:/$</code></pre>
+<p>Set <strong>Boot</strong> back to <strong>BASIC</strong> for the classic <code>READY</code> prompt. If <code>ASH.CAR</code> is missing or damaged, the machine silently boots to BASIC as before. You can also try ASH without changing the option: <strong>Cart</strong> → <strong>Attach</strong> → <code>ASH.CAR</code>.</p>
+<div class="tip"><strong>Why a cartridge?</strong> ASH copies itself into RAM in a fraction of a second and then switches the cartridge off, so games see a normal machine with <code>$A000</code>–<code>$BFFF</code> free. RESET always brings you back to the prompt.</div>
+
+<h2>The prompt</h2>
+<p>The badge shows where you are: <code>D1:/</code>–<code>D4:/</code> are the disk drives, <code>H:/</code> is the SD card's <code>/HDD</code> folder, and <code>SD:/games</code> is a folder anywhere on the SD card. Change with <code>cd</code>, or type a drive alone (<code>d2:</code>).</p>
+<ul>
+<li><kbd>Tab</kbd> completes file names; <kbd>↑</kbd>/<kbd>↓</kbd> recall earlier commands; <kbd>Ctrl</kbd>+<kbd>U</kbd> clears the line; <kbd>Break</kbd> cancels a command.</li>
+<li>Names with spaces go in double quotes: <code>run "sd:/games/Candy Crunch.xex"</code>.</li>
+<li><code>help</code> lists every command on one screen.</li>
+</ul>
+
+<h2>Browsing and running</h2>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>ls [-l] [path]</code></td><td>List a directory (<code>*</code> = runnable program, <code>/</code> = folder)</td></tr>
+<tr><td><code>cd path</code>, <code>pwd</code></td><td>Change / show the current directory: <code>cd sd:/games</code>, <code>cd ..</code>, <code>cd /</code></td></tr>
+<tr><td><code>cat</code>, <code>xxd</code>, <code>file</code></td><td>Show a text file, a hex dump, or what a file is (for a <code>.xex</code>: its segments)</td></tr>
+<tr><td><code>run file</code>, or just the name</td><td>Load and run a program: <code>run sd:/games/pitstop.xex</code>, or <code>pitstop</code> in its folder</td></tr>
+<tr><td><code>df</code></td><td>Drives present and their free space</td></tr>
+</table>
+
+<h2>Disks, cartridges and rebooting</h2>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>mount</code></td><td>Show what is on D1:–D4:, the cartridge slot and the boot setting</td></tr>
+<tr><td><code>mount d1: sd:/disks/x.atr</code></td><td>Put a disk image in a drive (any drive, D1:–D4:)</td></tr>
+<tr><td><code>umount d1:</code></td><td>Empty a drive</td></tr>
+<tr><td><code>cart sd:/carts/x.car</code></td><td>Load a cartridge and boot it. Detach it from the OSD to come back to ASH (with <strong>Boot: ASH</strong>; otherwise you land in BASIC). <strong>Hard Reset</strong> restarts the game cartridge, like a power cycle.</td></tr>
+<tr><td><code>reboot</code></td><td>A full cold boot (ROMs reloaded, cartridge power-cycled)</td></tr>
+<tr><td><code>basic</code> / <code>exit</code></td><td>Leave ASH for Atari BASIC; BASIC's <code>DOS</code> command returns to ASH</td></tr>
+</table>
+
+<h2>Managing files</h2>
+<p>ASH replaces DOS. Its <code>D:</code> device stays available to BASIC and to programs you start from it (<code>LOAD "D:GAME.BAS"</code>, saving high scores, and so on).</p>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>cp src dst</code></td><td>Copy between disks, <code>h:</code> and the SD card; <code>dst</code> may be a folder</td></tr>
+<tr><td><code>rm</code>, <code>mv</code></td><td>Delete (wildcards on disks: <code>rm d1:*.bak</code>), rename or move</td></tr>
+<tr><td><code>mkdir</code>, <code>rmdir</code></td><td>Folders (on MyDOS disks and on the SD card)</td></tr>
+<tr><td><code>lock</code>, <code>unlock</code></td><td>Protect files on a disk</td></tr>
+<tr><td><code>format d2:</code></td><td>Erase a disk to an empty DOS 2 disk (asks first)</td></tr>
+<tr><td><code>edit file</code></td><td>A full-screen text editor: <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, <kbd>Ctrl</kbd>+<kbd>Q</kbd> quits</td></tr>
+<tr><td><code>lp file</code></td><td>Print a text file (it arrives on the PC, see <a href="13-pc-link.html">PC Link</a>)</td></tr>
+</table>
+<p>Writable disks are DOS 2 / MyDOS format, 720 sectors, single or double density; larger disks are read-only from ASH.</p>
+<h3>Writing to the SD card</h3>
+<p>The SD card is <strong>read-only from ASH by default</strong>. Type <code>sd rw</code> to allow <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>mkdir</code> and <code>rmdir</code> on <code>sd:</code> until the next cold boot; <code>sd ro</code> turns it off again and <code>sd</code> shows the state. Even with writes enabled, the firmware refuses to delete or overwrite the ROM files, <code>atari.ini</code>, <code>ASH.CAR</code> and any file that is currently mounted or attached.</p>
+
+<h2>Network, through the PC</h2>
+<p>With the board connected to a computer and <code>ashterm</code> running there in its interactive mode (see <a href="13-pc-link.html#ashterm">PC Link → ashterm</a>), ASH can use the PC's internet connection. The Atari never talks to the network itself: it asks the PC, which fetches the file and delivers it through the USB link.</p>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>date</code></td><td>The PC's date and time (the Atari keeps counting afterwards; <code>date sync</code> asks again)</td></tr>
+<tr><td><code>wget URL [dest]</code></td><td>Download a file: onto a disk, into <code>h:</code>, onto the SD card (with <code>sd rw</code>), or <code>-</code> to show it</td></tr>
+<tr><td><code>ls</code>, <code>cat</code>, <code>run</code>, <code>cp</code></td><td>Also accept <code>http://</code>, <code>https://</code> and <code>tnfs://</code> URLs</td></tr>
+</table>
+<pre><code>ls tnfs://tnfs.fujinet.online/ATARI
+run tnfs://tnfs.fujinet.online/ATARI/_lobby.xex
+cp tnfs://tnfs.fujinet.online/ATARI/games/x.atr sd:/disks/</code></pre>
+<p>TNFS is the file-server protocol used by FujiNet; public TNFS servers carry large software libraries that ASH browses like a disk. Without the PC program these commands answer <em>no answer from the pc</em>; everything else in ASH works with no PC at all.</p>
+
+<h2>Notes</h2>
+<ul>
+<li>A program that needs a specific DOS (SpartaDOS, a DOS 2.x internal call) may not run under ASH; boot that DOS from a disk instead.</li>
+<li>ASH's resident part uses <code>$0700</code>–<code>$1CFF</code> (the same area as DOS 2.5), so anything that loads under DOS loads under ASH.</li>
+<li>ASH also exists as a plain program and boot disk (<code>ASH-TN.XEX</code>, <code>ASH-TN.ATR</code>), and in a generic edition for any Atari XL/XE (<code>ASH.XEX</code>, <code>ASH.ATR</code>), without the board-specific features.</li>
+</ul>
+
+<footer class="pn"><a href="13-pc-link.html">← Previous: 13. PC Link</a><a href="15-troubleshooting.html">Next: 15. Troubleshooting →</a></footer>
+</main></div></body></html>

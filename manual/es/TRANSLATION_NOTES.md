@@ -52,6 +52,7 @@ numbers, key names, file names, limits, warnings). Never drop a sentence, never 
 | Audio | Audio |
 | RAM expansion | Ampliación de RAM |
 | PC Link | PC Link |
+| ASH shell (nav) / ASH, the Atari shell (title) | Shell ASH / ASH, el shell del Atari |
 | Troubleshooting | Solución de problemas |
 | Known issues | Problemas conocidos |
 | Appendix | Apéndice |
@@ -132,9 +133,10 @@ Nav (identical on every page; put class="cur" on the current page's <a>):
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>Shell ASH</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Solución de problemas</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Problemas conocidos</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Apéndice</a></li>
 </ol></nav>
 ```
 

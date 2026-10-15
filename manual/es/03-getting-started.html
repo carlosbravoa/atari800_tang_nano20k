@@ -21,9 +21,10 @@
 <li><a href="11-audio.html"><span class="num">11</span>Audio</a></li>
 <li><a href="12-ram.html"><span class="num">12</span>Ampliación de RAM</a></li>
 <li><a href="13-pc-link.html"><span class="num">13</span>PC Link</a></li>
-<li><a href="14-troubleshooting.html"><span class="num">14</span>Solución de problemas</a></li>
-<li><a href="15-known-issues.html"><span class="num">15</span>Problemas conocidos</a></li>
-<li><a href="16-appendix.html"><span class="num">A</span>Apéndice</a></li>
+<li><a href="14-ash.html"><span class="num">14</span>Shell ASH</a></li>
+<li><a href="15-troubleshooting.html"><span class="num">15</span>Solución de problemas</a></li>
+<li><a href="16-known-issues.html"><span class="num">16</span>Problemas conocidos</a></li>
+<li><a href="17-appendix.html"><span class="num">A</span>Apéndice</a></li>
 </ol></nav>
 <main>
 <h1>3. Primeros pasos</h1>
@@ -97,7 +98,7 @@ No toques User Code ni IDCODE. Haz clic en <em>Save</em>.</li>
 <ul>
 <li>Instala el driver del paquete de programador de Sipeed y vuelve a conectar el cable. A veces Windows necesita un segundo intento después de la primera conexión.</li>
 <li>Cierra cualquier programa que tenga abierto el puerto COM de la placa (la aplicación del PC Link, un terminal). El canal JTAG y el canal serial comparten el chip.</li>
-<li>Prueba con otro cable o puerto USB-C. Los cables solo de carga no llevan datos, y un cable en mal estado hace que la placa se desconecte y reconecte (ver <a href="14-troubleshooting.html">Solución de problemas</a>).</li>
+<li>Prueba con otro cable o puerto USB-C. Los cables solo de carga no llevan datos, y un cable en mal estado hace que la placa se desconecte y reconecte (ver <a href="15-troubleshooting.html">Solución de problemas</a>).</li>
 <li>En la configuración del cable, deja la frecuencia en <strong>2.5 MHz o menos</strong>; relojes JTAG más altos no son confiables a través del chip de la placa.</li>
 </ul>
 <p>openFPGALoader también puede correr en Windows mediante MSYS2 (paquete <code>mingw-w64-ucrt-x86_64-openFPGALoader</code>) después de reemplazar con Zadig el driver de la interfaz USB 0 por WinUSB. Funciona, pero son más pasos que el Programmer y una elección equivocada en Zadig puede dejar sin funcionar el puerto serial, así que solo vale la pena si ya usas MSYS2.</p>
@@ -154,7 +155,7 @@ No toques User Code ni IDCODE. Haz clic en <em>Save</em>.</li>
 <li><a href="05-options.html">Opciones y atari.ini</a>: flechas como joystick, scanlines, posición de la imagen, estéreo, RAM.</li>
 <li><a href="08-executables.html">Ejecutables (.xex)</a>: ejecuta programas de carga binaria directamente desde la tarjeta.</li>
 <li><a href="13-pc-link.html">PC Link</a>: envía archivos y teclea desde el PC por el cable USB-C.</li>
-<li><a href="14-troubleshooting.html">Solución de problemas</a>: si algo de esta página no salió como se esperaba.</li>
+<li><a href="15-troubleshooting.html">Solución de problemas</a>: si algo de esta página no salió como se esperaba.</li>
 </ul>
 
 <footer class="pn"><a href="02-hardware.html">← Anterior: Instalación del hardware</a><a href="04-osd.html">Siguiente: El menú OSD →</a></footer>
