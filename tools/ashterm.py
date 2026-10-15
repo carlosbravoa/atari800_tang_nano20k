@@ -16,15 +16,21 @@ and the ASH.CAR cartridge). Uses only AtariLink.peek/poke/send from atari_link.p
                                `cp` it to DST on the Atari (default: stays on h:)
 
 While a command runs, and while the interactive prompt is idle, the PC also
-answers the shell's `pc` ping and its `date` request (local PC time).
+answers the shell's `pc` ping, its `date` request (local PC time) and its
+network requests (`wget URL [dest]`: the PC fetches on its own HTTP stack and
+delivers the file over the bridge's PUT — straight to an sd: path, or to h:
+for the shell to copy on; `ls tnfs://…` is next).
 
 Exit status 1 on a failed command. Errors say what to check: the board on
 USB, ASH-TN running, or the shell being busy (pager / editor / a program).
 """
 import argparse
 import os
+import re
 import sys
 import time
+import urllib.request
+import urllib.error
 
 from atari_link import AtariLink, LinkError
 
@@ -33,6 +39,13 @@ MB_CMDREQ, MB_STATUS, MB_ERR, MB_CIOERR = 0x643, 0x644, 0x645, 0x646
 MB_OUT, MB_CAP, MB_LEN, MB_SEQ = 0x647, 0x649, 0x64B, 0x64D
 MB_PING, MB_PONG, MB_ABORT, MB_RAM, MB_MORE = 0x64E, 0x64F, 0x650, 0x651, 0x653
 MB_TIMEREQ, MB_TIME = 0x654, 0x655          # `date`: shell sets TIMEREQ=1; PC writes yy mm dd hh mm ss, clears it
+HDR_LEN = 0x91                              # one header peek covers $0640..$06D0 (incl. NETREQ)
+# wget / tnfs: mailbox requests served here, delivered by the bridge PUT (never N:)
+MB_NETREQ, MB_NETST, MB_NETLEN = 0x6D0, 0x6D1, 0x6D2   # req 1 fetch / 2 listing; st; len LE24
+MB_NETDEST, MB_NETNAME = 0x6D5, 0x6D6                  # dest 0 sd: path / 1 /HDD/NAME / 2 text@$8200; NAME
+NET_URL, NET_DEST, NET_TEXT, NET_TEXT_MAX = 0x8000, 0x8100, 0x8200, 0x3E00
+NET_CAP = 4 * 1024 * 1024
+NST_OK, NST_NETERR, NST_TOOBIG, NST_NOTFILE, NST_REFUSED, NST_UNSUP = 1, 2, 3, 4, 5, 6
 MB_CMD, MB_PROMPT = 0x660, 0x6B0
 RAMWIN = 0x8000
 EOL = 0x9B
@@ -106,10 +119,10 @@ class Ash:
 
     def alive(self):
         try:
-            self.hdr = self.l.peek(MB, 0x20)
+            self.hdr = self.l.peek(MB, HDR_LEN)
         except LinkError:
             try:                                   # the first call after idle often misses
-                self.hdr = self.l.peek(MB, 0x20)
+                self.hdr = self.l.peek(MB, HDR_LEN)
             except LinkError:
                 return False
         return self.hdr[:2] == b"AS"
@@ -126,18 +139,85 @@ class Ash:
             self.poke(MB_TIME, bytes([t.tm_year - 2000, t.tm_mon, t.tm_mday,
                                       t.tm_hour, t.tm_min, t.tm_sec]))
             self.poke(MB_TIMEREQ, b"\x00")
+        if hdr[MB_NETREQ - MB] in (1, 2):
+            self.serve_net(hdr[MB_NETREQ - MB])
+
+    # ── wget / tnfs server ────────────────────────────────────────────────────
+    def _cstr(self, addr, n):
+        return self.rpeek(addr, n).split(b"\0")[0].decode("latin1")
+
+    @staticmethod
+    def hdd_name(url):
+        """An 8.3 /HDD name from the URL's last path component (hdd_path rules)."""
+        last = url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "FILE"
+        base, _, ext = last.rpartition(".") if "." in last else (last, "", "")
+        clean = lambda t, n: (re.sub(r"[^A-Z0-9_-]", "", t.upper())[:n] or "X")
+        name = clean(base, 8)
+        return name + ("." + clean(ext, 3) if ext else "")
+
+    @staticmethod
+    def fetch(url):
+        """GET url on the PC. Returns (status, data, content_type)."""
+        req = urllib.request.Request(url, headers={"User-Agent": "ashterm/1.0 (Atari 800 Tang Nano 20K)"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                if r.status != 200:
+                    return NST_NETERR, b"", ""
+                ctype = (r.headers.get("Content-Type") or "").lower()
+                data = r.read(NET_CAP + 1)
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError):
+            return NST_NETERR, b"", ""
+        if len(data) > NET_CAP:
+            return NST_TOOBIG, b"", ctype
+        return NST_OK, data, ctype
+
+    def serve_net(self, req):
+        """Serve one mailbox network request (wget / ls of a URL); clears NETREQ last."""
+        url = self._cstr(NET_URL, 256)
+        dest = self._cstr(NET_DEST, 128)
+        st, n, dtype, name = NST_UNSUP, 0, 0, ""
+        scheme = url.split("://", 1)[0].lower() if "://" in url else ""
+        if req == 1 and scheme in ("http", "https"):
+            st, data, ctype = self.fetch(url)
+            html = ctype.startswith("text/html")
+            if st == NST_OK and html and not url.lower().split("?")[0].endswith((".html", ".htm")):
+                st = NST_NOTFILE                       # an error/landing page, not the file
+            if st == NST_OK:
+                d = dest.strip()
+                dl = d.lower()
+                if dl.startswith("sd:/"):
+                    target, dtype = d[3:], 0            # final path on the card
+                elif dl.startswith("h:"):
+                    name = self.hdd_name(d[2:]); target, dtype = "/HDD/" + name, 1
+                else:                                   # d<n>:NAME or '-': stage on h:, shell copies/cats
+                    name = self.hdd_name(url); target, dtype = "/HDD/" + name, 1
+                if len(target) > 63:
+                    st = NST_UNSUP
+                else:
+                    try:
+                        self._io(self.l.send, data, target)
+                        n = len(data)
+                    except AshError:
+                        st = NST_REFUSED                # the firmware NAKed the PUT (guarded file)
+        elif scheme == "tnfs":
+            st = NST_UNSUP                              # TNFS: next step (needs a test server)
+        self.poke(MB_NETLEN, n.to_bytes(3, "little"))
+        self.poke(MB_NETDEST, bytes([dtype]))
+        self.poke(MB_NETNAME, (name.encode("ascii")[:15] + b"\0").ljust(16, b"\0"))
+        self.poke(MB_NETST, bytes([st]))
+        self.poke(MB_NETREQ, b"\x00")                   # last: the shell is waiting on this
 
     def idle_service(self):
         """One idle-time poll: answer PING / TIMEREQ raised from the Atari keyboard
         while no command of ours is running (interactive prompt). Never raises."""
         try:
-            self.pong(self.l.peek(MB, 0x20))
+            self.pong(self.l.peek(MB, HDR_LEN))
         except LinkError:
             pass
 
     def run(self, line, sink=None, timeout=120):
         """Run one command; stream its output to sink(text). Returns (status, err, cioerr)."""
-        hdr = self.peek(MB, 0x20)
+        hdr = self.peek(MB, HDR_LEN)
         if hdr[:2] != b"AS":
             raise AshError(NO_ASH)
         if hdr[MB_STATUS - MB] == 0 or hdr[MB_CMDREQ - MB]:
@@ -150,7 +230,7 @@ class Ash:
         base = int.from_bytes(out, "little")
         got, t0, started = 0, time.time(), False
         while True:
-            hdr = self.peek(MB, 0x20)
+            hdr = self.peek(MB, HDR_LEN)
             self.pong(hdr)
             n = int.from_bytes(hdr[MB_LEN - MB:MB_LEN - MB + 2], "little")
             st = hdr[MB_STATUS - MB]
@@ -180,7 +260,7 @@ class Ash:
             st, err, cio = self.run(cmd, sink=msgs.append)
             if st != 1:
                 raise AshError("".join(msgs).strip() or f"getw failed ({err}/{cio})")
-            hdr = self.peek(MB, 0x20)
+            hdr = self.peek(MB, HDR_LEN)
             n = int.from_bytes(hdr[MB_RAM - MB:MB_RAM - MB + 2], "little")
             for off in range(0, n, 1024):
                 data += self.rpeek(RAMWIN + off, min(1024, n - off))
@@ -278,4 +358,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BrokenPipeError:                     # `ashterm -c ... | head`: reader went away
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(0)
