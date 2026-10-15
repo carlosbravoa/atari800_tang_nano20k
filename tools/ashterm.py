@@ -15,8 +15,11 @@ and the ASH.CAR cartridge). Uses only AtariLink.peek/poke/send from atari_link.p
   ashterm put FILE [DST]       send a file to h: (the SD /HDD folder), then
                                `cp` it to DST on the Atari (default: stays on h:)
 
-While a command runs, and while the interactive prompt is idle, the PC also
-answers the shell's `pc` ping, its `date` request (local PC time) and its
+Output is shown when a command completes (not progressively): while the shell
+streams SIO (listings, cat, cp, getw) the PC keeps its bridge traffic to a
+~1.5 ms status poll, because a long bridge reply makes the firmware miss an
+SIO frame and a chunk of the stream is lost. While a command runs, and while
+the interactive prompt is idle, the PC also answers the shell's `pc` ping, its `date` request (local PC time) and its
 network requests (`wget URL [dest]`: the PC fetches on its own HTTP stack and
 delivers the file over the bridge's PUT — straight to an sd: path, or to h:
 for the shell to copy on; `ls`/`cat`/`run`/`cp` of a tnfs://host/path URL
@@ -233,6 +236,15 @@ class Ash:
     def poke(self, a, data):
         return self._io(self.l.poke, a, data)
 
+    def poll_window(self):
+        """While a command RUNS the shell may be streaming SIO (listings, cat, getw,
+        cp) and every bridge byte is a chance to make the firmware miss an SIO frame.
+        So the running-command poll is a 17-byte peek of $0644..$0654 (STATUS, ERR,
+        CIOERR, OUTPTR/CAP/LEN, SEQ, PING/PONG, ABORT, RAM/MORE, TIMEREQ) — ~1.5 ms
+        on the wire — padded into the 32-byte header layout."""
+        w = self.peek(MB + 4, 17)
+        return b"\0" * 4 + w + b"\0" * (0x20 - 4 - 17)
+
     def peek(self, a, n):
         """A stable read: the link can serve stale bytes, so read until two agree."""
         last = None
@@ -412,41 +424,38 @@ class Ash:
         base = int.from_bytes(out, "little")
         got, t0, started, done_seen = 0, time.time(), False, False
         while True:
-            hdr = self.peek(MB, HDR_LEN)
+            hdr = self.poll_window()
             self.pong(hdr)
             n = int.from_bytes(hdr[MB_LEN - MB:MB_LEN - MB + 2], "little")
             st = hdr[MB_STATUS - MB]
             if st == 0 or hdr[MB_SEQ - MB] != seq:
                 started = True
-            # Until the shell has signalled the command (STATUS 0 running, or a new
-            # SEQ), OUTLEN/STATUS still describe the PREVIOUS command while the new
-            # output is already overwriting the buffer — reading then returns stale
-            # text (seen as the previous command's output coming back).
-            if started and n > got:
-                chunk = self.rpeek(base + got, min(n - got, 256))   # short replies: see HDR_LEN
-                if sink:
-                    sink(atascii(chunk))
-                got += len(chunk)
-                done_seen = False
-                continue
+            # Output is fetched only AFTER the command is done (shell idle = no SIO
+            # in flight): reading it progressively costs frames while the shell
+            # streams. Until the shell has signalled the command (STATUS 0 / new SEQ)
+            # OUTLEN still describes the previous one, so never read before that.
             if started and st != 0 and hdr[MB_SEQ - MB] != seq:
-                # Done — but a header read can be STALE relative to the output length
-                # (the link serves stale bytes now and then; seen as listings cut short
-                # or empty). Confirm on a second read that nothing more arrived.
+                # Done — confirm on a second read (a header read can lag the output).
                 if done_seen:
+                    while n > got:
+                        chunk = self.rpeek(base + got, min(n - got, 1024))
+                        if sink:
+                            sink(atascii(chunk))
+                        got += len(chunk)
                     if os.environ.get("ASHTERM_DEBUG"):
                         sys.stderr.write(f"[done: st={st} seq={seq}->{hdr[MB_SEQ - MB]} outlen={n} got={got} "
                                          f"elapsed={time.time() - t0:.2f}s]\n")
                     return st, hdr[MB_ERR - MB], hdr[MB_CIOERR - MB]
                 done_seen = True
                 continue
+            done_seen = False
             if st == 3:
                 return 3, 0, 0
             if time.time() - t0 > timeout:
                 raise AshError("timed out waiting for ASH (" + BUSY + ")")
             if not started and time.time() - t0 > 5:
                 raise AshError(BUSY)
-            time.sleep(float(os.environ.get("ASHTERM_POLL", "0.1")))    # header poll pace
+            time.sleep(float(os.environ.get("ASHTERM_POLL", "0.15")))   # poll pace while a command runs
 
     def get(self, src, dst, progress=None):
         data = bytearray()
