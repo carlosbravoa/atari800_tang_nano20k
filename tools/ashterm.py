@@ -46,7 +46,8 @@ MB_NETDEST, MB_NETNAME = 0x6D5, 0x6D6                  # dest 0 sd: path / 1 /HD
 NET_URL, NET_DEST, NET_TEXT, NET_TEXT_MAX = 0x8000, 0x8100, 0x8200, 0x3E00
 NET_CAP = 4 * 1024 * 1024
 NST_OK, NST_NETERR, NST_TOOBIG, NST_NOTFILE, NST_REFUSED, NST_UNSUP = 1, 2, 3, 4, 5, 6
-MB_CMD, MB_PROMPT = 0x660, 0x6B0
+MB_CMD, MB_PROMPT = 0x660, 0x6E8            # v2: command line up to 111 chars + 0 ($0660-$06CF); prompt at $06E8 (≤23)
+MB_VER, MB_VER_WANT, MB_CMD_MAX = 0x642, 2, 111
 RAMWIN = 0x8000
 EOL = 0x9B
 
@@ -86,20 +87,44 @@ class Ash:
         self.hdr = None
         if not self.alive():
             raise AshError(NO_ASH)
+        if self.hdr[MB_VER - MB] != MB_VER_WANT:
+            raise AshError(f"ASH-TN speaks mailbox version {self.hdr[MB_VER - MB]}, this ashterm "
+                           f"needs {MB_VER_WANT}: update ASH-TN (or ashterm) so they match")
 
     def close(self):
         self.l.close()
 
     def _io(self, fn, *args, tries=40):
         """Link calls time out while the firmware is inside an SIO transaction
-        (ASH reading a disk); wait it out and retry."""
+        (ASH reading a disk); wait it out and retry — after DRAINING the line:
+        the firmware still completes the abandoned request, and its late reply
+        (same length, valid checksum) would otherwise be read as the answer to
+        the retry = stale data (seen as listings cut short, or the previous
+        command's output coming back)."""
         for i in range(tries):
             try:
                 return fn(*args)
-            except LinkError:
+            except LinkError as e:
                 if i == tries - 1:
                     raise AshError("the link stopped answering (" + BUSY + ")")
-                time.sleep(0.15)
+                if os.environ.get("ASHTERM_DEBUG"):
+                    sys.stderr.write(f"[link retry {i + 1}: {e}]\n")
+                self._drain()
+
+    def _drain(self, silence=0.25, limit=3.0):
+        """Swallow whatever is still streaming in until `silence` seconds pass
+        with no byte (bounded by `limit`)."""
+        ser = self.l.ser
+        saved, ser.timeout = ser.timeout, 0.05
+        try:
+            t_end, quiet = time.time() + limit, time.time()
+            while time.time() < t_end:
+                if ser.read(4096):
+                    quiet = time.time()
+                elif time.time() - quiet >= silence:
+                    break
+        finally:
+            ser.timeout = saved
 
     def rpeek(self, a, n):
         return self._io(self.l.peek, a, n)
@@ -187,8 +212,9 @@ class Ash:
                 dl = d.lower()
                 if dl.startswith("sd:/"):
                     target, dtype = d[3:], 0            # final path on the card
-                elif dl.startswith("h:"):
-                    name = self.hdd_name(d[2:]); target, dtype = "/HDD/" + name, 1
+                elif dl.startswith("h:"):     # "h:NAME" -> that name; "h:" alone -> from the URL
+                    name = self.hdd_name(d[2:] if d[2:].strip() else url)
+                    target, dtype = "/HDD/" + name, 1
                 else:                                   # d<n>:NAME or '-': stage on h:, shell copies/cats
                     name = self.hdd_name(url); target, dtype = "/HDD/" + name, 1
                 if len(target) > 63:
@@ -222,13 +248,13 @@ class Ash:
             raise AshError(NO_ASH)
         if hdr[MB_STATUS - MB] == 0 or hdr[MB_CMDREQ - MB]:
             raise AshError(BUSY)
-        data = line.encode("latin1")[:79] + b"\0"
+        data = line.encode("latin1")[:MB_CMD_MAX] + b"\0"
         self.poke(MB_CMD, data)
         seq = hdr[MB_SEQ - MB]
         self.poke(MB_CMDREQ, b"\x01")
         out = self.rpeek(MB_OUT, 2)
         base = int.from_bytes(out, "little")
-        got, t0, started = 0, time.time(), False
+        got, t0, started, done_seen = 0, time.time(), False, False
         while True:
             hdr = self.peek(MB, HDR_LEN)
             self.pong(hdr)
@@ -236,14 +262,25 @@ class Ash:
             st = hdr[MB_STATUS - MB]
             if st == 0 or hdr[MB_SEQ - MB] != seq:
                 started = True
-            if n > got:
+            # Until the shell has signalled the command (STATUS 0 running, or a new
+            # SEQ), OUTLEN/STATUS still describe the PREVIOUS command while the new
+            # output is already overwriting the buffer — reading then returns stale
+            # text (seen as the previous command's output coming back).
+            if started and n > got:
                 chunk = self.rpeek(base + got, min(n - got, 1024))
                 if sink:
                     sink(atascii(chunk))
                 got += len(chunk)
+                done_seen = False
                 continue
             if started and st != 0 and hdr[MB_SEQ - MB] != seq:
-                return st, hdr[MB_ERR - MB], hdr[MB_CIOERR - MB]
+                # Done — but a header read can be STALE relative to the output length
+                # (the link serves stale bytes now and then; seen as listings cut short
+                # or empty). Confirm on a second read that nothing more arrived.
+                if done_seen:
+                    return st, hdr[MB_ERR - MB], hdr[MB_CIOERR - MB]
+                done_seen = True
+                continue
             if st == 3:
                 return 3, 0, 0
             if time.time() - t0 > timeout:
