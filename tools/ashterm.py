@@ -19,7 +19,8 @@ While a command runs, and while the interactive prompt is idle, the PC also
 answers the shell's `pc` ping, its `date` request (local PC time) and its
 network requests (`wget URL [dest]`: the PC fetches on its own HTTP stack and
 delivers the file over the bridge's PUT — straight to an sd: path, or to h:
-for the shell to copy on; `ls tnfs://…` is next).
+for the shell to copy on; `ls`/`cat`/`run`/`cp` of a tnfs://host/path URL
+speak TNFS from the PC and hand the shell a listing or the file).
 
 Exit status 1 on a failed command. Errors say what to check: the board on
 USB, ASH-TN running, or the shell being busy (pager / editor / a program).
@@ -27,6 +28,8 @@ USB, ASH-TN running, or the shell being busy (pager / editor / a program).
 import argparse
 import os
 import re
+import socket
+import struct
 import sys
 import time
 import urllib.request
@@ -39,16 +42,17 @@ MB_CMDREQ, MB_STATUS, MB_ERR, MB_CIOERR = 0x643, 0x644, 0x645, 0x646
 MB_OUT, MB_CAP, MB_LEN, MB_SEQ = 0x647, 0x649, 0x64B, 0x64D
 MB_PING, MB_PONG, MB_ABORT, MB_RAM, MB_MORE = 0x64E, 0x64F, 0x650, 0x651, 0x653
 MB_TIMEREQ, MB_TIME = 0x654, 0x655          # `date`: shell sets TIMEREQ=1; PC writes yy mm dd hh mm ss, clears it
-HDR_LEN = 0x91                              # one header peek covers $0640..$06D0 (incl. NETREQ)
+HDR_LEN = 0x20                              # keep bridge replies SHORT: a long peek delays the firmware's SIO ACK,
+                                            # the OS retries the command and a 128-byte READ chunk is lost (2026-10-15)
 # wget / tnfs: mailbox requests served here, delivered by the bridge PUT (never N:)
 MB_NETREQ, MB_NETST, MB_NETLEN = 0x6D0, 0x6D1, 0x6D2   # req 1 fetch / 2 listing; st; len LE24
 MB_NETDEST, MB_NETNAME = 0x6D5, 0x6D6                  # dest 0 sd: path / 1 /HDD/NAME / 2 text@$8200; NAME
-NET_URL, NET_DEST, NET_TEXT, NET_TEXT_MAX = 0x8000, 0x8100, 0x8200, 0x3E00
+NET_URL, NET_DEST, NET_TEXT, NET_TEXT_MAX = 0x9000, 0x9100, 0x9200, 0x2E00   # URL/DEST strings, listing text ≤ 11.5 KB
 NET_CAP = 4 * 1024 * 1024
 NST_OK, NST_NETERR, NST_TOOBIG, NST_NOTFILE, NST_REFUSED, NST_UNSUP = 1, 2, 3, 4, 5, 6
 MB_CMD, MB_PROMPT = 0x660, 0x6E8            # v2: command line up to 111 chars + 0 ($0660-$06CF); prompt at $06E8 (≤23)
 MB_VER, MB_VER_WANT, MB_CMD_MAX = 0x642, 2, 111
-RAMWIN = 0x8000
+RAMWIN = 0x9000                             # getw window ($9000, 12 KB chunks; the mirror is $7800-$8FFF)
 EOL = 0x9B
 
 NO_BOARD = "no board found on USB: connect the Atari board to this computer and make sure it is powered on"
@@ -60,6 +64,103 @@ BUSY = ("ASH is not at its prompt (a pager, the editor, or a running program "
 
 class AshError(Exception):
     pass
+
+
+class TnfsError(Exception):
+    def __init__(self, status):
+        super().__init__(f"tnfs status {status}")
+        self.status = status
+
+
+class Tnfs:
+    """Minimal TNFS client (FujiNet file protocol, UDP/16384): mount, listdir with
+    stat, read a whole file. The Atari never sees TNFS — ashterm presents the
+    result through the mailbox as text or as a delivered file."""
+    EOF, ENOENT, ENOTDIR, EISDIR = 0x21, 0x02, 0x0C, 0x0D
+    READ_SZ = 512                                 # fits every server's datagram
+
+    def __init__(self, host, port=16384, timeout=3.0):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(timeout)
+        self.addr, self.seq, self.sid = (host, port), 0, 0
+        r = self._xfer(0x00, b"\x02\x01/\0\0\0")   # protocol 1.2, root, no credentials
+        if r[4] != 0:
+            raise TnfsError(r[4])
+        self.sid = struct.unpack("<H", r[:2])[0]
+
+    def close(self):
+        try:
+            self._xfer(0x01, b"")
+        except (TnfsError, OSError):
+            pass
+        self.sock.close()
+
+    def _xfer(self, cmd, payload, tries=3):
+        pkt = struct.pack("<HBB", self.sid, self.seq, cmd) + payload
+        for _ in range(tries):
+            self.sock.sendto(pkt, self.addr)
+            try:
+                while True:
+                    r, _ = self.sock.recvfrom(2048)
+                    if len(r) >= 5 and r[2] == self.seq and r[3] == cmd:
+                        self.seq = (self.seq + 1) & 0xFF
+                        return r
+            except socket.timeout:
+                continue
+        raise TnfsError(0xFF)                      # no answer
+
+    def stat(self, path):
+        r = self._xfer(0x24, path.encode("latin1") + b"\0")
+        if r[4] != 0:
+            raise TnfsError(r[4])
+        mode, _, _, size = struct.unpack("<HHHI", r[5:15])
+        return (mode & 0xF000) == 0x4000, size
+
+    def listdir(self, path):
+        """[(is_dir, size, name)] — directories first, as the shell's ls shows them."""
+        r = self._xfer(0x10, path.encode("latin1") + b"\0")
+        if r[4] != 0:
+            raise TnfsError(r[4])
+        dh, names = r[5], []
+        while True:
+            r = self._xfer(0x11, bytes([dh]))
+            if r[4] != 0:
+                break
+            names.append(r[5:].split(b"\0")[0].decode("latin1"))
+        self._xfer(0x12, bytes([dh]))
+        out = []
+        for n in names:
+            if n in (".", ".."):
+                continue
+            try:
+                is_dir, size = self.stat(path.rstrip("/") + "/" + n)
+            except TnfsError:
+                is_dir, size = False, 0
+            out.append((is_dir, size, n))
+        out.sort(key=lambda e: (not e[0], e[2].lower()))
+        return out
+
+    def read_file(self, path, cap, progress=None):
+        r = self._xfer(0x29, struct.pack("<HH", 0x0001, 0) + path.encode("latin1") + b"\0")
+        if r[4] != 0:
+            raise TnfsError(r[4])
+        fd, data = r[5], bytearray()
+        try:
+            while len(data) <= cap:
+                r = self._xfer(0x21, struct.pack("<BH", fd, self.READ_SZ))
+                if r[4] == self.EOF:
+                    break
+                if r[4] != 0:
+                    raise TnfsError(r[4])
+                n = struct.unpack("<H", r[5:7])[0]
+                data += r[7:7 + n]
+                if progress:
+                    progress(len(data))
+                if n == 0:
+                    break
+        finally:
+            self._xfer(0x23, bytes([fd]))
+        return bytes(data)
 
 
 def atascii(b):
@@ -164,8 +265,11 @@ class Ash:
             self.poke(MB_TIME, bytes([t.tm_year - 2000, t.tm_mon, t.tm_mday,
                                       t.tm_hour, t.tm_min, t.tm_sec]))
             self.poke(MB_TIMEREQ, b"\x00")
-        if hdr[MB_NETREQ - MB] in (1, 2):
-            self.serve_net(hdr[MB_NETREQ - MB])
+        self._net_tick = getattr(self, "_net_tick", 0) + 1
+        if self._net_tick % 4 == 0:                # NETREQ lives outside the 32-byte header
+            req = self.rpeek(MB_NETREQ, 1)[0]
+            if req in (1, 2):
+                self.serve_net(req)
 
     # ── wget / tnfs server ────────────────────────────────────────────────────
     def _cstr(self, addr, n):
@@ -196,14 +300,68 @@ class Ash:
             return NST_TOOBIG, b"", ctype
         return NST_OK, data, ctype
 
+    @staticmethod
+    def tnfs_split(url):
+        """tnfs://host[:port]/path -> (host, port, '/path')"""
+        rest = url.split("://", 1)[1]
+        hostport, _, path = rest.partition("/")
+        host, _, port = hostport.partition(":")
+        return host, int(port) if port.isdigit() else 16384, "/" + path
+
+    @staticmethod
+    def listing_text(entries):
+        """The XIO 40 line format the shell already parses: '<d|f> <size8> <name27>'EOL … 'END'EOL."""
+        out = bytearray()
+        for is_dir, size, name in entries:
+            line = ("d " + " " * 8 if is_dir else "f " + str(size).rjust(8)) + " " + name[:27]
+            out += line.encode("latin1", "replace") + b"\x9b"
+            if len(out) > NET_TEXT_MAX - 64:
+                break
+        return bytes(out) + b"END\x9b"
+
+    def tnfs_request(self, req, url):
+        """Returns (status, data) — data = file bytes (req 1) or listing text (req 2)."""
+        try:
+            host, port, path = self.tnfs_split(url)
+            t = Tnfs(host, port)
+        except (TnfsError, OSError, ValueError):
+            return NST_NETERR, b""
+        try:
+            if req == 2:
+                return NST_OK, self.listing_text(t.listdir(path))
+            is_dir, size = t.stat(path)
+            if is_dir:
+                return NST_NOTFILE, b""
+            if size > NET_CAP:
+                return NST_TOOBIG, b""
+            return NST_OK, t.read_file(path, NET_CAP)
+        except TnfsError as e:
+            if e.status in (Tnfs.ENOENT, Tnfs.ENOTDIR, Tnfs.EISDIR):
+                return NST_NOTFILE, b""
+            return NST_NETERR, b""
+        except OSError:
+            return NST_NETERR, b""
+        finally:
+            t.close()
+
     def serve_net(self, req):
         """Serve one mailbox network request (wget / ls of a URL); clears NETREQ last."""
         url = self._cstr(NET_URL, 256)
         dest = self._cstr(NET_DEST, 128)
         st, n, dtype, name = NST_UNSUP, 0, 0, ""
         scheme = url.split("://", 1)[0].lower() if "://" in url else ""
-        if req == 1 and scheme in ("http", "https"):
-            st, data, ctype = self.fetch(url)
+        data, ctype = b"", ""
+        if req == 2 and scheme == "tnfs":          # listing -> text at $8200
+            st, text = self.tnfs_request(2, url)
+            if st == NST_OK:
+                for off in range(0, len(text), 256):
+                    self.poke(NET_TEXT + off, text[off:off + 256])
+                n, dtype = len(text), 2
+        elif req == 1 and scheme in ("http", "https", "tnfs"):
+            if scheme == "tnfs":
+                st, data = self.tnfs_request(1, url)
+            else:
+                st, data, ctype = self.fetch(url)
             html = ctype.startswith("text/html")
             if st == NST_OK and html and not url.lower().split("?")[0].endswith((".html", ".htm")):
                 st = NST_NOTFILE                       # an error/landing page, not the file
@@ -225,8 +383,6 @@ class Ash:
                         n = len(data)
                     except AshError:
                         st = NST_REFUSED                # the firmware NAKed the PUT (guarded file)
-        elif scheme == "tnfs":
-            st = NST_UNSUP                              # TNFS: next step (needs a test server)
         self.poke(MB_NETLEN, n.to_bytes(3, "little"))
         self.poke(MB_NETDEST, bytes([dtype]))
         self.poke(MB_NETNAME, (name.encode("ascii")[:15] + b"\0").ljust(16, b"\0"))
@@ -267,7 +423,7 @@ class Ash:
             # output is already overwriting the buffer — reading then returns stale
             # text (seen as the previous command's output coming back).
             if started and n > got:
-                chunk = self.rpeek(base + got, min(n - got, 1024))
+                chunk = self.rpeek(base + got, min(n - got, 256))   # short replies: see HDR_LEN
                 if sink:
                     sink(atascii(chunk))
                 got += len(chunk)
@@ -278,6 +434,9 @@ class Ash:
                 # (the link serves stale bytes now and then; seen as listings cut short
                 # or empty). Confirm on a second read that nothing more arrived.
                 if done_seen:
+                    if os.environ.get("ASHTERM_DEBUG"):
+                        sys.stderr.write(f"[done: st={st} seq={seq}->{hdr[MB_SEQ - MB]} outlen={n} got={got} "
+                                         f"elapsed={time.time() - t0:.2f}s]\n")
                     return st, hdr[MB_ERR - MB], hdr[MB_CIOERR - MB]
                 done_seen = True
                 continue
@@ -287,7 +446,7 @@ class Ash:
                 raise AshError("timed out waiting for ASH (" + BUSY + ")")
             if not started and time.time() - t0 > 5:
                 raise AshError(BUSY)
-            time.sleep(0.05)
+            time.sleep(float(os.environ.get("ASHTERM_POLL", "0.1")))    # header poll pace
 
     def get(self, src, dst, progress=None):
         data = bytearray()
