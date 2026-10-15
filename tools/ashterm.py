@@ -266,7 +266,7 @@ class Ash:
                                       t.tm_hour, t.tm_min, t.tm_sec]))
             self.poke(MB_TIMEREQ, b"\x00")
         self._net_tick = getattr(self, "_net_tick", 0) + 1
-        if self._net_tick % 4 == 0:                # NETREQ lives outside the 32-byte header
+        if self._net_tick % 2 == 0:                # NETREQ lives outside the 32-byte header
             req = self.rpeek(MB_NETREQ, 1)[0]
             if req in (1, 2):
                 self.serve_net(req)
