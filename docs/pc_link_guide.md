@@ -248,6 +248,11 @@ python3 tools/atari.py poke 0x2C8 0x35        # tint the border pink
 ```
 
 ### ASH terminal — `ashterm.py`
+> **Requires ASH-TN running on the Atari.** ashterm only talks to ASH-TN (the
+> edition of ASH for this board) while it sits at its prompt; with BASIC, a game
+> or any other program it stops with "ASH-TN is not running". Every other tool
+> in this guide works with any software.
+
 If the Atari is running [ASH](https://github.com/carlosbravoa/atari800-atari-shell)
 (the Atari Shell: `ASH.CAR` from the OSD or the Boot: ASH option, or
 `atari.py run ash-tn.xex`), the PC can drive the shell directly instead of

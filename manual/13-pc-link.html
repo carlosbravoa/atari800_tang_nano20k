@@ -31,10 +31,11 @@
 <p class="lead">The USB-C cable that powers and flashes the board also carries a serial link to the Atari: send files, boot programs, type, read the screen and capture the printer from your PC.</p>
 
 <h2 id="what">13.1 What it is</h2>
-<p>The board's onboard BL616 chip bridges a USB serial port to the Atari firmware. No extra hardware is needed: the same USB-C cable that powers and flashes the board is the link. Two programs in the repository's <code>tools/</code> folder use it, and both share one protocol library (<code>atari_link.py</code>):</p>
+<p>The board's onboard BL616 chip bridges a USB serial port to the Atari firmware. No extra hardware is needed: the same USB-C cable that powers and flashes the board is the link. Three programs in the repository's <code>tools/</code> folder use it, and all share one protocol library (<code>atari_link.py</code>):</p>
 <ul>
 <li><code>tools/atari.py</code> — the command-line tool.</li>
 <li><code>tools/atari_gui.py</code> — the same things in a desktop window (Linux/Windows).</li>
+<li><code>tools/ashterm.py</code> — a terminal for the ASH shell (<a href="#ashterm">13.10</a>). <strong>It only works while ASH-TN, ASH's edition for this board, is running on the Atari</strong>; <code>atari.py</code> and the desktop app work with any software.</li>
 </ul>
 <p>The Atari has its own power and keeps running whatever the PC does, so a failed command is always safe to retry. Transfers run at about 11 KB/s and the machine keeps running during them (mounted disks stay live). Firmware memory access is Atari-first by design; measured impact on machine timing is zero even under continuous <code>peek</code> load. Flashing the board is unaffected by the link.</p>
 
@@ -161,6 +162,7 @@ python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</co
 <div class="note"><strong>Status</strong>Work in progress: some text garbles under fast BBS bursts. Usable for BBS sessions, not yet release-grade under sustained load.</div>
 
 <h2 id="ashterm">13.10 The ASH terminal: <code>ashterm.py</code></h2>
+<div class="warn"><strong>Requires ASH-TN running on the Atari</strong>ashterm does not work with BASIC, a game, a DOS or any other program: it only talks to ASH-TN, the edition of ASH for this board, and only while ASH sits at its prompt. Start ASH first (<a href="14-ash.html">chapter 14</a>), then ashterm. Everything else in this chapter works without ASH.</div>
 <p><code>ashterm</code> is the PC side of <a href="14-ash.html">ASH, the Atari shell</a>. It runs ASH commands from the PC with exact output and no typing, copies files in both directions, and serves the shell's network commands (<code>date</code>, <code>wget</code>, <code>tnfs://</code>). It talks to ASH through a small mailbox in Atari memory, so it needs ASH's board edition running on the Atari: the <code>ASH.CAR</code> cartridge (with <strong>Boot: ASH</strong> or attached from the OSD) or <code>ASH-TN.XEX</code>. It needs nothing beyond the <a href="#setup">one-time setup</a> above.</p>
 <h3>The terminal</h3>
 <pre><code>python3 tools/ashterm.py</code></pre>

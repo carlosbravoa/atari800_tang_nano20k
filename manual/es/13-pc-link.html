@@ -31,10 +31,11 @@
 <p class="lead">El mismo cable USB-C que alimenta y graba la placa lleva también un enlace serial con el Atari: envía archivos, arranca programas, teclea, lee la pantalla y captura la impresora desde tu PC.</p>
 
 <h2 id="what">13.1 Qué es</h2>
-<p>El chip BL616 integrado en la placa hace de puente entre un puerto serial USB y el firmware del Atari. No hace falta ningún hardware adicional: el mismo cable USB-C que alimenta y graba (flashea) la placa es el enlace. Dos programas de la carpeta <code>tools/</code> del repositorio lo usan, y ambos comparten una misma biblioteca de protocolo (<code>atari_link.py</code>):</p>
+<p>El chip BL616 integrado en la placa hace de puente entre un puerto serial USB y el firmware del Atari. No hace falta ningún hardware adicional: el mismo cable USB-C que alimenta y graba (flashea) la placa es el enlace. Tres programas de la carpeta <code>tools/</code> del repositorio lo usan, y todos comparten una misma biblioteca de protocolo (<code>atari_link.py</code>):</p>
 <ul>
 <li><code>tools/atari.py</code> — la herramienta de línea de comandos.</li>
 <li><code>tools/atari_gui.py</code> — lo mismo, en una ventana de escritorio (Linux/Windows).</li>
+<li><code>tools/ashterm.py</code> — un terminal para el shell ASH (<a href="#ashterm">13.10</a>). <strong>Solo funciona mientras ASH-TN, la edición de ASH para esta placa, está corriendo en el Atari</strong>; <code>atari.py</code> y la aplicación de escritorio funcionan con cualquier software.</li>
 </ul>
 <p>El Atari tiene su propia alimentación y sigue funcionando haga lo que haga el PC, así que un comando fallido siempre se puede reintentar sin riesgo. Las transferencias van a unos 11 KB/s y la máquina sigue funcionando mientras tanto (los discos montados siguen activos). El acceso del firmware a la memoria está diseñado con prioridad para el Atari; el impacto medido sobre la temporización de la máquina es cero incluso bajo carga continua de <code>peek</code>. La grabación de la placa no se ve afectada por el enlace.</p>
 
@@ -161,6 +162,7 @@ python3 tools/atari.py send tools/fujinet_850/850relocator.bin PC/850REL.BIN</co
 <div class="note"><strong>Estado</strong>En desarrollo: parte del texto se corrompe con ráfagas rápidas de la BBS. Utilizable para sesiones de BBS; todavía no a nivel de versión publicada bajo carga sostenida.</div>
 
 <h2 id="ashterm">13.10 El terminal de ASH: <code>ashterm.py</code></h2>
+<div class="warn"><strong>Requiere ASH-TN corriendo en el Atari</strong>ashterm no funciona con BASIC, un juego, un DOS ni ningún otro programa: solo se comunica con ASH-TN, la edición de ASH para esta placa, y solo mientras ASH está en su prompt. Arranca primero ASH (<a href="14-ash.html">capítulo 14</a>) y después ashterm. Todo lo demás de este capítulo funciona sin ASH.</div>
 <p><code>ashterm</code> es el lado PC de <a href="14-ash.html">ASH, el shell del Atari</a>. Ejecuta comandos de ASH desde el PC con la salida exacta y sin teclear, copia archivos en ambas direcciones y atiende los comandos de red del shell (<code>date</code>, <code>wget</code>, <code>tnfs://</code>). Se comunica con ASH a través de un pequeño buzón en la memoria del Atari, así que necesita la edición de ASH para esta placa corriendo en el Atari: el cartucho <code>ASH.CAR</code> (con <strong>Boot: ASH</strong> o adjuntado desde el OSD) o <code>ASH-TN.XEX</code>. No necesita nada más que la <a href="#setup">configuración inicial</a> de arriba.</p>
 <h3>El terminal</h3>
 <pre><code>python3 tools/ashterm.py</code></pre>

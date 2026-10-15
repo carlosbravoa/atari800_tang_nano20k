@@ -68,8 +68,9 @@ RAMWIN = 0x9000                             # getw window ($9000, 12 KB chunks; 
 EOL = 0x9B
 
 NO_BOARD = "no board found on USB: connect the Atari board to this computer and make sure it is powered on"
-NO_ASH = ("the board answers but ASH-TN is not running on it: deploy "
-          "build/ash-tn.xex or boot ASH-TN.ATR, then retry")
+NO_ASH = ("the board answers but ASH-TN is not running on it (ashterm only works with ASH-TN): "
+          "put ASH.CAR on the SD card and set OSD Options > Boot: ASH (or attach it as the "
+          "cartridge), then retry")
 BUSY = ("ASH is not at its prompt (a pager, the editor, or a running program "
         "on the Atari): finish that on the Atari and retry")
 

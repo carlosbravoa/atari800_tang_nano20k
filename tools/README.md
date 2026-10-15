@@ -7,7 +7,7 @@ Talk to the Atari over the board's own USB-C (firmware >= v2.5).
 - **`atari_gui.py`** — desktop app (Linux/Windows): connect, send/run with progress,
   paste-to-BASIC, live keyboard, remote reset/eject, live firmware log pane.
 - **`ashterm.py`** — terminal for [ASH](https://github.com/carlosbravoa/atari800-atari-shell)
-  (the Atari Shell) when it runs on the board: `ashterm` (interactive), `-c "cmd"`,
+  (the Atari Shell). **Requires ASH-TN running on the Atari** (not BASIC, a game or a DOS): `ashterm` (interactive), `-c "cmd"`,
   `get SRC [DST]` (any Atari file → PC), `put FILE [DST]`, `log [N]`. Serves the
   shell's `date`, `wget` and `tnfs://` requests, keeps a session log and explains
   failed commands in plain language (`ashlog.py`). Pure peek/poke over
