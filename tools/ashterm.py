@@ -304,7 +304,12 @@ def main():
                 rc = 0 if st == 1 else 1
         elif a.c:
             for cmd in a.c:
-                st, err, cio = ash.run(cmd, sink=lambda t: print(t, end="", flush=True))
+                try:
+                    st, err, cio = ash.run(cmd, sink=lambda t: print(t, end="", flush=True))
+                except BrokenPipeError:             # `ashterm -c ... | head`: reader went away;
+                    ash.poke(MB_ABORT, b"\x01")      # BREAK the shell's command so it returns
+                    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+                    break                           # to its prompt instead of waiting on us
                 if st == 3:
                     print("(program launched; ASH is no longer running)")
                     break
@@ -360,6 +365,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except BrokenPipeError:                     # `ashterm -c ... | head`: reader went away
+    except BrokenPipeError:                     # stdout closed under a late print
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         sys.exit(0)
