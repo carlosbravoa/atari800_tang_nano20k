@@ -8,7 +8,9 @@ Talk to the Atari over the board's own USB-C (firmware >= v2.5).
   paste-to-BASIC, live keyboard, remote reset/eject, live firmware log pane.
 - **`ashterm.py`** — terminal for [ASH](https://github.com/carlosbravoa/atari800-atari-shell)
   (the Atari Shell) when it runs on the board: `ashterm` (interactive), `-c "cmd"`,
-  `get SRC [DST]` (any Atari file → PC), `put FILE [DST]`. Pure peek/poke over
+  `get SRC [DST]` (any Atari file → PC), `put FILE [DST]`, `log [N]`. Serves the
+  shell's `date`, `wget` and `tnfs://` requests, keeps a session log and explains
+  failed commands in plain language (`ashlog.py`). Pure peek/poke over
   `atari_link.py`; the page-6 mailbox protocol is owned by the ASH project.
 
 > Tools and firmware must come from the same release. Since v3.2.1 every bridge command is

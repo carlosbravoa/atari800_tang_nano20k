@@ -266,7 +266,28 @@ python3 tools/ashterm.py put notes.txt d1:    # send to h: then cp to the destin
 Exit status 1 on a failed command. The error texts say what to check: no board
 on USB, the board answers but ASH is not running, or ASH is busy (a pager, the
 editor, a running program). `Ctrl-C` in the interactive terminal sends BREAK to
-the running command. The mailbox contract is owned and documented by the ASH
+the running command.
+
+**Session log and plain-language errors.** ashterm keeps a log at
+`~/.local/state/ashterm/ashterm.log` (`--log FILE` to move it, `--no-log` to
+turn it off; `python3 tools/ashterm.py log 50` shows the last 50 lines). It
+records every command with its result, every request the shell made of the PC
+(`date`, `wget`, `tnfs`) and the board firmware's own log lines: mounts, SD and
+SIO errors, file transfers. Firmware lines caused by commands typed on the
+Atari keyboard land there too, as long as ashterm is running. When something
+goes wrong, ashterm explains it on the terminal under the shell's short
+message, for example:
+
+```
+cat: i/o error 138
+ashterm: i/o error: CIO 138 = drive not responding. The drive did not answer in time:
+         nothing mounted on that drive, or the firmware was busy with a PC link transfer.
+mount d1: sd:/NOPE.ATR
+ashterm: firmware: sd: mount D1 failed 4  (mounting on D1 failed: no such file)
+```
+
+The second case matters: a mount or cartridge load runs in the firmware after
+the shell has already answered, so the shell alone cannot tell you it failed. The mailbox contract is owned and documented by the ASH
 project (`ash/tn.s`); this tool only uses `peek`/`poke`/`send` from
 `atari_link.py`, so it needs no firmware support.
 

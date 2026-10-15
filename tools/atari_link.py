@@ -165,20 +165,43 @@ class AtariLink:
         """Scan for a reply byte in `want`, skipping interleaved log bytes."""
         deadline = time.time() + timeout
         skipped = b""
-        while time.time() < deadline:
-            b = self.ser.read(1)
-            if b:
-                if b in want:
-                    return b
-                if b == bytes([NAK]):
-                    raise LinkError(f"{what}: firmware refused (NAK)")
-                skipped += b
-        raise LinkError(f"{what}: timeout (skipped {skipped!r})")
+        try:
+            while time.time() < deadline:
+                b = self.ser.read(1)
+                if b:
+                    if b in want:
+                        return b
+                    if b == bytes([NAK]):
+                        raise LinkError(f"{what}: firmware refused (NAK)")
+                    skipped += b
+            raise LinkError(f"{what}: timeout (skipped {skipped!r})")
+        finally:
+            if skipped and self.on_log is not None:   # interleaved firmware log lines
+                try:
+                    self.on_log(skipped)
+                except Exception:
+                    pass
+
+    # Optional: on_log(bytes) receives whatever the firmware sent between replies (its
+    # uart log: mounts, SIO/SD errors, transfers) instead of it being discarded before
+    # the next command. Off by default; ashterm uses it for its session log.
+    on_log = None
+
+    def _take_pending(self):
+        if self.on_log is None:
+            return
+        try:
+            n = self.ser.in_waiting
+            if n:
+                self.on_log(self.ser.read(n))
+        except Exception:
+            pass
 
     def _cmd(self, byte):
         """Framed command (firmware >= v3.2.1): sync 0xA8, the dispatch beat (firmware
         main-loop latency, 1-byte RX register), then cmd + complement check together —
         the firmware is in its tight header read by then."""
+        self._take_pending()
         self.ser.reset_input_buffer()
         self.ser.write(b"\xa8")
         time.sleep(0.05)
@@ -300,6 +323,7 @@ class AtariLink:
 
     def status(self, timeout=3):
         """One parseable status line from the firmware (0x08)."""
+        self._take_pending()
         self.ser.reset_input_buffer()
         self._cmd(0x08)
         deadline = time.time() + timeout

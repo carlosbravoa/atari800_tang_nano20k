@@ -14,6 +14,14 @@ and the ASH.CAR cartridge). Uses only AtariLink.peek/poke/send from atari_link.p
                                subdir) to the PC through the RAM window
   ashterm put FILE [DST]       send a file to h: (the SD /HDD folder), then
                                `cp` it to DST on the Atari (default: stays on h:)
+  ashterm log [N]              show the last N lines of the session log (default 40)
+
+Session log (--log FILE, default ~/.local/state/ashterm/ashterm.log; --no-log):
+every command with its result, every request served for the shell (date,
+wget, tnfs) and the board firmware's own log lines (mounts, SIO/SD errors,
+transfers) — including those caused by commands typed on the Atari keyboard
+while ashterm runs. A failed command is explained in plain language on the
+terminal (shell error, CIO code, firmware lines), not just the shell's terse text.
 
 Output is shown when a command completes (not progressively): while the shell
 streams SIO (listings, cat, cp, getw) the PC keeps its bridge traffic to a
@@ -39,6 +47,7 @@ import urllib.request
 import urllib.error
 
 from atari_link import AtariLink, LinkError
+import ashlog
 
 MB = 0x0640
 MB_CMDREQ, MB_STATUS, MB_ERR, MB_CIOERR = 0x643, 0x644, 0x645, 0x646
@@ -183,11 +192,14 @@ def atascii(b):
 
 
 class Ash:
-    def __init__(self):
+    def __init__(self, log_path=None):
+        self.log = ashlog.SessionLog(log_path)
+        self.last_explain = []                    # explanation lines of the last failed command
         try:
             self.l = AtariLink()
         except LinkError:
             raise AshError(NO_BOARD)
+        self.l.on_log = self.log.firmware_bytes   # keep the firmware's log lines, don't drop them
         self.hdr = None
         if not self.alive():
             raise AshError(NO_ASH)
@@ -223,7 +235,9 @@ class Ash:
         try:
             t_end, quiet = time.time() + limit, time.time()
             while time.time() < t_end:
-                if ser.read(4096):
+                b = ser.read(4096)
+                if b:
+                    self.log.firmware_bytes(b)
                     quiet = time.time()
                 elif time.time() - quiet >= silence:
                     break
@@ -277,6 +291,7 @@ class Ash:
             self.poke(MB_TIME, bytes([t.tm_year - 2000, t.tm_mon, t.tm_mday,
                                       t.tm_hour, t.tm_min, t.tm_sec]))
             self.poke(MB_TIMEREQ, b"\x00")
+            self.log.write("req", time.strftime("date -> %Y-%m-%d %H:%M:%S (PC local time)", t))
         self._net_tick = getattr(self, "_net_tick", 0) + 1
         if self._net_tick % 2 == 0:                # NETREQ lives outside the 32-byte header
             req = self.rpeek(MB_NETREQ, 1)[0]
@@ -303,10 +318,15 @@ class Ash:
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 if r.status != 200:
+                    Ash.net_detail = f"HTTP {r.status}"
                     return NST_NETERR, b"", ""
                 ctype = (r.headers.get("Content-Type") or "").lower()
                 data = r.read(NET_CAP + 1)
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError):
+        except urllib.error.HTTPError as e:
+            Ash.net_detail = f"HTTP {e.code} {e.reason}"
+            return NST_NETERR, b"", ""
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            Ash.net_detail = str(getattr(e, "reason", e))
             return NST_NETERR, b"", ""
         if len(data) > NET_CAP:
             return NST_TOOBIG, b"", ctype
@@ -336,7 +356,8 @@ class Ash:
         try:
             host, port, path = self.tnfs_split(url)
             t = Tnfs(host, port)
-        except (TnfsError, OSError, ValueError):
+        except (TnfsError, OSError, ValueError) as e:
+            Ash.net_detail = f"tnfs mount failed ({e})"
             return NST_NETERR, b""
         try:
             if req == 2:
@@ -348,10 +369,12 @@ class Ash:
                 return NST_TOOBIG, b""
             return NST_OK, t.read_file(path, NET_CAP)
         except TnfsError as e:
+            Ash.net_detail = f"tnfs status 0x{e.status:02X}"
             if e.status in (Tnfs.ENOENT, Tnfs.ENOTDIR, Tnfs.EISDIR):
                 return NST_NOTFILE, b""
             return NST_NETERR, b""
-        except OSError:
+        except OSError as e:
+            Ash.net_detail = str(e)
             return NST_NETERR, b""
         finally:
             t.close()
@@ -361,6 +384,8 @@ class Ash:
         url = self._cstr(NET_URL, 256)
         dest = self._cstr(NET_DEST, 128)
         st, n, dtype, name = NST_UNSUP, 0, 0, ""
+        Ash.net_detail = ""
+        target = ""
         scheme = url.split("://", 1)[0].lower() if "://" in url else ""
         data, ctype = b"", ""
         if req == 2 and scheme == "tnfs":          # listing -> text at $8200
@@ -395,11 +420,26 @@ class Ash:
                         n = len(data)
                     except AshError:
                         st = NST_REFUSED                # the firmware NAKed the PUT (guarded file)
+                        target = ""
         self.poke(MB_NETLEN, n.to_bytes(3, "little"))
         self.poke(MB_NETDEST, bytes([dtype]))
         self.poke(MB_NETNAME, (name.encode("ascii")[:15] + b"\0").ljust(16, b"\0"))
         self.poke(MB_NETST, bytes([st]))
         self.poke(MB_NETREQ, b"\x00")                   # last: the shell is waiting on this
+        what = "list" if req == 2 else "fetch"
+        where = f" -> {dest}" if req == 1 else ""
+        if st == NST_OK:
+            to = f", delivered to {target}" if target else ""
+            self.log.write("req", f"{what} {url}{where}: ok, {n} bytes{to}")
+        else:
+            why = ashlog.NET_TEXT.get(st, f"status {st}")
+            if Ash.net_detail:
+                why += f" ({Ash.net_detail})"
+            fw = self.log.take_fw()
+            lines = [f"{what} {url}{where}: FAILED - {why}"] + \
+                    [f"firmware: {x}" + (f"  ({ashlog.fw_hint(x)})" if ashlog.fw_hint(x) else "") for x in fw]
+            self.log.write("req", "\n".join(lines))
+            sys.stderr.write("\n[pc] " + "\n[pc] ".join(lines) + "\n")
 
     def idle_service(self):
         """One idle-time poll: answer PING / TIMEREQ raised from the Atari keyboard
@@ -410,6 +450,39 @@ class Ash:
             pass
 
     def run(self, line, sink=None, timeout=120):
+        """Run one command (logged; explained on failure). Returns (status, err, cioerr)."""
+        self.log.take_fw()                        # earlier firmware lines are already in the file
+        self.last_explain = []
+        t0 = time.time()
+        seen = []
+        def tee(t):
+            seen.append(t)
+            if sink:
+                sink(t)
+        try:
+            st, err, cio = self._run(line, tee, timeout)
+        except AshError as e:
+            self.log.write("cmd", f"{line}  -> not run: {e}")
+            raise
+        dt = time.time() - t0
+        fw = self.log.take_fw()
+        if st == 1:
+            self.log.write("cmd", f"{line}  -> ok ({dt:.1f}s)")
+            # The shell said ok, but the firmware may have failed behind it (a mount or
+            # cart load is deferred to the firmware's main loop): surface those too.
+            self.last_explain = [f"firmware: {x}  ({ashlog.fw_hint(x)})" for x in fw if ashlog.fw_hint(x)]
+        elif st == 3:
+            self.log.write("run", f"{line}  -> program launched; ASH is no longer running")
+        else:
+            if not cio:                           # the shell printed it but left MB_CIOERR at 0
+                m = re.search(r"error (1[2-9]\d)\b", "".join(seen))
+                cio = int(m.group(1)) if m else 0
+            self.last_explain = ashlog.explain(err, cio, fw)
+            self.log.write("cmd", f"{line}  -> error E{err} CIO {cio} ({dt:.1f}s)\n" +
+                           "\n".join(self.last_explain))
+        return st, err, cio
+
+    def _run(self, line, sink=None, timeout=120):
         """Run one command; stream its output to sink(text). Returns (status, err, cioerr)."""
         hdr = self.peek(MB, HDR_LEN)
         if hdr[:2] != b"AS":
@@ -464,7 +537,8 @@ class Ash:
             msgs = []
             st, err, cio = self.run(cmd, sink=msgs.append)
             if st != 1:
-                raise AshError("".join(msgs).strip() or f"getw failed ({err}/{cio})")
+                msg = "".join(msgs).strip() or f"getw failed ({err}/{cio})"
+                raise AshError("\n".join([msg] + self.last_explain))
             hdr = self.peek(MB, HDR_LEN)
             n = int.from_bytes(hdr[MB_RAM - MB:MB_RAM - MB + 2], "little")
             for off in range(0, n, 1024):
@@ -475,17 +549,29 @@ class Ash:
                 break
             cmd = "getw"
         open(dst, "wb").write(data)
+        self.log.write("get", f"{src} -> {dst}: {len(data)} bytes")
         return len(data)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-c", action="append", default=[], metavar="CMD", help="run this command and exit")
-    ap.add_argument("op", nargs="?", choices=["get", "put"])
+    ap.add_argument("--log", metavar="FILE", default=ashlog.default_path(),
+                    help="session log file (default: %(default)s)")
+    ap.add_argument("--no-log", action="store_true", help="do not write the session log")
+    ap.add_argument("op", nargs="?", choices=["get", "put", "log"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
+    if a.op == "log":                           # show the end of the session log; no board needed
+        n = int(a.args[0]) if a.args and a.args[0].isdigit() else 40
+        lines = ashlog.tail(a.log, n)
+        sys.stdout.write("".join(lines) if lines else f"(no log yet at {a.log})\n")
+        sys.exit(0)
+    def explain(ash):                           # printed after any command that has something to explain
+        for x in ash.last_explain:
+            sys.stderr.write(f"ashterm: {x}\n")
     try:
-        ash = Ash()
+        ash = Ash(None if a.no_log else a.log)
     except AshError as e:
         sys.exit(f"ashterm: {e}")
     rc = 0
@@ -507,6 +593,7 @@ def main():
             if len(a.args) > 1:
                 st, *_ = ash.run(f"cp h:{name.lower()} {a.args[1]}", sink=lambda t: print(t, end=""))
                 rc = 0 if st == 1 else 1
+                explain(ash)
         elif a.c:
             for cmd in a.c:
                 try:
@@ -520,8 +607,10 @@ def main():
                     break
                 if st != 1:
                     rc = 1
+                explain(ash)
         else:
             print("ASH-TN terminal — Ctrl-D or 'exit' to leave; the Atari keeps running")
+            ash.log.write("sess", "interactive session started")
             # Idle poller: while we sit at the prompt, answer the shell's `pc` ping and
             # `date` request (raised from the Atari keyboard) every ~250 ms. The serial
             # link is one byte stream, so EVERY access is serialised through `link`:
@@ -559,6 +648,7 @@ def main():
                 if st == 3:
                     print("(program launched; ASH is no longer running)")
                     break
+                explain(ash)
             stop.set()                         # after the loop: the poller ends with the prompt
     except AshError as e:
         sys.exit(f"ashterm: {e}")
