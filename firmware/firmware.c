@@ -1046,8 +1046,8 @@ int hdd_rename(const char *oldname, const char *newname) {
 #define HDD_LFN_W 27                              // the OSD's displayable-name rule
 #define SD_PATH_MAX 160                           // parent path + a resolved LFN (FF_LFN_BUF 128)
 
-// The shell sees sd: names cut at HDD_LFN_W (and holds at most 27 chars itself),
-// so a long name can be listed but not typed back. When the exact path fails,
+// The shell sees sd: names cut at HDD_LFN_W (ASH before its `longnames` change
+// also held at most 27 chars), so a long name can be listed but not typed back. When the exact path fails,
 // a final component that is a unique case-insensitive PREFIX of a real entry
 // resolves to that entry. Ambiguous (two entries share the prefix) = refused,
 // not guessed. READ-side only (OPENR, LIST, MOUNT, CART); writes stay exact.
