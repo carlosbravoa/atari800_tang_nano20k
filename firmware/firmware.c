@@ -1044,6 +1044,41 @@ int hdd_rename(const char *oldname, const char *newname) {
 // Writes stay confined to /HDD through hdd_path. Listings reuse the single 1 KB
 // H: text buffer: one listing open at a time, exactly like H: mode 6.
 #define HDD_LFN_W 27                              // the OSD's displayable-name rule
+#define SD_PATH_MAX 160                           // parent path + a resolved LFN (FF_LFN_BUF 128)
+
+// The shell sees sd: names cut at HDD_LFN_W (and holds at most 27 chars itself),
+// so a long name can be listed but not typed back. When the exact path fails,
+// a final component that is a unique case-insensitive PREFIX of a real entry
+// resolves to that entry. Ambiguous (two entries share the prefix) = refused,
+// not guessed. READ-side only (OPENR, LIST, MOUNT, CART); writes stay exact.
+// Returns the resolved path (static buffer) or NULL.
+static char sd_res[SD_PATH_MAX];
+static const char *sd_resolve(const char *path) {
+    const char *slash = strrchr(path, '/');
+    const char *comp = slash ? slash + 1 : path;
+    int dl = slash ? (int)(slash - path) : 0;     // parent length, 0 = root
+    int cl = strlen(comp);
+    if (!cl || dl >= SD_PATH_MAX - 2) return 0;
+    memcpy(sd_res, path, dl); sd_res[dl] = 0;
+    DIR d; FILINFO fi; int n = 0;
+    if (f_opendir(&d, dl ? sd_res : "/")) return 0;
+    while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+        if (fi.fattrib & (AM_HID | AM_SYS)) continue;
+        int k = 0;
+        while (k < cl && fi.fname[k]) {
+            char a = fi.fname[k], b = comp[k];
+            if (a >= 'A' && a <= 'Z') a += 32;
+            if (b >= 'A' && b <= 'Z') b += 32;
+            if (a != b) break;
+            k++;
+        }
+        if (k < cl) continue;                     // not a prefix
+        if (n++ || dl + 1 + (int)strlen(fi.fname) >= SD_PATH_MAX) { n = 2; break; }
+        sd_res[dl] = '/'; strcpy(sd_res + dl + 1, fi.fname);
+    }
+    f_closedir(&d);
+    return n == 1 ? sd_res : 0;
+}
 
 // Append s to the H: text buffer; -1 if it would not leave room for the tail.
 static int hdd_text_put(const char *s) {
@@ -1062,7 +1097,10 @@ static int hdd_list(const char *path, int start, int h) {
     DIR d; FILINFO fi;
     if (h < 0 || h >= HDD_HANDLES) return -1;
     if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
-    if (f_opendir(&d, path[0] ? path : "/")) return -2;
+    if (f_opendir(&d, path[0] ? path : "/")) {
+        const char *r = sd_resolve(path);          // a folder name cut at HDD_LFN_W
+        if (!r || f_opendir(&d, r)) return -2;
+    }
     hdd_dirlen = 0; hdd_dirpos = 0;
     int idx = 0;
     const char *tail = "END\x9b";
@@ -1097,7 +1135,10 @@ static int hdd_list(const char *path, int start, int h) {
 static int hdd_openr(const char *path, int h) {
     if (h < 0 || h >= HDD_HANDLES || !path[0]) return -1;
     if (hdd_open_f[h]) { f_close(&hdd_fil[h]); hdd_open_f[h] = 0; }
-    if (f_open(&hdd_fil[h], path, FA_READ)) return -4;
+    if (f_open(&hdd_fil[h], path, FA_READ)) {
+        const char *r = sd_resolve(path);          // a name cut at HDD_LFN_W
+        if (!r || f_open(&hdd_fil[h], r, FA_READ)) return -4;
+    }
     hdd_open_f[h] = 1;
     return 0;
 }
@@ -1852,7 +1893,7 @@ static void rs232_stream_loop(void) {
 // sd: control set for ASH (spec: ash-tn-proposal.md §3, pinned 2026-10-14).
 // Unknown commands: SILENT (boot-glitch lesson — never answer what you don't know).
 extern int bridge_req;
-extern char bridge_req_path[68];
+extern char bridge_req_path[SD_PATH_MAX];
 extern char mounted_atr_name[ATR_DRIVES][16];
 int bridge_req_slot = 0;                       // drive index for deferred MOUNT/UNMOUNT
 
@@ -1899,6 +1940,11 @@ static int sd_defer(int fn, char *frame) {
     if (slot < 0 || slot >= ATR_DRIVES) return -1;
     if (fn == 42) { bridge_req = 5; bridge_req_slot = slot; return 0; }
     if (!path[0]) return -1;
+    if (f_stat(path, 0) != FR_OK) {                // a name cut at HDD_LFN_W: resolve it now,
+        const char *r = sd_resolve(path);          // so the shell's answer is truthful
+        if (!r) return -1;
+        path = (char *)r;
+    }
     strncpy(bridge_req_path, path, sizeof(bridge_req_path) - 1);
     bridge_req_path[sizeof(bridge_req_path) - 1] = 0;
     char *ext = strrchr(path, '.');
@@ -1976,6 +2022,7 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
         sio_tx_byte(0x41); sio_wait_tx_empty();
         if (sio_rx_data_frame(buf, 64)) { delay_us(250); sio_tx_byte(0x4E); break; }
         delay_us(250); sio_tx_byte(0x41); sio_wait_tx_empty();  // data ACK first (see OPEN)
+        int start = buf[62] | (buf[63] << 8);                    // XIO 40 start index (before the terminator)
         buf[63] = 0;
         int r = -1;
         if (aux1 == 33) r = hdd_delete((char *)buf);
@@ -1984,7 +2031,6 @@ static void sio_hdd(uint8_t cmd, uint8_t aux1, uint8_t aux2) {
             if (comma) { *comma = 0; r = hdd_rename((char *)buf, comma + 1); }
         }
         else if (aux1 == 40) {                                   // sd: LIST path, start@62..63
-            int start = buf[62] | (buf[63] << 8);
             buf[62] = 0;
             r = hdd_list((char *)buf, start, h);
         }
@@ -2976,7 +3022,7 @@ void test_sdram(void) {
 
 static FIL bridge_file;
 int bridge_req = 0;                     // 1 = run xex, 2 = cold boot, 3 = warm
-char bridge_req_path[68];               // full path, subfolders allowed
+char bridge_req_path[SD_PATH_MAX];      // full path, subfolders allowed (sd_resolve'd names too)
 // OSD drive/cart display names — global so the bridge keeps the menu truthful
 // when it mounts/ejects behind the menu's back (remote RUN/eject).
 char mounted_atr_name[ATR_DRIVES][16] = {"None", "None", "None", "None"};

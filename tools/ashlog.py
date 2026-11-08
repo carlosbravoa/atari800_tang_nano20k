@@ -19,7 +19,9 @@ import time
 E_TEXT = {
     1: ("no such file or directory",
         "Check the name with ls. sd: paths start at the card root (sd:/games/x.atr); "
-        "h: is the flat /HDD folder with 8.3 names."),
+        "h: is the flat /HDD folder with 8.3 names. A long name shows cut at 27 characters: "
+        "the cut name opens the file if no other entry starts the same way (firmware v3.4+); "
+        "if two do, the firmware refuses rather than guess."),
     2: ("not a directory", "The path names a file where a folder was expected."),
     3: ("i/o error", "The device answered with an error; the CIO code and firmware lines below say which."),
     4: ("is a directory", "Use cd or ls for folders; cat/run/cp need a file."),

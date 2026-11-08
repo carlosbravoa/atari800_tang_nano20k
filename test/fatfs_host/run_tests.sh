@@ -130,6 +130,11 @@ fresh $IMG 64
 fresh $IMG 64
 ./fatfs_host $IMG s_sdctl > /dev/null; check "s_sdctl        " $? $IMG
 
+# 15b. sd_resolve: a final component that is a unique case-insensitive prefix of a
+#      real entry (the shell's 27-char cut) opens/lists the real one; ambiguous = refused
+fresh $IMG 64
+./fatfs_host $IMG s_sdprefix > /dev/null; check "s_sdprefix     " $? $IMG
+
 # 16. phase 2b: SD writes from the shell — session gate, name/cluster guards
 #     (ROMs, ini, ASH.CAR, mounted ATR, active xex, other handle, cart), ops
 fresh $IMG 64

@@ -34,6 +34,8 @@ FIL bridge_file;
 #define HDD_HANDLES 2
 #define HDD_DIRBUF  1024
 #define HDD_LFN_W   27
+#define SD_PATH_MAX 160
+static char sd_res[SD_PATH_MAX];         /* sd_resolve's result buffer (firmware static) */
 #define OPTION_FILE   "/atari.ini"
 #define ASH_CART_FILE "/ASH.CAR"
 uint8_t  sd_rw = 0;
@@ -457,6 +459,66 @@ int main(int argc, char **argv) {
         hdd_status(0, st);
         if ((st[2] | (st[3] << 8)) != (int)strlen(txt)) die("h0 clobbered by listing");
         hdd_close(0); hdd_close(1);
+        #undef READ_LISTING
+        return 0;
+    }
+
+    if (!strcmp(cmd, "s_sdprefix")) {          /* sd_resolve: names cut at HDD_LFN_W (ASH #2) */
+        uint8_t st[4]; char dl[1025]; FIL f; UINT bw;
+        #define READ_LISTING(h) do {                                            \
+            hdd_status(h, st);                                                  \
+            int dav = st[2] | (st[3] << 8);                                     \
+            if (dav <= 0 || dav > 1024) { die("listing avail"); }               \
+            int got = 0;                                                        \
+            while (got < dav) {                                                 \
+                int n = hdd_read(h, (uint8_t *)dl + got, dav - got > 128 ? 128 : dav - got); \
+                if (n <= 0) { die("listing read"); }                            \
+                got += n;                                                       \
+            }                                                                   \
+            dl[got] = 0; hdd_close(h);                                          \
+        } while (0)
+        /* fixture: two names identical through char 27 (ambiguous), one unique long
+           name, an exact short name, a long folder, a hidden long name */
+        if (f_mkdir("/long") || f_mkdir("/A Folder With A Really Long Name")) die("mkdir");
+        const char *names[] = { "/long/Bruce Lee (1984)(Datasoft)(US).atx",
+                                "/long/Bruce Lee (1984)(Datasoft)(EU).atx",
+                                "/long/Montezuma's Revenge (1984)(Parker).xex",
+                                "/long/B.ATR",
+                                "/long/Hidden Long Name Entry Here.txt",
+                                "/A Folder With A Really Long Name/INSIDE.TXT" };
+        for (int i = 0; i < 6; i++) {
+            if (f_open(&f, names[i], FA_WRITE | FA_CREATE_ALWAYS)) die("mk fixture");
+            if (f_write(&f, names[i], i + 1, &bw)) die("wr fixture");   /* size = i+1 */
+            f_close(&f);
+        }
+        if (f_chmod(names[4], AM_HID, AM_HID)) die("chmod hidden");
+        /* 1. exact names never reach the resolver's guesswork: open as-is */
+        if (hdd_openr("/long/B.ATR", 1)) die("exact open");
+        hdd_status(1, st); if ((st[2] | (st[3] << 8)) != 4) die("exact size"); hdd_close(1);
+        /* 2. unique prefix (the 27-char cut, any case) resolves to the full name */
+        const char *r = sd_resolve("/long/montezuma's revenge (1984)(");
+        if (!r || strcmp(r, names[2])) { printf("FAIL: resolve unique -> %s\n", r ? r : "(null)"); return 1; }
+        if (hdd_openr("/long/MONTEZUMA'S REVENGE (1984)(", 1)) die("prefix open");
+        hdd_status(1, st); if ((st[2] | (st[3] << 8)) != 3) die("prefix size"); hdd_close(1);
+        /* 3. ambiguous prefix: refused, not guessed */
+        if (sd_resolve("/long/Bruce Lee (1984)(Datasoft)(")) die("ambiguous resolved");
+        if (hdd_openr("/long/Bruce Lee (1984)(Datasoft)(", 1) == 0) die("ambiguous open");
+        /* 4. a longer prefix that disambiguates works */
+        if (hdd_openr("/long/Bruce Lee (1984)(Datasoft)(US", 1)) die("disambiguated open");
+        hdd_status(1, st); if ((st[2] | (st[3] << 8)) != 1) die("disambiguated size"); hdd_close(1);
+        /* 5. no match, empty component, hidden entries: NULL */
+        if (sd_resolve("/long/Nothing like this")) die("nomatch resolved");
+        if (sd_resolve("/long/")) die("empty resolved");
+        if (sd_resolve("/long/hidden long name entry")) die("hidden resolved");
+        if (hdd_openr("/long/Nothing like this", 1) == 0) die("nomatch open");
+        /* 6. a folder name cut at 27 chars lists the real folder */
+        if (hdd_list("/A Folder With A Really Lon", 0, 1)) die("list cut folder");
+        READ_LISTING(1);
+        if (!strstr(dl, "INSIDE.TXT\x9b")) { printf("FAIL: cut folder listing: %s\n", dl); return 1; }
+        /* 7. the resolved path itself is usable as a parent */
+        r = sd_resolve("/A Folder With A Really Lon/insi");
+        if (r) die("cut parent resolved");          /* only the LAST component is resolved */
+        if (!(r = sd_resolve("/A Folder With A Really Long Name/insi")) || strcmp(r, names[5])) die("inside resolve");
         #undef READ_LISTING
         return 0;
     }
