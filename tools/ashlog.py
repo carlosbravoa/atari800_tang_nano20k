@@ -45,6 +45,9 @@ E_TEXT = {
 # CIO status codes (ash.s ciocodes + Atari OS), shell message and the usual cause on this board
 CIO_TEXT = {
     128: ("BREAK abort", "The command was interrupted with BREAK (or by ashterm's Ctrl-C)."),
+    129: ("IOCB already open",
+          "The shell's disk-write channel was left open by an earlier refused write (ASH releases before 1.4); "
+          "reboot the shell (Hard Reset / atari.py reset) and retry."),
     130: ("no such device", "The device letter is not installed (e.g. h: before the H: handler)."),
     136: ("end of file", "Read past the end of the file."),
     138: ("drive not responding",
